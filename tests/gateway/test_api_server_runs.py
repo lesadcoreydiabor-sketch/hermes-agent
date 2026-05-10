@@ -50,6 +50,7 @@ def _create_runs_app(adapter: APIServerAdapter) -> web.Application:
     mws = [mw for mw in (cors_middleware, security_headers_middleware) if mw is not None]
     app = web.Application(middlewares=mws)
     app["api_server_adapter"] = adapter
+    app.router.add_get("/v1/runs", adapter._handle_list_runs)
     app.router.add_post("/v1/runs", adapter._handle_runs)
     app.router.add_get("/v1/runs/{run_id}", adapter._handle_get_run)
     app.router.add_get("/v1/runs/{run_id}/events", adapter._handle_run_events)
@@ -281,6 +282,47 @@ class TestRunStatus:
         async with TestClient(TestServer(app)) as cli:
             resp = await cli.get("/v1/runs/run_any")
         assert resp.status == 401
+
+    @pytest.mark.asyncio
+    async def test_list_runs_returns_safe_recent_summaries(self, adapter):
+        app = _create_runs_app(adapter)
+        async with TestClient(TestServer(app)) as cli:
+            with patch.object(adapter, "_create_agent") as mock_create:
+                mock_agent = MagicMock()
+                mock_agent.run_conversation.return_value = {
+                    "final_response": "token=super-secret-value"
+                }
+                mock_agent.session_prompt_tokens = 1
+                mock_agent.session_completion_tokens = 1
+                mock_agent.session_total_tokens = 2
+                mock_create.return_value = mock_agent
+
+                resp = await cli.post(
+                    "/v1/runs",
+                    json={"input": "hello", "session_id": "session-1"},
+                )
+                assert resp.status == 202
+                data = await resp.json()
+                run_id = data["run_id"]
+
+                for _ in range(20):
+                    status_resp = await cli.get(f"/v1/runs/{run_id}")
+                    status = await status_resp.json()
+                    if status["status"] == "completed":
+                        break
+                    await asyncio.sleep(0.05)
+
+                list_resp = await cli.get("/v1/runs?limit=5")
+                assert list_resp.status == 200
+                payload = await list_resp.json()
+
+        assert payload["object"] == "hermes.run.list"
+        assert payload["data"][0]["run_id"] == run_id
+        assert payload["data"][0]["status"] == "completed"
+        assert payload["data"][0]["session_id"] == "session-1"
+        assert payload["data"][0]["last_event"] == "run.completed"
+        assert "output" not in payload["data"][0]
+        assert "error" not in payload["data"][0]
 
 
 # ---------------------------------------------------------------------------

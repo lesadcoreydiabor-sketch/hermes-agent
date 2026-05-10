@@ -123,6 +123,35 @@ The control should:
 
 This is not a gateway run launcher and not an automatic run discovery mechanism. It only connects an already-created gateway run to the dashboard timeline.
 
+## P6 Recent Gateway Runs Discovery
+
+The next slice removes the need to manually copy a `run_id` when the configured gateway can list recent runs.
+
+Add a privacy-safe gateway route:
+
+- `GET /v1/runs`
+
+The gateway route should return only safe summaries:
+
+- `run_id`
+- `status`
+- `created_at`
+- `updated_at`
+- `session_id`
+- `model`
+- `last_event`
+- `has_error`
+
+It must not return raw input, final output, raw errors, prompts, tool previews, or usage details.
+
+Add a protected dashboard proxy:
+
+- `GET /api/run-inspector/gateway-runs`
+
+The dashboard proxy should resolve the gateway URL/key server-side, fetch the recent summaries, normalize/redact them, and expose only the safe summary list to the Run Inspector page.
+
+The Run Inspector page should add a `Runs` refresh action and a compact selectable recent-runs list inside the existing Gateway Run Follow card. Selecting a recent run fills the run id input; following still uses the existing P4 forwarder endpoint.
+
 ## Acceptance
 
 - Recent events API returns an envelope with `ok`, `events`, and `refreshed_at`.
@@ -150,5 +179,7 @@ This is not a gateway run launcher and not an automatic run discovery mechanism.
 - API tests for the protected gateway follow endpoint, missing config, and status lookup.
 - Frontend tests for hook error classification, event formatting, and overflow/privacy guards.
 - Frontend tests that the Run Inspector page exposes gateway follow controls without gateway secret names or values.
+- Gateway route tests that recent run summaries omit output/error payloads.
+- Dashboard proxy tests that recent run summaries are fetched server-side and keep gateway keys out of frontend code.
 - `npm.cmd run build`.
 - Manual or Playwright smoke for `/run-inspector`.

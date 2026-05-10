@@ -432,6 +432,43 @@ tasks:
     status: completed
     risk: medium
 
+  - id: HRIGF-05
+    title: Add recent gateway runs discovery
+    description: Add a privacy-safe gateway recent-runs list, dashboard proxy, and Run Inspector UI selection flow.
+    depends_on:
+      - HRIGF-04
+    acceptance:
+      - Gateway exposes GET /v1/runs with recent run summaries only.
+      - Gateway run summaries omit raw input, final output, raw errors, prompts, tool previews, and usage details.
+      - Dashboard exposes GET /api/run-inspector/gateway-runs using server-side gateway URL/key resolution.
+      - Frontend uses the dashboard proxy, not the gateway directly.
+      - Run Inspector Gateway Run Follow card can refresh recent runs and select a run_id.
+      - Secret-looking summary fields are redacted before reaching the frontend.
+    verify:
+      - venv/Scripts/python.exe -m pytest tests/gateway/test_api_server_runs.py::TestRunStatus tests/runtime/test_run_inspector_gateway_forwarder.py tests/hermes_cli/test_run_inspector_gateway_forwarder_api.py tests/web/test_run_inspector_status_policy.py -q -o addopts=
+      - npm.cmd run build
+    status: completed
+    risk: high
+
+  - id: HRIGF-06
+    title: Verify recent gateway runs discovery slice
+    description: Re-run gateway, dashboard proxy, frontend, build, and browser smoke checks for recent run selection.
+    depends_on:
+      - HRIGF-05
+    acceptance:
+      - Gateway run list tests pass.
+      - Dashboard gateway-runs proxy tests pass.
+      - Frontend policy tests and build pass.
+      - Browser smoke confirms Runs refresh control and recent-run selection UI render without horizontal overflow.
+      - Diff check passes.
+    verify:
+      - venv/Scripts/python.exe -m pytest tests/gateway/test_api_server_runs.py::TestRunStatus tests/runtime/test_run_inspector_gateway_forwarder.py tests/hermes_cli/test_run_inspector_gateway_forwarder_api.py tests/web/test_run_inspector_status_policy.py -q -o addopts=
+      - npm.cmd run build
+      - Playwright smoke for /run-inspector
+      - git diff --check for HRIGF discovery files
+    status: completed
+    risk: medium
+
 risk_flags:
   destructive_file_change:
     pause: true
@@ -765,6 +802,40 @@ progress_report:
       verification_result: "passed: venv/Scripts/python.exe -m pytest tests/web/test_run_inspector_status_policy.py tests/runtime/test_run_inspector_gateway_forwarder.py tests/hermes_cli/test_run_inspector_gateway_forwarder_api.py -q -o addopts= (23 passed); passed: npm.cmd run build; passed: git diff --check for HRIGF UI files; smoke passed: /run-inspector Gateway Run Follow title/input visible on desktop and narrow viewports with no horizontal overflow"
       blockers: []
       next_step: "Run Inspector P5 dashboard gateway follow control complete; review, stage/commit/push, or add automatic gateway run_id discovery."
+    - task_id: HRIGF-05
+      status: completed
+      changed_files:
+        - gateway/platforms/api_server.py
+        - hermes_cli/run_inspector_gateway_forwarder.py
+        - hermes_cli/web_server.py
+        - web/src/lib/api.ts
+        - web/src/pages/RunInspectorPage.tsx
+        - tests/gateway/test_api_server_runs.py
+        - tests/runtime/test_run_inspector_gateway_forwarder.py
+        - tests/hermes_cli/test_run_inspector_gateway_forwarder_api.py
+        - tests/web/test_run_inspector_status_policy.py
+        - docs/plans/hermes-run-inspector-event-integration-prd.md
+        - .hermes/task.yaml
+      verification_result: "partial: venv/Scripts/python.exe -m pytest tests/gateway/test_api_server_runs.py::TestRunStatus tests/runtime/test_run_inspector_gateway_forwarder.py tests/hermes_cli/test_run_inspector_gateway_forwarder_api.py -q -o addopts= initially found summary token redaction gap; fixed with local summary secret pattern; rerun passed 17 passed, 5 warnings; npm.cmd run build passed"
+      blockers: []
+      next_step: HRIGF-06
+    - task_id: HRIGF-06
+      status: completed
+      changed_files:
+        - gateway/platforms/api_server.py
+        - hermes_cli/run_inspector_gateway_forwarder.py
+        - hermes_cli/web_server.py
+        - web/src/lib/api.ts
+        - web/src/pages/RunInspectorPage.tsx
+        - tests/gateway/test_api_server_runs.py
+        - tests/runtime/test_run_inspector_gateway_forwarder.py
+        - tests/hermes_cli/test_run_inspector_gateway_forwarder_api.py
+        - tests/web/test_run_inspector_status_policy.py
+        - docs/plans/hermes-run-inspector-event-integration-prd.md
+        - .hermes/task.yaml
+      verification_result: "passed: venv/Scripts/python.exe -m pytest tests/gateway/test_api_server_runs.py::TestRunEvents tests/gateway/test_api_server_runs.py::TestRunStatus tests/hermes_cli/test_run_inspector_gateway_forwarder_api.py tests/runtime/test_run_inspector_gateway_forwarder.py tests/web/test_run_inspector_status_policy.py -q -o addopts= (37 passed, 10 warnings); passed: npm.cmd run build; passed: git diff --check for HRIGF discovery files; browser smoke passed in in-app browser and Playwright desktop/narrow viewports without horizontal overflow"
+      blockers: []
+      next_step: "Run Inspector P6 recent gateway runs discovery complete; stage/commit/push, or add automatic run launcher integration."
 
 failure_review:
   enabled: true
@@ -821,4 +892,12 @@ failure_review:
       what_changed: "Changed the smoke to assert locator counts for the card title and input while keeping the horizontal overflow checks."
       how_it_was_verified: "Re-ran Playwright smoke for desktop and narrow viewports; both found the title/input and had scrollWidth equal to viewport width."
       added_eval_or_badcase: "manual Playwright smoke for /run-inspector Gateway Run Follow"
+      blocker: false
+    - trigger: redaction_failure
+      task_id: HRIGF-05
+      what_happened: "Recent gateway run summary normalization initially let a session_id containing token=secret-value pass through unchanged."
+      why_it_failed: "agent.redact did not cover that exact token=... shape in this summary path."
+      what_changed: "Added a local summary secret regex in run_inspector_gateway_forwarder.py and updated the runtime test to assert session-Redacted."
+      how_it_was_verified: "Re-ran venv/Scripts/python.exe -m pytest tests/gateway/test_api_server_runs.py::TestRunStatus tests/runtime/test_run_inspector_gateway_forwarder.py tests/hermes_cli/test_run_inspector_gateway_forwarder_api.py -q -o addopts= and got 17 passed, 5 warnings."
+      added_eval_or_badcase: "tests/runtime/test_run_inspector_gateway_forwarder.py::test_fetch_gateway_run_summaries_returns_redacted_safe_list"
       blocker: false

@@ -70,6 +70,11 @@ export const api = {
       `/api/run-inspector/events?limit=${limit}`,
       init,
     ),
+  getGatewayRuns: (limit = 20, init?: RequestInit) =>
+    fetchJSON<RunInspectorGatewayRunsResponse>(
+      `/api/run-inspector/gateway-runs?limit=${limit}`,
+      init,
+    ),
   followGatewayRunEvents: (runId: string) =>
     fetchJSON<RunInspectorGatewayForwarderResponse>(
       `/api/run-inspector/gateway-runs/${encodeURIComponent(runId)}/follow`,
@@ -514,6 +519,23 @@ export interface RunInspectorGatewayForwarder {
 export interface RunInspectorGatewayForwarderResponse {
   ok: boolean;
   forwarder: RunInspectorGatewayForwarder | null;
+  refreshed_at: string;
+}
+
+export interface RunInspectorGatewayRun {
+  run_id: string;
+  status: string;
+  created_at: number | null;
+  updated_at: number | null;
+  session_id: string | null;
+  model: string | null;
+  last_event: string | null;
+  has_error: boolean;
+}
+
+export interface RunInspectorGatewayRunsResponse {
+  ok: boolean;
+  runs: RunInspectorGatewayRun[];
   refreshed_at: string;
 }
 

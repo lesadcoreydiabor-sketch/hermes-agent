@@ -2765,6 +2765,30 @@ class APIServerAdapter(BasePlatformAdapter):
     _RUN_STREAM_TTL = 300  # seconds before orphaned runs are swept
     _RUN_STATUS_TTL = 3600  # seconds to retain terminal run status for polling
 
+    def _run_status_summary(self, status: Dict[str, Any]) -> Dict[str, Any]:
+        """Return a privacy-safe run summary for list views."""
+
+        return {
+            "object": "hermes.run.summary",
+            "run_id": status.get("run_id"),
+            "status": status.get("status", "unknown"),
+            "created_at": status.get("created_at"),
+            "updated_at": status.get("updated_at"),
+            "session_id": status.get("session_id"),
+            "model": status.get("model"),
+            "last_event": status.get("last_event"),
+            "has_error": bool(status.get("error")),
+        }
+
+    def _recent_run_statuses(self, limit: int = 20) -> List[Dict[str, Any]]:
+        safe_limit = max(1, min(int(limit), 50))
+        statuses = sorted(
+            self._run_statuses.values(),
+            key=lambda item: item.get("updated_at") or item.get("created_at") or 0,
+            reverse=True,
+        )
+        return [self._run_status_summary(status) for status in statuses[:safe_limit]]
+
     def _set_run_status(self, run_id: str, status: str, **fields: Any) -> Dict[str, Any]:
         """Update pollable run status without exposing private agent objects."""
         now = time.time()
@@ -3180,6 +3204,23 @@ class APIServerAdapter(BasePlatformAdapter):
             headers=response_headers,
         )
 
+    async def _handle_list_runs(self, request: "web.Request") -> "web.Response":
+        """GET /v1/runs - list recent run summaries for external UIs."""
+        auth_err = self._check_auth(request)
+        if auth_err:
+            return auth_err
+
+        try:
+            limit = int(request.query.get("limit", "20"))
+        except (TypeError, ValueError):
+            limit = 20
+        return web.json_response(
+            {
+                "object": "hermes.run.list",
+                "data": self._recent_run_statuses(limit=limit),
+            }
+        )
+
     async def _handle_get_run(self, request: "web.Request") -> "web.Response":
         """GET /v1/runs/{run_id} — return pollable run status for external UIs."""
         auth_err = self._check_auth(request)
@@ -3438,6 +3479,7 @@ class APIServerAdapter(BasePlatformAdapter):
             self._app.router.add_post("/api/jobs/{job_id}/resume", self._handle_resume_job)
             self._app.router.add_post("/api/jobs/{job_id}/run", self._handle_run_job)
             # Structured event streaming
+            self._app.router.add_get("/v1/runs", self._handle_list_runs)
             self._app.router.add_post("/v1/runs", self._handle_runs)
             self._app.router.add_get("/v1/runs/{run_id}", self._handle_get_run)
             self._app.router.add_get("/v1/runs/{run_id}/events", self._handle_run_events)

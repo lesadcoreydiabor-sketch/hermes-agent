@@ -56,6 +56,7 @@ from hermes_cli.run_inspector_events import (
 )
 from hermes_cli.run_inspector_gateway_forwarder import (
     DEFAULT_GATEWAY_EVENT_TIMEOUT_SECONDS,
+    fetch_gateway_run_summaries,
     get_gateway_run_event_forwarder_status,
     resolve_gateway_event_api_key,
     resolve_gateway_event_base_url,
@@ -584,21 +585,7 @@ async def get_run_inspector_events(limit: int = 50):
     }
 
 
-def _gateway_event_forwarder_timeout() -> float:
-    raw = os.getenv(
-        "HERMES_RUN_INSPECTOR_GATEWAY_TIMEOUT",
-        str(DEFAULT_GATEWAY_EVENT_TIMEOUT_SECONDS),
-    )
-    try:
-        timeout = float(raw)
-    except (TypeError, ValueError):
-        return DEFAULT_GATEWAY_EVENT_TIMEOUT_SECONDS
-    return max(1.0, min(timeout, 3600.0))
-
-
-@app.post("/api/run-inspector/gateway-runs/{run_id}/follow")
-async def follow_run_inspector_gateway_run(run_id: str):
-    """Follow a configured gateway run SSE stream into the local event ledger."""
+def _resolve_gateway_event_config() -> tuple[str, Optional[str]]:
     try:
         base_url = resolve_gateway_event_base_url()
     except ValueError as exc:
@@ -611,12 +598,60 @@ async def follow_run_inspector_gateway_run(run_id: str):
                 "HERMES_RUN_INSPECTOR_GATEWAY_URL or API_SERVER_* env vars."
             ),
         )
+    return base_url, resolve_gateway_event_api_key()
+
+
+def _gateway_event_forwarder_timeout() -> float:
+    raw = os.getenv(
+        "HERMES_RUN_INSPECTOR_GATEWAY_TIMEOUT",
+        str(DEFAULT_GATEWAY_EVENT_TIMEOUT_SECONDS),
+    )
+    try:
+        timeout = float(raw)
+    except (TypeError, ValueError):
+        return DEFAULT_GATEWAY_EVENT_TIMEOUT_SECONDS
+    return max(1.0, min(timeout, 3600.0))
+
+
+@app.get("/api/run-inspector/gateway-runs")
+async def list_run_inspector_gateway_runs(limit: int = 20):
+    """Return recent configured gateway run summaries for Run Inspector."""
+    base_url, api_key = _resolve_gateway_event_config()
+    loop = asyncio.get_running_loop()
+    try:
+        runs = await loop.run_in_executor(
+            None,
+            lambda: fetch_gateway_run_summaries(
+                base_url=base_url,
+                api_key=api_key,
+                limit=limit,
+                timeout=_gateway_event_forwarder_timeout(),
+            ),
+        )
+    except Exception as exc:
+        _log.debug("Gateway run list fetch failed: %s", exc)
+        raise HTTPException(
+            status_code=502,
+            detail=f"Gateway run list fetch failed: {type(exc).__name__}",
+        )
+
+    return {
+        "ok": True,
+        "runs": runs,
+        "refreshed_at": _utc_now_iso(),
+    }
+
+
+@app.post("/api/run-inspector/gateway-runs/{run_id}/follow")
+async def follow_run_inspector_gateway_run(run_id: str):
+    """Follow a configured gateway run SSE stream into the local event ledger."""
+    base_url, api_key = _resolve_gateway_event_config()
 
     try:
         forwarder = start_gateway_run_event_forwarder(
             run_id,
             base_url=base_url,
-            api_key=resolve_gateway_event_api_key(),
+            api_key=api_key,
             timeout=_gateway_event_forwarder_timeout(),
         )
     except ValueError as exc:

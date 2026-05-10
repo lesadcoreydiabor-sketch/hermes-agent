@@ -10,12 +10,15 @@ same privacy-safe event contract used by Run Inspector.
 from __future__ import annotations
 
 import os
+import re
 import threading
 import urllib.error
 import urllib.parse
 import urllib.request
 from datetime import datetime, timezone
 from typing import Any, Callable, Dict, Iterable, Iterator, Optional
+
+from agent.redact import redact_sensitive_text
 
 from hermes_cli.run_inspector_events import (
     record_run_inspector_event,
@@ -30,6 +33,11 @@ TERMINAL_GATEWAY_EVENTS = frozenset({
     "run.failed",
     "run.cancelled",
 })
+_SUMMARY_SECRET_RE = re.compile(
+    r"\b(?:api[_-]?key|token|secret|password)\s*[:=]\s*[^,\s;]+"
+    r"|\b(?:sk|gh[pousr])-[A-Za-z0-9_-]{8,}",
+    re.IGNORECASE,
+)
 
 _forwarders: dict[str, dict[str, Any]] = {}
 _lock = threading.RLock()
@@ -169,6 +177,31 @@ def forward_gateway_run_events(
     return forwarded
 
 
+def fetch_gateway_run_summaries(
+    *,
+    base_url: str,
+    api_key: Optional[str] = None,
+    limit: int = 20,
+    timeout: float = DEFAULT_GATEWAY_EVENT_TIMEOUT_SECONDS,
+    urlopen: Callable[..., Any] = urllib.request.urlopen,
+) -> list[dict[str, Any]]:
+    """Fetch recent gateway runs and normalize to dashboard-safe summaries."""
+
+    safe_limit = max(1, min(int(limit), 50))
+    request = _build_gateway_runs_request(base_url, api_key, safe_limit)
+    with urlopen(request, timeout=timeout) as response:
+        raw_body = response.read()
+    payload = json_loads_bytes(raw_body)
+    raw_runs = payload.get("data") if isinstance(payload, dict) else None
+    if not isinstance(raw_runs, list):
+        return []
+    return [
+        run
+        for run in (_normalize_gateway_run_summary(item) for item in raw_runs)
+        if run is not None
+    ]
+
+
 def _run_gateway_forwarder_thread(
     run_id: str,
     base_url: str,
@@ -227,6 +260,43 @@ def _build_gateway_events_request(
     return urllib.request.Request(url, headers=headers, method="GET")
 
 
+def _build_gateway_runs_request(
+    base_url: str,
+    api_key: Optional[str],
+    limit: int,
+) -> urllib.request.Request:
+    url = f"{_normalize_gateway_base_url(base_url)}/v1/runs?limit={int(limit)}"
+    headers = {"Accept": "application/json"}
+    if api_key:
+        headers["Authorization"] = f"Bearer {api_key}"
+    return urllib.request.Request(url, headers=headers, method="GET")
+
+
+def _normalize_gateway_run_summary(value: Any) -> Optional[dict[str, Any]]:
+    if not isinstance(value, dict):
+        return None
+    run_id = _safe_summary_text(value.get("run_id"))
+    if not run_id:
+        return None
+    return {
+        "run_id": run_id,
+        "status": _safe_summary_text(value.get("status")) or "unknown",
+        "created_at": _safe_number(value.get("created_at")),
+        "updated_at": _safe_number(value.get("updated_at")),
+        "session_id": _safe_summary_text(value.get("session_id")),
+        "model": _safe_summary_text(value.get("model")),
+        "last_event": _safe_summary_text(value.get("last_event")),
+        "has_error": bool(value.get("has_error")),
+    }
+
+
+def json_loads_bytes(raw_body: bytes | str) -> Any:
+    import json
+
+    text = raw_body.decode("utf-8", "replace") if isinstance(raw_body, bytes) else str(raw_body)
+    return json.loads(text)
+
+
 def _iter_sse_data(lines: Iterable[bytes | str]) -> Iterator[str]:
     data_lines: list[str] = []
     for raw_line in lines:
@@ -276,6 +346,25 @@ def _validate_run_id(run_id: str) -> str:
     if len(text) > 120:
         raise ValueError("run_id is too long")
     return text
+
+
+def _safe_summary_text(value: Any) -> Optional[str]:
+    if value is None:
+        return None
+    text = str(value).strip()
+    if not text:
+        return None
+    redacted = redact_sensitive_text(text, force=True)
+    return _SUMMARY_SECRET_RE.sub("Redacted", redacted)
+
+
+def _safe_number(value: Any) -> Optional[float]:
+    if value is None:
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
 
 
 def _clean_env(value: Optional[str]) -> Optional[str]:

@@ -24,6 +24,7 @@ import { useRunInspectorStatus } from "@/hooks/useRunInspectorStatus";
 import type {
   RunInspectorEvent,
   RunInspectorGatewayForwarder,
+  RunInspectorGatewayRun,
   RunInspectorMcpHealth,
   RunInspectorResponse,
   RunInspectorSnapshot,
@@ -75,6 +76,9 @@ export default function RunInspectorPage() {
     useState<RunInspectorGatewayForwarder | null>(null);
   const [gatewayForwarderError, setGatewayForwarderError] = useState<string | null>(null);
   const [gatewayForwarderBusy, setGatewayForwarderBusy] = useState(false);
+  const [gatewayRuns, setGatewayRuns] = useState<RunInspectorGatewayRun[]>([]);
+  const [gatewayRunsError, setGatewayRunsError] = useState<string | null>(null);
+  const [gatewayRunsBusy, setGatewayRunsBusy] = useState(false);
   const { setAfterTitle, setEnd, setTitle } = usePageHeader();
   const stateDisplay = describeRunInspectorState(inspector.state, inspector.snapshot);
 
@@ -117,6 +121,22 @@ export default function RunInspectorPage() {
       setGatewayForwarderBusy(false);
     }
   }, [eventStream, gatewayForwarder?.run_id, gatewayRunId]);
+
+  const refreshGatewayRuns = useCallback(async () => {
+    setGatewayRunsBusy(true);
+    setGatewayRunsError(null);
+    try {
+      const response = await api.getGatewayRuns(10);
+      setGatewayRuns(response.runs);
+      if (!gatewayRunId.trim() && response.runs.length > 0) {
+        setGatewayRunId(response.runs[0].run_id);
+      }
+    } catch (err) {
+      setGatewayRunsError(errorMessage(err));
+    } finally {
+      setGatewayRunsBusy(false);
+    }
+  }, [gatewayRunId]);
 
   const handleGatewayFollowSubmit = useCallback(
     (event: FormEvent<HTMLFormElement>) => {
@@ -210,7 +230,11 @@ export default function RunInspectorPage() {
               error={gatewayForwarderError}
               forwarder={gatewayForwarder}
               onRefresh={refreshGatewayFollowStatus}
+              onRefreshRuns={refreshGatewayRuns}
               onRunIdChange={setGatewayRunId}
+              recentRuns={gatewayRuns}
+              recentRunsBusy={gatewayRunsBusy}
+              recentRunsError={gatewayRunsError}
               onSubmit={handleGatewayFollowSubmit}
               runId={gatewayRunId}
             />
@@ -475,7 +499,11 @@ function GatewayRunFollowCard({
   error,
   forwarder,
   onRefresh,
+  onRefreshRuns,
   onRunIdChange,
+  recentRuns,
+  recentRunsBusy,
+  recentRunsError,
   onSubmit,
   runId,
 }: {
@@ -483,7 +511,11 @@ function GatewayRunFollowCard({
   error: string | null;
   forwarder: RunInspectorGatewayForwarder | null;
   onRefresh: () => void;
+  onRefreshRuns: () => void;
   onRunIdChange: (value: string) => void;
+  recentRuns: RunInspectorGatewayRun[];
+  recentRunsBusy: boolean;
+  recentRunsError: string | null;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
   runId: string;
 }) {
@@ -505,7 +537,7 @@ function GatewayRunFollowCard({
       </CardHeader>
       <CardContent className="flex min-w-0 flex-col gap-3">
         <form
-          className="grid min-w-0 gap-2 sm:grid-cols-[minmax(0,1fr)_auto_auto]"
+          className="grid min-w-0 gap-2 sm:grid-cols-[minmax(0,1fr)_auto_auto_auto]"
           onSubmit={onSubmit}
         >
           <Input
@@ -527,6 +559,16 @@ function GatewayRunFollowCard({
             type="button"
             size="sm"
             outlined
+            disabled={recentRunsBusy}
+            onClick={onRefreshRuns}
+            prefix={recentRunsBusy ? <Spinner /> : <RefreshCw />}
+          >
+            Runs
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            outlined
             disabled={busy || (!forwarder && !runId.trim())}
             onClick={onRefresh}
             prefix={busy ? <Spinner /> : <RefreshCw />}
@@ -534,6 +576,39 @@ function GatewayRunFollowCard({
             Status
           </Button>
         </form>
+
+        {recentRuns.length > 0 ? (
+          <div className="flex min-w-0 flex-col divide-y divide-border/70 border border-border">
+            {recentRuns.map((run) => (
+              <button
+                key={run.run_id}
+                className="grid min-w-0 gap-1 px-3 py-2 text-left transition-colors hover:bg-secondary/40 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-midground sm:grid-cols-[minmax(0,1fr)_auto]"
+                onClick={() => onRunIdChange(run.run_id)}
+                type="button"
+              >
+                <span className="min-w-0 truncate font-mono-ui text-xs">
+                  {formatDisplayValue(run.run_id)}
+                </span>
+                <span className="flex min-w-0 flex-wrap items-center gap-2">
+                  <Badge tone={gatewayRunTone(run)} className="w-fit text-[10px]">
+                    {formatDisplayValue(run.status)}
+                  </Badge>
+                  {run.last_event ? (
+                    <span className="truncate text-[10px] text-muted-foreground">
+                      {formatDisplayValue(run.last_event)}
+                    </span>
+                  ) : null}
+                </span>
+              </button>
+            ))}
+          </div>
+        ) : null}
+
+        {recentRunsError ? (
+          <p className="break-words border border-warning/30 bg-warning/10 px-3 py-2 text-xs text-warning">
+            {formatDisplayValue(recentRunsError)}
+          </p>
+        ) : null}
 
         <div className="grid min-w-0 gap-2 sm:grid-cols-2">
           <Metric
@@ -790,6 +865,19 @@ function mcpDetail(item: RunInspectorMcpHealth): string {
     ? `${item.affected_tools.length} tools`
     : "No affected tools";
   return item.last_error_class ? `${item.last_error_class} - ${affected}` : affected;
+}
+
+function gatewayRunTone(run: RunInspectorGatewayRun): BadgeTone {
+  if (run.has_error || run.status === "failed") {
+    return "destructive";
+  }
+  if (run.status === "completed") {
+    return "success";
+  }
+  if (run.status === "running" || run.status === "queued") {
+    return "secondary";
+  }
+  return "outline";
 }
 
 function describeGatewayForwarder(
