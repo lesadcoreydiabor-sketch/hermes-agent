@@ -9644,6 +9644,11 @@ def main():
     status_parser.add_argument(
         "--deep", action="store_true", help="Run deep checks (may take longer)"
     )
+    status_parser.add_argument(
+        "--run-inspector",
+        action="store_true",
+        help="Print the read-only Run Inspector snapshot as JSON",
+    )
     status_parser.set_defaults(func=cmd_status)
 
     # =========================================================================

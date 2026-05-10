@@ -8,6 +8,7 @@ import os
 import sys
 import subprocess  # noqa: F401 — re-exported for tests that monkeypatch status.subprocess to guard against regressions
 import importlib.util
+import json
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).parent.parent.resolve()
@@ -84,11 +85,56 @@ def _effective_provider_label() -> str:
     return provider_label(effective)
 
 
+def _configured_mcp_servers_for_inspector() -> dict:
+    try:
+        config = load_config()
+    except Exception:
+        return {}
+    servers = config.get("mcp_servers")
+    return servers if isinstance(servers, dict) else {}
+
+
+def get_run_inspector_status_payload(*, inspector_module=None) -> dict:
+    """Return the read-only Run Inspector payload for ``hermes status``."""
+    if inspector_module is None:
+        from hermes_cli import run_inspector as inspector_module
+
+    configured_mcp = _configured_mcp_servers_for_inspector()
+    try:
+        tool_health, mcp_health = inspector_module.collect_tool_and_mcp_health(
+            configured_mcp_servers=configured_mcp,
+        )
+    except Exception:
+        tool_health, mcp_health = (), ()
+    try:
+        snapshot = inspector_module.build_run_inspector_snapshot(
+            tool_health=tool_health,
+            mcp_health=mcp_health,
+        )
+    except Exception as exc:
+        from hermes_cli.run_inspector import empty_run_snapshot
+
+        snapshot = empty_run_snapshot(
+            degraded_reason=f"run_inspector_build_failed:{type(exc).__name__}",
+        )
+    return snapshot.to_dict()
+
+
+def show_run_inspector_status(args) -> None:
+    """Print the privacy-safe Run Inspector snapshot as JSON."""
+    payload = get_run_inspector_status_payload()
+    print(json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True))
+
+
 from hermes_constants import is_termux as _is_termux
 
 
 def show_status(args):
     """Show status of all Hermes Agent components."""
+    if getattr(args, "run_inspector", False):
+        show_run_inspector_status(args)
+        return
+
     show_all = getattr(args, 'all', False)
     deep = getattr(args, 'deep', False)
 

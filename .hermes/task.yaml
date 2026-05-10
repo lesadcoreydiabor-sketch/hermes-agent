@@ -1,0 +1,247 @@
+version: 1
+project: hermes-agent
+capability: hermes-run-inspector
+source_prd: docs/plans/hermes-run-inspector-prd.md
+owner: product-manager
+mode: implementation
+
+tasks:
+  - id: HRI-01
+    title: Define read-only run snapshot schema
+    description: Add a versioned schema for run status, last activity, active tool summary, MCP health, recovery hint, and privacy flags.
+    depends_on: []
+    acceptance:
+      - Snapshot has version, run_id, source, status, reason, workspace, session_id, last_activity_at, active_tool, mcp_health, recovery_hint, privacy_flags, and degraded_reason fields.
+      - Snapshot excludes raw prompts, secrets, full file contents, raw logs, and full tool arguments.
+      - Missing data is represented as unknown or null, not guessed.
+    verify:
+      - pytest tests/runtime/test_run_snapshot_schema.py
+    status: completed
+    risk: low
+
+  - id: HRI-02
+    title: Collect session and resume state
+    description: Build a read-only adapter over existing session/gateway state without changing persistence or run behavior.
+    depends_on:
+      - HRI-01
+    acceptance:
+      - Active, idle, completed, failed, stopped, and unknown states map into snapshot status.
+      - Resume-pending or degraded session state returns a recovery_hint when available.
+      - Missing or corrupt state returns degraded_reason instead of raising an uncaught exception.
+    verify:
+      - pytest tests/runtime/test_run_snapshot_session.py
+    status: completed
+    risk: medium
+
+  - id: HRI-03
+    title: Collect tool and MCP health
+    description: Summarize active tool state, ToolRegistry availability, and MCP server health without dispatching tools or refreshing remote servers.
+    depends_on:
+      - HRI-01
+    acceptance:
+      - Active tool summary includes name, call_id when available, and duration_ms when available.
+      - Tool summary reports available, unavailable, running, failed, or unknown.
+      - MCP summary reports connected, degraded, failed, or unknown state.
+      - Inspector does not reconnect, refresh, register, deregister, or dispatch MCP tools.
+    verify:
+      - pytest tests/runtime/test_run_snapshot_tools_mcp.py
+    status: completed
+    risk: medium
+
+  - id: HRI-04
+    title: Add redaction and privacy tests
+    description: Centralize snapshot redaction rules before exposing the snapshot through CLI or API.
+    depends_on:
+      - HRI-01
+      - HRI-02
+      - HRI-03
+    acceptance:
+      - Secret-like values, raw prompts, file bodies, raw logs, and full tool args are omitted or summarized.
+      - Tests cover string args, dict args, non-dict args, nested secret-looking fields, and large payload summaries.
+      - Each exposed field is safe, redacted, local_only, or unknown.
+    verify:
+      - pytest tests/runtime/test_run_snapshot_redaction.py
+    status: completed
+    risk: high
+
+  - id: HRI-05
+    title: Expose local read-only status surface
+    description: Add a local CLI command or existing API/status extension that prints the current run snapshot.
+    depends_on:
+      - HRI-02
+      - HRI-03
+      - HRI-04
+    acceptance:
+      - User can request status without starting, stopping, retrying, resuming, reconnecting, or mutating a run.
+      - Output includes status, last activity, active tool, MCP health, recovery hint, and degraded-state explanation.
+      - Command/API returns successfully when optional resource data is unavailable.
+    verify:
+      - pytest tests/hermes_cli/test_run_status.py
+    status: completed
+    risk: medium
+
+  - id: HRI-06
+    title: Add failure review and regression capture
+    description: Ensure failed verification or redaction problems become badcases, tests, or task updates before implementation continues.
+    depends_on:
+      - HRI-05
+    acceptance:
+      - Failed verification records what happened, why it failed, what changed, how it was verified, and what regression was added.
+      - Redaction failures are treated as blockers.
+      - Repeated unknown-state failures produce a new regression case or a task.yaml update.
+    verify:
+      - manual review of failure review entry after one simulated failed test
+    status: completed
+    risk: medium
+
+risk_flags:
+  destructive_file_change:
+    pause: true
+    examples:
+      - deleting files
+      - broad refactors outside the run-inspector slice
+  database_migration:
+    pause: true
+    examples:
+      - persistent state schema change
+      - session storage migration
+  external_api_write:
+    pause: true
+    examples:
+      - posting to Slack, Telegram, GitHub, or remote MCP services
+  credential_or_secret_access:
+    pause: true
+    examples:
+      - reading tokens
+      - writing secrets to logs or snapshots
+  public_contract_change:
+    pause: true
+    examples:
+      - changing existing API response fields
+      - changing status endpoint semantics without versioning
+  user_visible_behavior_change:
+    pause: false
+    examples:
+      - adding a new read-only CLI command
+      - adding optional fields to a versioned inspector payload
+
+progress_report:
+  enabled: true
+  update_after_each_task: true
+  fields:
+    - task_id
+    - status
+    - changed_files
+    - verification_result
+    - blockers
+    - next_step
+  entries:
+    - task_id: HRI-01
+      status: completed
+      changed_files:
+        - hermes_cli/run_inspector.py
+        - tests/runtime/test_run_snapshot_schema.py
+      verification_result: "passed: venv/Scripts/python.exe -m pytest tests/runtime/test_run_snapshot_schema.py -q -o addopts="
+      blockers: []
+      next_step: HRI-02
+    - task_id: HRI-02
+      status: completed
+      changed_files:
+        - hermes_cli/run_inspector.py
+        - tests/runtime/test_run_snapshot_session.py
+      verification_result: "passed: venv/Scripts/python.exe -m pytest tests/runtime/test_run_snapshot_session.py tests/runtime/test_run_snapshot_schema.py -q -o addopts="
+      blockers: []
+      next_step: HRI-03
+    - task_id: HRI-03
+      status: completed
+      changed_files:
+        - hermes_cli/run_inspector.py
+        - tests/runtime/test_run_snapshot_schema.py
+        - tests/runtime/test_run_snapshot_tools_mcp.py
+      verification_result: "passed: venv/Scripts/python.exe -m pytest tests/runtime/test_run_snapshot_schema.py tests/runtime/test_run_snapshot_session.py tests/runtime/test_run_snapshot_tools_mcp.py -q -o addopts="
+      blockers: []
+      next_step: HRI-04
+    - task_id: HRI-04
+      status: completed
+      changed_files:
+        - hermes_cli/run_inspector.py
+        - tests/runtime/test_run_snapshot_schema.py
+        - tests/runtime/test_run_snapshot_redaction.py
+      verification_result: "passed: venv/Scripts/python.exe -m pytest tests/runtime/test_run_snapshot_schema.py tests/runtime/test_run_snapshot_session.py tests/runtime/test_run_snapshot_tools_mcp.py tests/runtime/test_run_snapshot_redaction.py -q -o addopts="
+      blockers: []
+      next_step: HRI-05
+    - task_id: HRI-05
+      status: completed
+      changed_files:
+        - hermes_cli/run_inspector.py
+        - hermes_cli/status.py
+        - hermes_cli/main.py
+        - tests/hermes_cli/test_run_status.py
+      verification_result: "passed: venv/Scripts/python.exe -m pytest tests/runtime/test_run_snapshot_schema.py tests/runtime/test_run_snapshot_session.py tests/runtime/test_run_snapshot_tools_mcp.py tests/runtime/test_run_snapshot_redaction.py tests/hermes_cli/test_run_status.py -q -o addopts=; smoke passed: python -m hermes_cli.main status --run-inspector returned JSON"
+      blockers: []
+      next_step: HRI-06
+    - task_id: HRI-06
+      status: completed
+      changed_files:
+        - hermes_cli/run_inspector.py
+        - tests/runtime/test_run_snapshot_failure_review.py
+        - .hermes/task.yaml
+      verification_result: "passed: venv/Scripts/python.exe -m pytest tests/runtime/test_run_snapshot_schema.py tests/runtime/test_run_snapshot_session.py tests/runtime/test_run_snapshot_tools_mcp.py tests/runtime/test_run_snapshot_redaction.py tests/runtime/test_run_snapshot_failure_review.py tests/hermes_cli/test_run_status.py -q -o addopts="
+      blockers: []
+      next_step: "Run Inspector P0 implementation slice complete; prepare review or continue with integration hardening"
+    - task_id: HRI-06
+      status: completed
+      changed_files:
+        - hermes_cli/status.py
+        - tests/hermes_cli/test_run_status.py
+        - .hermes/task.yaml
+      verification_result: "passed: venv/Scripts/python.exe -m pytest tests/hermes_cli/test_status.py tests/hermes_cli/test_run_status.py tests/runtime/test_run_snapshot_schema.py tests/runtime/test_run_snapshot_session.py tests/runtime/test_run_snapshot_tools_mcp.py tests/runtime/test_run_snapshot_redaction.py tests/runtime/test_run_snapshot_failure_review.py -q -o addopts= (39 passed); smoke passed: python -m hermes_cli.main status --run-inspector returned JSON; partial completion regression passed with bash syntax test deselected because /bin/bash is unavailable in this environment (25 passed, 1 skipped, 1 deselected)"
+      blockers:
+        - "Full tests/hermes_cli/test_completion.py includes a bash -n syntax check that cannot run here because /bin/bash is unavailable."
+      next_step: "Review Run Inspector P0 diff, then decide whether to stage/commit or continue deeper integration hardening."
+
+failure_review:
+  enabled: true
+  trigger_on:
+    - failed_verification
+    - blocked_task
+    - repeated_tool_error
+    - redaction_failure
+    - user_interruption
+  record:
+    - what_happened
+    - why_it_failed
+    - what_changed
+    - how_it_was_verified
+    - added_eval_or_badcase
+  entries:
+    - trigger: failed_verification
+      task_id: HRI-01
+      what_happened: "Initial schema test expected the redactor to preserve the sk-proj prefix, but HERMES redacts environment assignment values to OPENAI_API_KEY=***."
+      why_it_failed: "The test expectation was less strict than the existing agent.redact behavior."
+      what_changed: "Updated the test to assert the safer existing OPENAI_API_KEY=*** output."
+      how_it_was_verified: "Re-ran venv/Scripts/python.exe -m pytest tests/runtime/test_run_snapshot_schema.py -q -o addopts= and all 6 tests passed."
+      added_eval_or_badcase: "tests/runtime/test_run_snapshot_schema.py::test_snapshot_redacts_secret_like_text_fields"
+    - trigger: failed_verification
+      task_id: HRI-03
+      what_happened: "Configured-only MCP servers with an empty config dict were classified as failed instead of unknown/not_connected."
+      why_it_failed: "The implementation used truthiness of the config dict rather than membership in configured_servers."
+      what_changed: "Changed summarize_mcp_servers to treat name presence in configured_servers as configured, even when the config value is an empty dict."
+      how_it_was_verified: "Re-ran venv/Scripts/python.exe -m pytest tests/runtime/test_run_snapshot_schema.py tests/runtime/test_run_snapshot_session.py tests/runtime/test_run_snapshot_tools_mcp.py -q -o addopts= and all 19 tests passed."
+      added_eval_or_badcase: "tests/runtime/test_run_snapshot_tools_mcp.py::test_mcp_summary_reports_connected_failed_degraded_and_configured_unknown"
+    - trigger: repeated_unknown_state
+      task_id: HRI-06
+      what_happened: "Simulated three Run Inspector snapshots returning status=unknown with degraded_reason=gateway_state_unknown."
+      why_it_failed: "Repeated unknown state would hide an inspector classification gap if it occurred in real runs."
+      what_changed: "Added FailureReviewEntry, redaction-failure blocker behavior, repeated unknown-state detection, and task.yaml append helper."
+      how_it_was_verified: "Re-ran venv/Scripts/python.exe -m pytest tests/runtime/test_run_snapshot_schema.py tests/runtime/test_run_snapshot_session.py tests/runtime/test_run_snapshot_tools_mcp.py tests/runtime/test_run_snapshot_redaction.py tests/runtime/test_run_snapshot_failure_review.py tests/hermes_cli/test_run_status.py -q -o addopts= and all 34 tests passed."
+      added_eval_or_badcase: "tests/runtime/test_run_snapshot_failure_review.py::test_repeated_unknown_state_creates_regression_entry"
+      blocker: false
+    - trigger: failed_verification
+      task_id: HRI-06
+      what_happened: "A new degradation test expected empty fallback snapshots to include redacted/local_only privacy flags, but empty_run_snapshot intentionally returns only safe."
+      why_it_failed: "The test conflated a fully assembled Run Inspector snapshot with the existing empty snapshot schema."
+      what_changed: "Kept the runtime degradation behavior and updated the test to assert the existing safe-only empty snapshot contract."
+      how_it_was_verified: "Re-ran venv/Scripts/python.exe -m pytest tests/hermes_cli/test_status.py tests/hermes_cli/test_run_status.py tests/runtime/test_run_snapshot_schema.py tests/runtime/test_run_snapshot_session.py tests/runtime/test_run_snapshot_tools_mcp.py tests/runtime/test_run_snapshot_redaction.py tests/runtime/test_run_snapshot_failure_review.py -q -o addopts= and all 39 tests passed."
+      added_eval_or_badcase: "tests/hermes_cli/test_run_status.py::test_run_inspector_status_degrades_when_snapshot_build_fails"
+      blocker: false
