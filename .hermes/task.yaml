@@ -2,6 +2,10 @@ version: 1
 project: hermes-agent
 capability: hermes-run-inspector
 source_prd: docs/plans/hermes-run-inspector-prd.md
+related_prds:
+  - docs/plans/hermes-run-inspector-prd.md
+  - docs/plans/hermes-run-inspector-desktop-panel-requirements.md
+  - docs/plans/hermes-run-inspector-desktop-panel-prd.md
 owner: product-manager
 mode: implementation
 
@@ -94,6 +98,143 @@ tasks:
     status: completed
     risk: medium
 
+  - id: HRIDP-01
+    title: Finalize issue-grounded desktop panel PRD
+    description: Convert GitNexus code evidence and issue evidence from adjacent HERMES UI projects into a formal Run Inspector Desktop Panel PRD.
+    depends_on:
+      - HRI-06
+    acceptance:
+      - PRD references HERMES P0 Run Inspector as the source data contract.
+      - PRD separates code evidence, issue evidence, transferable patterns, non-goals, and risks.
+      - PRD explicitly keeps P1 read-only and excludes installer, config editor, gateway write controls, terminal streaming, and raw logs.
+      - PRD includes an execution contract for API, hook, panel, sidebar, session/chat entry, resilience tests, and desktop wrapper decision.
+    verify:
+      - manual review of docs/plans/hermes-run-inspector-desktop-panel-prd.md
+      - git diff --check -- docs/plans/hermes-run-inspector-desktop-panel-prd.md
+    status: completed
+    risk: low
+
+  - id: HRIDP-02
+    title: Add read-only Run Inspector dashboard API
+    description: Add an additive local dashboard endpoint backed by the P0 Run Inspector snapshot contract.
+    depends_on:
+      - HRIDP-01
+    acceptance:
+      - GET /api/run-inspector returns a privacy-safe snapshot envelope with refreshed_at.
+      - Endpoint does not start, stop, resume, retry, reconnect, refresh MCP, dispatch tools, or write config.
+      - Missing collector data returns unknown or degraded state without crashing the dashboard API.
+      - API tests cover success, unknown state, collector failure, and redaction.
+    verify:
+      - venv/Scripts/python.exe -m pytest tests/hermes_cli/test_run_inspector_api.py -q -o addopts=
+      - venv/Scripts/python.exe -m pytest tests/runtime/test_run_snapshot_schema.py tests/runtime/test_run_snapshot_redaction.py -q -o addopts=
+    status: completed
+    risk: medium
+
+  - id: HRIDP-03
+    title: Add Run Inspector client hook
+    description: Add a frontend data hook for the dashboard panel with bounded timeout, backoff, auth-failure handling, and manual refresh.
+    depends_on:
+      - HRIDP-02
+    acceptance:
+      - Hook maps API states to loading, ready, degraded, auth_failed, offline, and unknown.
+      - Request timeout is bounded.
+      - Repeated failures use backoff.
+      - Auth failure stops polling and surfaces auth state.
+      - Hook exposes manual refresh without triggering gateway or config actions.
+    verify:
+      - venv/Scripts/python.exe -m pytest tests/web/test_run_inspector_status_policy.py -q -o addopts=
+      - npm.cmd run build
+    status: completed
+    risk: medium
+
+  - id: HRIDP-04
+    title: Add full Run Inspector dashboard panel
+    description: Render the P0 snapshot in a dashboard panel with status, session, active tool, MCP/tool health, recovery hint, degraded reason, privacy flags, and refresh state.
+    depends_on:
+      - HRIDP-03
+    acceptance:
+      - Panel shows running, waiting, failed, degraded, unknown, auth_failed, and offline states.
+      - Panel never renders raw prompts, raw logs, secrets, file bodies, environment values, or full tool arguments.
+      - Long tool names, call ids, and argument summaries do not overflow their containers.
+      - Empty and no-snapshot states are explicit and not treated as fatal errors.
+    verify:
+      - venv/Scripts/python.exe -m pytest tests/web/test_run_inspector_status_policy.py -q -o addopts=
+      - npm.cmd run build
+      - Invoke-WebRequest http://127.0.0.1:9121/run-inspector
+      - Invoke-WebRequest http://127.0.0.1:9121/api/run-inspector with dashboard session token
+    status: completed
+    risk: medium
+
+  - id: HRIDP-05
+    title: Add sidebar Run Inspector signal
+    description: Add a compact sidebar status signal that routes to the full Run Inspector panel.
+    depends_on:
+      - HRIDP-04
+    acceptance:
+      - Sidebar maps snapshot state to running, waiting, failed, degraded, unknown, or unavailable.
+      - Sidebar signal opens or routes to the full panel.
+      - Sidebar polling is slower than panel polling or uses shared cached state.
+      - API unavailable state does not block navigation.
+    verify:
+      - venv/Scripts/python.exe -m pytest tests/web/test_run_inspector_status_policy.py -q -o addopts=
+      - npm.cmd run build
+      - Invoke-WebRequest http://127.0.0.1:9121/run-inspector
+      - Invoke-WebRequest http://127.0.0.1:9121/api/run-inspector with dashboard session token
+    status: completed
+    risk: low
+
+  - id: HRIDP-06
+    title: Add Sessions and Chat diagnostic entry points
+    description: Add links from session and chat surfaces into the Run Inspector panel without requiring run mutation.
+    depends_on:
+      - HRIDP-05
+    acceptance:
+      - Sessions page can link to the current or latest run diagnostic when a snapshot exists.
+      - Chat page can link to current run diagnostics when embedded chat is enabled.
+      - No-snapshot state is shown as unavailable, not an error.
+      - Entry points do not start, stop, resume, retry, reconnect, or mutate gateway state.
+    verify:
+      - venv/Scripts/python.exe -m pytest tests/web/test_run_inspector_status_policy.py -q -o addopts=
+      - npm.cmd run build
+      - Invoke-WebRequest http://127.0.0.1:9121/run-inspector
+      - Invoke-WebRequest http://127.0.0.1:9121/api/run-inspector with dashboard session token
+    status: completed
+    risk: low
+
+  - id: HRIDP-07
+    title: Add resilience, privacy, and UI regression coverage
+    description: Verify that the Run Inspector panel cannot enter infinite loading, auth retry loops, privacy leaks, layout overflow, or platform-specific shell assumptions.
+    depends_on:
+      - HRIDP-06
+    acceptance:
+      - Backend and frontend tests cover timeout, degraded state, auth failure, backoff, and manual refresh.
+      - UI tests include long tool names, long summaries, and secret-looking values.
+      - Manual browser screenshots confirm no overlap at desktop and narrow widths.
+      - Feature does not require /bin/bash or hardcoded Unix paths on Windows.
+      - Any failed verification creates a failure_review entry or regression test before continuing.
+    verify:
+      - venv/Scripts/python.exe -m pytest tests/hermes_cli/test_run_inspector_api.py tests/runtime/test_run_snapshot_schema.py tests/runtime/test_run_snapshot_redaction.py -q -o addopts=
+      - venv/Scripts/python.exe -m pytest tests/web/test_run_inspector_status_policy.py -q -o addopts=
+      - npm.cmd run build
+      - Playwright screenshot check for desktop and narrow /run-inspector viewports
+    status: completed
+    risk: high
+
+  - id: HRIDP-08
+    title: Decide desktop wrapper scope
+    description: Produce a short decision note on whether a separate desktop wrapper is justified after the read-only dashboard panel is stable.
+    depends_on:
+      - HRIDP-07
+    acceptance:
+      - Decision considers platform compatibility, install detection, remote mode, config writes, and support burden.
+      - Decision does not add installer or gateway control scope to P1.
+      - If a wrapper is recommended, a separate PRD and task.yaml slice are created.
+    verify:
+      - manual review of desktop wrapper decision note
+      - git diff --check -- docs/plans/hermes-desktop-wrapper-decision.md .hermes/task.yaml
+    status: completed
+    risk: low
+
 risk_flags:
   destructive_file_change:
     pause: true
@@ -124,6 +265,31 @@ risk_flags:
     examples:
       - adding a new read-only CLI command
       - adding optional fields to a versioned inspector payload
+  config_mutation:
+    pause: true
+    examples:
+      - changing config.yaml
+      - changing .env or provider profile files
+      - auto-incrementing gateway ports
+  platform_specific_execution:
+    pause: true
+    examples:
+      - adding subprocess execution paths
+      - assuming /bin/bash
+      - assuming venv/bin/python on Windows
+  infinite_loading_or_retry_loop:
+    pause: true
+    examples:
+      - polling without timeout
+      - unauthenticated retry loops
+      - spinner state without degraded fallback
+  ui_privacy_leak:
+    pause: true
+    examples:
+      - rendering raw prompts
+      - rendering raw logs
+      - rendering full tool arguments
+      - rendering secret-looking environment values
 
 progress_report:
   enabled: true
@@ -199,6 +365,85 @@ progress_report:
       blockers:
         - "Full tests/hermes_cli/test_completion.py includes a bash -n syntax check that cannot run here because /bin/bash is unavailable."
       next_step: "Review Run Inspector P0 diff, then decide whether to stage/commit or continue deeper integration hardening."
+    - task_id: HRIDP-01
+      status: completed
+      changed_files:
+        - docs/plans/hermes-run-inspector-desktop-panel-requirements.md
+        - docs/plans/hermes-run-inspector-desktop-panel-prd.md
+        - .hermes/task.yaml
+      verification_result: "passed: git diff --check -- .hermes/task.yaml docs/plans/hermes-run-inspector-desktop-panel-prd.md docs/plans/hermes-run-inspector-desktop-panel-requirements.md; passed: yaml.safe_load parsed .hermes/task.yaml with 14 tasks and 10 risk flags"
+      blockers: []
+      next_step: HRIDP-02
+    - task_id: HRIDP-02
+      status: completed
+      changed_files:
+        - hermes_cli/web_server.py
+        - tests/hermes_cli/test_run_inspector_api.py
+        - .hermes/task.yaml
+      verification_result: "passed: venv/Scripts/python.exe -m pytest tests/hermes_cli/test_run_inspector_api.py tests/runtime/test_run_snapshot_schema.py tests/runtime/test_run_snapshot_redaction.py -q -o addopts= (16 passed); passed: venv/Scripts/python.exe -m pytest tests/hermes_cli/test_web_server.py::TestWebServerEndpoints tests/hermes_cli/test_run_inspector_api.py -q -o addopts= (20 passed); passed: git diff --check for changed HRIDP files"
+      blockers: []
+      next_step: HRIDP-03
+    - task_id: HRIDP-03
+      status: completed
+      changed_files:
+        - web/src/lib/api.ts
+        - web/src/hooks/runInspectorStatusPolicy.ts
+        - web/src/hooks/useRunInspectorStatus.ts
+        - tests/web/test_run_inspector_status_policy.py
+        - .hermes/task.yaml
+      verification_result: "passed: venv/Scripts/python.exe -m pytest tests/web/test_run_inspector_status_policy.py -q -o addopts= (3 passed); passed: npm.cmd run build; passed: git diff --check for changed HRIDP files"
+      blockers:
+        - "PowerShell blocked npm.ps1 by execution policy, so verification used npm.cmd run build instead."
+      next_step: HRIDP-04
+    - task_id: HRIDP-04
+      status: completed
+      changed_files:
+        - web/src/App.tsx
+        - web/src/pages/RunInspectorPage.tsx
+        - web/src/pages/runInspectorViewModel.ts
+        - tests/web/test_run_inspector_status_policy.py
+        - .hermes/task.yaml
+      verification_result: "passed: venv/Scripts/python.exe -m pytest tests/web/test_run_inspector_status_policy.py -q -o addopts= (5 passed); passed: npm.cmd run build; passed: git diff --check for changed HRIDP files; smoke passed: http://127.0.0.1:9121/run-inspector returned 200 and /api/run-inspector returned ok=True with snapshot_status=unknown"
+      blockers: []
+      next_step: HRIDP-05
+    - task_id: HRIDP-05
+      status: completed
+      changed_files:
+        - web/src/components/SidebarStatusStrip.tsx
+        - web/src/pages/runInspectorViewModel.ts
+        - tests/web/test_run_inspector_status_policy.py
+        - .hermes/task.yaml
+      verification_result: "passed: venv/Scripts/python.exe -m pytest tests/web/test_run_inspector_status_policy.py -q -o addopts= (6 passed); passed: npm.cmd run build; passed: git diff --check for changed HRIDP files; smoke passed: http://127.0.0.1:9121/run-inspector returned 200 and /api/run-inspector returned ok=True with snapshot_status=unknown"
+      blockers: []
+      next_step: HRIDP-06
+    - task_id: HRIDP-06
+      status: completed
+      changed_files:
+        - web/src/pages/SessionsPage.tsx
+        - web/src/pages/ChatPage.tsx
+        - tests/web/test_run_inspector_status_policy.py
+        - .hermes/task.yaml
+      verification_result: "passed: venv/Scripts/python.exe -m pytest tests/web/test_run_inspector_status_policy.py -q -o addopts= (7 passed); passed: npm.cmd run build; passed: git diff --check for changed HRIDP files; smoke passed: http://127.0.0.1:9121/run-inspector returned 200 and /api/run-inspector returned ok=True with snapshot_status=unknown"
+      blockers: []
+      next_step: HRIDP-07
+    - task_id: HRIDP-07
+      status: completed
+      changed_files:
+        - web/src/pages/RunInspectorPage.tsx
+        - web/src/pages/runInspectorViewModel.ts
+        - tests/web/test_run_inspector_status_policy.py
+        - .hermes/task.yaml
+      verification_result: "passed: venv/Scripts/python.exe -m pytest tests/web/test_run_inspector_status_policy.py -q -o addopts= (11 passed); passed: venv/Scripts/python.exe -m pytest tests/hermes_cli/test_run_inspector_api.py tests/runtime/test_run_snapshot_schema.py tests/runtime/test_run_snapshot_redaction.py -q -o addopts= (16 passed); passed: npm.cmd run build; smoke passed: http://127.0.0.1:9121/run-inspector returned 200 and /api/run-inspector returned ok=True with snapshot_status=unknown; Playwright desktop/narrow screenshots passed without horizontal overflow"
+      blockers: []
+      next_step: HRIDP-08
+    - task_id: HRIDP-08
+      status: completed
+      changed_files:
+        - docs/plans/hermes-desktop-wrapper-decision.md
+        - .hermes/task.yaml
+      verification_result: "passed: manual review of docs/plans/hermes-desktop-wrapper-decision.md; passed: git diff --check -- docs/plans/hermes-desktop-wrapper-decision.md .hermes/task.yaml"
+      blockers: []
+      next_step: "Run Inspector Desktop Panel P1 slice complete; prepare review, stage/commit, or start Run Inspector P2 event integration."
 
 failure_review:
   enabled: true
@@ -208,6 +453,9 @@ failure_review:
     - repeated_tool_error
     - redaction_failure
     - user_interruption
+    - infinite_loading
+    - auth_retry_loop
+    - ui_privacy_leak
   record:
     - what_happened
     - why_it_failed

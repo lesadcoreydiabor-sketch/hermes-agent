@@ -63,6 +63,8 @@ async function getSessionToken(): Promise<string> {
 
 export const api = {
   getStatus: () => fetchJSON<StatusResponse>("/api/status"),
+  getRunInspector: (init?: RequestInit) =>
+    fetchJSON<RunInspectorResponse>("/api/run-inspector", init),
   getSessions: (limit = 20, offset = 0) =>
     fetchJSON<PaginatedSessions>(`/api/sessions?limit=${limit}&offset=${offset}`),
   getSessionMessages: (id: string) =>
@@ -379,6 +381,84 @@ export interface StatusResponse {
   latest_config_version: number;
   release_date: string;
   version: string;
+}
+
+export type RunInspectorSource =
+  | "cli"
+  | "gateway"
+  | "acp"
+  | "mcp"
+  | "eval"
+  | "unknown";
+
+export type RunInspectorStatus =
+  | "starting"
+  | "thinking"
+  | "executing_tool"
+  | "waiting_input"
+  | "waiting_approval"
+  | "rate_limited"
+  | "recovering"
+  | "completed"
+  | "failed"
+  | "stopped"
+  | "unknown";
+
+export type RunInspectorHealthStatus =
+  | "available"
+  | "unavailable"
+  | "running"
+  | "failed"
+  | "unknown";
+
+export type RunInspectorMcpStatus =
+  | "connected"
+  | "degraded"
+  | "failed"
+  | "unknown";
+
+export interface RunInspectorActiveTool {
+  name: string | null;
+  call_id: string | null;
+  duration_ms: number | null;
+  args_summary: Record<string, unknown> | null;
+}
+
+export interface RunInspectorToolHealth {
+  name: string | null;
+  toolset: string | null;
+  status: RunInspectorHealthStatus;
+  reason: string | null;
+}
+
+export interface RunInspectorMcpHealth {
+  name: string | null;
+  status: RunInspectorMcpStatus;
+  last_error_class: string | null;
+  affected_tools: string[];
+}
+
+export interface RunInspectorSnapshot {
+  version: number;
+  run_id: string;
+  source: RunInspectorSource;
+  status: RunInspectorStatus;
+  reason: string | null;
+  workspace: string | null;
+  session_id: string | null;
+  last_activity_at: string | null;
+  active_tool: RunInspectorActiveTool;
+  tool_health: RunInspectorToolHealth[];
+  mcp_health: RunInspectorMcpHealth[];
+  recovery_hint: string | null;
+  privacy_flags: string[];
+  degraded_reason: string | null;
+}
+
+export interface RunInspectorResponse {
+  ok: boolean;
+  snapshot: RunInspectorSnapshot;
+  refreshed_at: string;
 }
 
 export interface SessionInfo {

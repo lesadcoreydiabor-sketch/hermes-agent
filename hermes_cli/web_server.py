@@ -22,6 +22,7 @@ import threading
 import time
 import urllib.parse
 import urllib.request
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -47,6 +48,7 @@ from hermes_cli.config import (
     check_config_version,
     redact_key,
 )
+from hermes_cli.status import get_run_inspector_status_payload
 from gateway.status import get_running_pid, read_runtime_status
 
 try:
@@ -518,6 +520,45 @@ def _probe_gateway_health() -> tuple[bool, dict | None]:
         except Exception:
             continue
     return False, None
+
+
+def _utc_now_iso() -> str:
+    return datetime.now(timezone.utc).isoformat()
+
+
+def _normalize_run_inspector_snapshot(payload: Any) -> dict[str, Any]:
+    """Normalize dashboard snapshots through the P0 privacy-safe contract."""
+    from hermes_cli.run_inspector import RunSnapshot
+
+    return RunSnapshot.from_mapping(payload).to_dict()
+
+
+def _run_inspector_error_snapshot(exc: Exception) -> dict[str, Any]:
+    from hermes_cli.run_inspector import empty_run_snapshot
+
+    return empty_run_snapshot(
+        degraded_reason=f"run_inspector_api_failed:{type(exc).__name__}",
+    ).to_dict()
+
+
+@app.get("/api/run-inspector")
+async def get_run_inspector():
+    """Return a privacy-safe, read-only Run Inspector snapshot for dashboard UI."""
+    ok = True
+    try:
+        snapshot = _normalize_run_inspector_snapshot(
+            get_run_inspector_status_payload()
+        )
+    except Exception as exc:
+        ok = False
+        _log.warning("Run Inspector API snapshot failed: %s", exc)
+        snapshot = _run_inspector_error_snapshot(exc)
+
+    return {
+        "ok": ok,
+        "snapshot": snapshot,
+        "refreshed_at": _utc_now_iso(),
+    }
 
 
 @app.get("/api/status")
@@ -3047,11 +3088,41 @@ def _resolve_chat_argv(
     the spawned ``tui_gateway.entry`` can mirror dispatcher emits to the
     dashboard's ``/api/pub`` endpoint (see :func:`pub_ws`).
     """
+    import tempfile
+
     from hermes_cli.main import PROJECT_ROOT, _make_tui_argv
 
     argv, cwd = _make_tui_argv(PROJECT_ROOT / "ui-tui", tui_dev=False)
     env = os.environ.copy()
     env.setdefault("NODE_ENV", "production")
+    env["HERMES_PYTHON_SRC_ROOT"] = os.environ.get(
+        "HERMES_PYTHON_SRC_ROOT", str(PROJECT_ROOT)
+    )
+    venv_python = PROJECT_ROOT / "venv" / "Scripts" / "python.exe"
+    env.setdefault(
+        "HERMES_PYTHON",
+        str(venv_python if venv_python.exists() else sys.executable),
+    )
+    venv_hermes = PROJECT_ROOT / "venv" / "Scripts" / "hermes.exe"
+    sibling_hermes = Path(sys.executable).with_name("hermes.exe")
+    if venv_hermes.exists():
+        env.setdefault("HERMES_BIN", str(venv_hermes))
+    elif sibling_hermes.exists():
+        env.setdefault("HERMES_BIN", str(sibling_hermes))
+    env.setdefault("HERMES_CWD", os.getcwd())
+    if not env.get("HERMES_TUI_ACTIVE_SESSION_FILE"):
+        active_session_fd, active_session_file = tempfile.mkstemp(
+            prefix="hermes-tui-active-session-", suffix=".json"
+        )
+        os.close(active_session_fd)
+        env["HERMES_TUI_ACTIVE_SESSION_FILE"] = active_session_file
+
+    node_options = env.get("NODE_OPTIONS", "").split()
+    if not any(t.startswith("--max-old-space-size=") for t in node_options):
+        node_options.append("--max-old-space-size=8192")
+    if "--expose-gc" not in node_options:
+        node_options.append("--expose-gc")
+    env["NODE_OPTIONS"] = " ".join(node_options)
     # Browser-embedded chat should prefer stable wheel-based scrollback over
     # native terminal mouse tracking. When mouse tracking is enabled, wheel
     # events are consumed by the TUI and forwarded as terminal input, which

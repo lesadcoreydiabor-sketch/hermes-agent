@@ -1,0 +1,514 @@
+import { useLayoutEffect, type ReactNode } from "react";
+import {
+  Activity,
+  AlertTriangle,
+  CheckCircle2,
+  Clock,
+  Database,
+  FileWarning,
+  RefreshCw,
+  Shield,
+  Terminal,
+  Wrench,
+  XCircle,
+} from "lucide-react";
+import { Badge } from "@nous-research/ui/ui/components/badge";
+import { Button } from "@nous-research/ui/ui/components/button";
+import { Spinner } from "@nous-research/ui/ui/components/spinner";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { usePageHeader } from "@/contexts/usePageHeader";
+import { useRunInspectorStatus } from "@/hooks/useRunInspectorStatus";
+import type {
+  RunInspectorMcpHealth,
+  RunInspectorResponse,
+  RunInspectorSnapshot,
+  RunInspectorToolHealth,
+} from "@/lib/api";
+import { cn } from "@/lib/utils";
+import { PluginSlot } from "@/plugins";
+import {
+  TONE_CLASSES,
+  countMcpHealth,
+  countToolHealth,
+  describeRunInspectorState,
+  formatArgsSummary,
+  formatDateTime,
+  formatDisplayValue,
+  formatDurationMs,
+  responseHealthLabel,
+  type StateDisplay,
+  type Tone,
+} from "@/pages/runInspectorViewModel";
+
+type BadgeTone = "success" | "warning" | "destructive" | "secondary" | "outline";
+
+const BADGE_TONE: Record<Tone, BadgeTone> = {
+  success: "success",
+  warning: "warning",
+  destructive: "destructive",
+  muted: "outline",
+  primary: "secondary",
+};
+
+export default function RunInspectorPage() {
+  const inspector = useRunInspectorStatus();
+  const { setAfterTitle, setEnd, setTitle } = usePageHeader();
+  const stateDisplay = describeRunInspectorState(inspector.state, inspector.snapshot);
+
+  useLayoutEffect(() => {
+    setTitle("Run Inspector");
+    setAfterTitle(
+      <Badge tone={BADGE_TONE[stateDisplay.tone]} className="text-[10px]">
+        {stateDisplay.label}
+      </Badge>,
+    );
+    setEnd(
+      <div className="flex w-full min-w-0 items-center justify-end gap-2">
+        <span className="hidden min-w-0 truncate text-xs text-muted-foreground sm:inline">
+          {inspector.lastUpdatedAt
+            ? `Refreshed ${formatDateTime(inspector.lastUpdatedAt)}`
+            : "Not refreshed"}
+        </span>
+        <Button
+          type="button"
+          size="sm"
+          outlined
+          onClick={inspector.refresh}
+          disabled={inspector.isLoading}
+          prefix={inspector.isLoading ? <Spinner /> : <RefreshCw />}
+        >
+          Refresh
+        </Button>
+      </div>,
+    );
+    return () => {
+      setTitle(null);
+      setAfterTitle(null);
+      setEnd(null);
+    };
+  }, [
+    inspector.isLoading,
+    inspector.lastUpdatedAt,
+    inspector.refresh,
+    setAfterTitle,
+    setEnd,
+    setTitle,
+    stateDisplay.label,
+    stateDisplay.tone,
+  ]);
+
+  const snapshot = inspector.snapshot;
+
+  return (
+    <div className="flex min-w-0 flex-col gap-4">
+      <PluginSlot name="run-inspector:top" />
+
+      <RunInspectorBanner
+        error={inspector.error}
+        response={inspector.response}
+        snapshot={snapshot}
+        state={stateDisplay}
+      />
+
+      {inspector.state === "loading" && snapshot === null ? (
+        <Card>
+          <CardContent className="flex min-h-[240px] items-center justify-center">
+            <div className="flex items-center gap-3 text-sm text-muted-foreground">
+              <Spinner />
+              <span>Loading run state</span>
+            </div>
+          </CardContent>
+        </Card>
+      ) : (
+        <div className="grid min-w-0 gap-4 xl:grid-cols-[minmax(0,1.1fr)_minmax(320px,0.9fr)]">
+          <div className="flex min-w-0 flex-col gap-4">
+            <OverviewCard
+              response={inspector.response}
+              snapshot={snapshot}
+              state={stateDisplay}
+            />
+            <ActiveToolCard snapshot={snapshot} />
+            <RecoveryCard snapshot={snapshot} />
+          </div>
+
+          <div className="flex min-w-0 flex-col gap-4">
+            <RuntimeCard snapshot={snapshot} />
+            <HealthCard snapshot={snapshot} />
+            <PrivacyCard snapshot={snapshot} />
+          </div>
+        </div>
+      )}
+
+      <PluginSlot name="run-inspector:bottom" />
+    </div>
+  );
+}
+
+function RunInspectorBanner({
+  error,
+  response,
+  snapshot,
+  state,
+}: {
+  error: string | null;
+  response: RunInspectorResponse | null;
+  snapshot: RunInspectorSnapshot | null;
+  state: StateDisplay;
+}) {
+  const degraded = snapshot?.degraded_reason;
+  const message = error ?? degraded;
+  if (!message && response?.ok !== false) {
+    return null;
+  }
+
+  return (
+    <div
+      className={cn(
+        "flex min-w-0 items-start gap-3 border px-4 py-3 text-sm",
+        state.tone === "destructive"
+          ? "border-destructive/30 bg-destructive/10 text-destructive"
+          : "border-warning/30 bg-warning/10 text-warning",
+      )}
+      role="status"
+    >
+      {state.tone === "destructive" ? (
+        <XCircle className="mt-0.5 h-4 w-4 shrink-0" />
+      ) : (
+        <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+      )}
+      <div className="min-w-0">
+        <p className="font-medium">{state.label}</p>
+        <p className="break-words text-xs opacity-80">
+          {formatDisplayValue(message, "Snapshot returned degraded state")}
+        </p>
+      </div>
+    </div>
+  );
+}
+
+function OverviewCard({
+  response,
+  snapshot,
+  state,
+}: {
+  response: RunInspectorResponse | null;
+  snapshot: RunInspectorSnapshot | null;
+  state: StateDisplay;
+}) {
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <Activity className="h-4 w-4" />
+          Current State
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="grid min-w-0 gap-3 sm:grid-cols-2">
+        <Metric
+          icon={<Activity className="h-4 w-4" />}
+          label="Run"
+          tone={state.tone}
+          value={state.label}
+        />
+        <Metric
+          icon={<CheckCircle2 className="h-4 w-4" />}
+          label="Snapshot"
+          value={responseHealthLabel(response)}
+          tone={response?.ok === false ? "warning" : response ? "success" : "muted"}
+        />
+        <Metric
+          icon={<Terminal className="h-4 w-4" />}
+          label="Source"
+          value={snapshot?.source ?? "Unknown"}
+        />
+        <Metric
+          icon={<Clock className="h-4 w-4" />}
+          label="Last Activity"
+          value={formatDateTime(snapshot?.last_activity_at ?? null)}
+        />
+      </CardContent>
+    </Card>
+  );
+}
+
+function RuntimeCard({ snapshot }: { snapshot: RunInspectorSnapshot | null }) {
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <Database className="h-4 w-4" />
+          Runtime Context
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="flex min-w-0 flex-col divide-y divide-border/70 p-0">
+        <DetailRow label="Run ID" value={formatDisplayValue(snapshot?.run_id)} />
+        <DetailRow label="Session ID" value={formatDisplayValue(snapshot?.session_id)} />
+        <DetailRow label="Workspace" value={formatDisplayValue(snapshot?.workspace)} />
+        <DetailRow label="Reason" value={formatDisplayValue(snapshot?.reason, "None")} />
+      </CardContent>
+    </Card>
+  );
+}
+
+function ActiveToolCard({ snapshot }: { snapshot: RunInspectorSnapshot | null }) {
+  const tool = snapshot?.active_tool;
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <Wrench className="h-4 w-4" />
+          Active Tool
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="flex min-w-0 flex-col divide-y divide-border/70 p-0">
+        <DetailRow label="Name" value={formatDisplayValue(tool?.name, "None")} />
+        <DetailRow label="Call ID" value={formatDisplayValue(tool?.call_id, "None")} />
+        <DetailRow label="Duration" value={formatDurationMs(tool?.duration_ms ?? null)} />
+        <DetailRow
+          label="Args"
+          value={formatDisplayValue(formatArgsSummary(tool?.args_summary ?? null))}
+        />
+      </CardContent>
+    </Card>
+  );
+}
+
+function HealthCard({ snapshot }: { snapshot: RunInspectorSnapshot | null }) {
+  const toolCounts = countToolHealth(snapshot?.tool_health ?? []);
+  const mcpCounts = countMcpHealth(snapshot?.mcp_health ?? []);
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <Shield className="h-4 w-4" />
+          Dependency Health
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="flex min-w-0 flex-col gap-4">
+        <HealthSummary
+          title="Tools"
+          items={[
+            ["available", toolCounts.available, "success"],
+            ["running", toolCounts.running, "primary"],
+            ["unavailable", toolCounts.unavailable, "warning"],
+            ["failed", toolCounts.failed, "destructive"],
+            ["unknown", toolCounts.unknown, "muted"],
+          ]}
+        />
+        <HealthRows
+          emptyLabel="No tool health rows"
+          items={(snapshot?.tool_health ?? []).map((item) => ({
+            key: `tool:${item.name ?? "unknown"}:${item.toolset ?? "unknown"}`,
+            label: formatDisplayValue(item.name, "Unknown tool"),
+            detail: formatDisplayValue(item.toolset ?? item.reason, "No toolset"),
+            status: item.status,
+            tone: toolTone(item.status),
+          }))}
+        />
+
+        <HealthSummary
+          title="MCP"
+          items={[
+            ["connected", mcpCounts.connected, "success"],
+            ["degraded", mcpCounts.degraded, "warning"],
+            ["failed", mcpCounts.failed, "destructive"],
+            ["unknown", mcpCounts.unknown, "muted"],
+          ]}
+        />
+        <HealthRows
+          emptyLabel="No MCP health rows"
+          items={(snapshot?.mcp_health ?? []).map((item) => ({
+            key: `mcp:${item.name ?? "unknown"}`,
+            label: formatDisplayValue(item.name, "Unknown server"),
+            detail: formatDisplayValue(mcpDetail(item)),
+            status: item.status,
+            tone: mcpTone(item.status),
+          }))}
+        />
+      </CardContent>
+    </Card>
+  );
+}
+
+function RecoveryCard({ snapshot }: { snapshot: RunInspectorSnapshot | null }) {
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <FileWarning className="h-4 w-4" />
+          Recovery
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="grid min-w-0 gap-3 sm:grid-cols-2">
+        <Metric
+          icon={<AlertTriangle className="h-4 w-4" />}
+          label="Hint"
+          value={formatDisplayValue(snapshot?.recovery_hint, "None")}
+          tone={snapshot?.recovery_hint ? "warning" : "muted"}
+        />
+        <Metric
+          icon={<FileWarning className="h-4 w-4" />}
+          label="Degraded"
+          value={formatDisplayValue(snapshot?.degraded_reason, "None")}
+          tone={snapshot?.degraded_reason ? "warning" : "muted"}
+        />
+      </CardContent>
+    </Card>
+  );
+}
+
+function PrivacyCard({ snapshot }: { snapshot: RunInspectorSnapshot | null }) {
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <Shield className="h-4 w-4" />
+          Privacy Flags
+        </CardTitle>
+      </CardHeader>
+      <CardContent>
+        {snapshot?.privacy_flags.length ? (
+          <div className="flex flex-wrap gap-2">
+            {snapshot.privacy_flags.map((flag) => (
+              <Badge key={flag} tone="outline" className="max-w-full text-[10px]">
+                <span className="truncate">{formatDisplayValue(flag)}</span>
+              </Badge>
+            ))}
+          </div>
+        ) : (
+          <p className="text-sm text-muted-foreground">No privacy flags</p>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+function Metric({
+  icon,
+  label,
+  tone = "muted",
+  value,
+}: {
+  icon: ReactNode;
+  label: string;
+  tone?: Tone;
+  value: string;
+}) {
+  return (
+    <div className="flex min-w-0 items-start gap-3 border border-border bg-secondary/20 p-3">
+      <span className={cn("mt-0.5 shrink-0", TONE_CLASSES[tone])}>{icon}</span>
+      <div className="min-w-0">
+        <p className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
+          {label}
+        </p>
+        <p className={cn("break-words text-sm font-medium", TONE_CLASSES[tone])}>
+          {value}
+        </p>
+      </div>
+    </div>
+  );
+}
+
+function DetailRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="grid min-w-0 gap-2 px-4 py-3 text-sm sm:grid-cols-[120px_minmax(0,1fr)]">
+      <span className="text-xs uppercase tracking-[0.12em] text-muted-foreground">
+        {label}
+      </span>
+      <span className="min-w-0 break-all font-mono-ui text-muted-foreground/90">
+        {value}
+      </span>
+    </div>
+  );
+}
+
+function HealthSummary({
+  items,
+  title,
+}: {
+  items: Array<[string, number, Tone]>;
+  title: string;
+}) {
+  return (
+    <div className="min-w-0">
+      <p className="mb-2 text-xs uppercase tracking-[0.12em] text-muted-foreground">
+        {title}
+      </p>
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+        {items.map(([label, count, tone]) => (
+          <div
+            key={label}
+            className="flex min-w-0 items-center justify-between gap-2 border border-border bg-secondary/20 px-3 py-2"
+          >
+            <span className="min-w-0 truncate text-xs text-muted-foreground">
+              {label}
+            </span>
+            <span className={cn("font-mono-ui text-sm", TONE_CLASSES[tone])}>
+              {count}
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function HealthRows({
+  emptyLabel,
+  items,
+}: {
+  emptyLabel: string;
+  items: Array<{
+    detail: string;
+    key: string;
+    label: string;
+    status: string;
+    tone: Tone;
+  }>;
+}) {
+  if (items.length === 0) {
+    return <p className="text-sm text-muted-foreground">{emptyLabel}</p>;
+  }
+
+  return (
+    <div className="flex min-w-0 flex-col divide-y divide-border/70 border border-border">
+      {items.map((item) => (
+        <div
+          key={item.key}
+          className="grid min-w-0 gap-2 px-3 py-2 sm:grid-cols-[minmax(0,1fr)_auto]"
+        >
+          <div className="min-w-0">
+            <p className="truncate text-sm font-medium">{item.label}</p>
+            <p className="truncate text-xs text-muted-foreground">{item.detail}</p>
+          </div>
+          <Badge tone={BADGE_TONE[item.tone]} className="w-fit text-[10px]">
+            {item.status}
+          </Badge>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function toolTone(status: RunInspectorToolHealth["status"]): Tone {
+  if (status === "available") return "success";
+  if (status === "running") return "primary";
+  if (status === "unavailable") return "warning";
+  if (status === "failed") return "destructive";
+  return "muted";
+}
+
+function mcpTone(status: RunInspectorMcpHealth["status"]): Tone {
+  if (status === "connected") return "success";
+  if (status === "degraded") return "warning";
+  if (status === "failed") return "destructive";
+  return "muted";
+}
+
+function mcpDetail(item: RunInspectorMcpHealth): string {
+  const affected = item.affected_tools.length
+    ? `${item.affected_tools.length} tools`
+    : "No affected tools";
+  return item.last_error_class ? `${item.last_error_class} - ${affected}` : affected;
+}

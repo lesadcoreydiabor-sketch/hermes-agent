@@ -1,0 +1,142 @@
+import json
+
+import pytest
+
+
+@pytest.fixture
+def run_inspector_client(_isolate_hermes_home):
+    try:
+        from starlette.testclient import TestClient
+    except ImportError:
+        pytest.skip("fastapi/starlette not installed")
+
+    from hermes_cli import web_server
+
+    client = TestClient(web_server.app)
+    client.headers[web_server._SESSION_HEADER_NAME] = web_server._SESSION_TOKEN
+    return client
+
+
+def test_run_inspector_api_requires_session_token(_isolate_hermes_home):
+    try:
+        from starlette.testclient import TestClient
+    except ImportError:
+        pytest.skip("fastapi/starlette not installed")
+
+    from hermes_cli import web_server
+
+    client = TestClient(web_server.app)
+
+    response = client.get("/api/run-inspector")
+
+    assert response.status_code == 401
+
+
+def test_run_inspector_api_returns_snapshot_envelope(monkeypatch, run_inspector_client):
+    from hermes_cli import web_server
+
+    monkeypatch.setattr(
+        web_server,
+        "get_run_inspector_status_payload",
+        lambda: {
+            "version": 1,
+            "run_id": "run-123",
+            "source": "cli",
+            "status": "thinking",
+            "reason": None,
+            "workspace": "C:/workspace/project",
+            "session_id": "session-123",
+            "last_activity_at": "2026-05-11T01:00:00+00:00",
+            "active_tool": {
+                "name": "mcp_tool",
+                "call_id": "call-123",
+                "duration_ms": 42,
+                "args_summary": {"type": "object", "key_count": 1},
+            },
+            "tool_health": [
+                {"name": "shell", "toolset": "terminal", "status": "available"},
+            ],
+            "mcp_health": [
+                {"name": "gitnexus", "status": "connected"},
+            ],
+            "recovery_hint": None,
+            "privacy_flags": ["safe", "redacted", "local_only"],
+            "degraded_reason": None,
+        },
+    )
+
+    response = run_inspector_client.get("/api/run-inspector")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["ok"] is True
+    assert payload["refreshed_at"]
+    assert payload["snapshot"]["run_id"] == "run-123"
+    assert payload["snapshot"]["source"] == "cli"
+    assert payload["snapshot"]["status"] == "thinking"
+    assert payload["snapshot"]["active_tool"]["name"] == "mcp_tool"
+    assert payload["snapshot"]["tool_health"][0]["name"] == "shell"
+    assert payload["snapshot"]["mcp_health"][0]["name"] == "gitnexus"
+
+
+def test_run_inspector_api_degrades_when_payload_builder_fails(
+    monkeypatch,
+    run_inspector_client,
+):
+    from hermes_cli import web_server
+
+    def fail():
+        raise RuntimeError("snapshot unavailable")
+
+    monkeypatch.setattr(web_server, "get_run_inspector_status_payload", fail)
+
+    response = run_inspector_client.get("/api/run-inspector")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["ok"] is False
+    assert payload["snapshot"]["status"] == "unknown"
+    assert payload["snapshot"]["degraded_reason"] == "run_inspector_api_failed:RuntimeError"
+    assert payload["snapshot"]["privacy_flags"] == ["safe"]
+
+
+def test_run_inspector_api_normalizes_and_redacts_payload(
+    monkeypatch,
+    run_inspector_client,
+):
+    from hermes_cli import web_server
+
+    monkeypatch.setattr(
+        web_server,
+        "get_run_inspector_status_payload",
+        lambda: {
+            "version": 1,
+            "run_id": "run-secret",
+            "source": "cli",
+            "status": "executing_tool",
+            "reason": "OPENAI_API_KEY=sk-secret-1234567890",
+            "active_tool": {
+                "name": "shell",
+                "call_id": "call-secret",
+                "duration_ms": 10,
+                "args": {
+                    "command": "echo $OPENAI_API_KEY",
+                    "token": "sk-secret-1234567890",
+                },
+            },
+            "privacy_flags": ["safe", "redacted", "local_only"],
+        },
+    )
+
+    response = run_inspector_client.get("/api/run-inspector")
+
+    assert response.status_code == 200
+    snapshot = response.json()["snapshot"]
+    encoded = json.dumps(snapshot, sort_keys=True)
+    assert "sk-secret-1234567890" not in encoded
+    assert snapshot["active_tool"]["args_summary"]["privacy"] == "redacted"
+    assert snapshot["active_tool"]["args_summary"]["key_count"] == 2
+    assert snapshot["active_tool"]["args_summary"]["value_types"] == {
+        "command": "string",
+        "token": "string",
+    }

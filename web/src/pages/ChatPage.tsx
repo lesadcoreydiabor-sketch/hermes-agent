@@ -25,10 +25,10 @@ import "@xterm/xterm/css/xterm.css";
 import { Button } from "@nous-research/ui/ui/components/button";
 import { Typography } from "@/components/NouiTypography";
 import { cn } from "@/lib/utils";
-import { Copy, PanelRight, X } from "lucide-react";
+import { Activity, Copy, PanelRight, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { useSearchParams } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 
 import { ChatSidebar } from "@/components/ChatSidebar";
 import { usePageHeader } from "@/contexts/usePageHeader";
@@ -798,6 +798,16 @@ export default function ChatPage({ isActive = true }: { isActive?: boolean }) {
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-2 normal-case">
       <PluginSlot name="chat:top" />
+      <div className="flex shrink-0 justify-end">
+        <Link
+          to="/run-inspector"
+          title="Open Run Inspector diagnostics"
+          className="inline-flex h-8 items-center gap-1.5 border border-current/20 px-2 text-[0.65rem] font-medium uppercase tracking-wide text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-midground"
+        >
+          <Activity className="h-3.5 w-3.5 shrink-0" />
+          <span>Run Inspector</span>
+        </Link>
+      </div>
       {mobileModelToolsPortal}
 
       {banner && (

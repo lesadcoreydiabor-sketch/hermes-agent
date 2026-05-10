@@ -5,8 +5,9 @@ import {
   useCallback,
   useRef,
 } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import {
+  Activity,
   AlertTriangle,
   CheckCircle2,
   ChevronDown,
@@ -443,29 +444,39 @@ export default function SessionsPage() {
       </Badge>,
     );
     setEnd(
-      <div className="relative w-full min-w-0 sm:max-w-xs">
-        {searching ? (
-          <Spinner className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[0.875rem] text-primary" />
-        ) : (
-          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
-        )}
-        <Input
-          placeholder={t.sessions.searchPlaceholder}
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          className="h-8 pr-7 pl-8 text-xs"
-        />
-        {search && (
-          <Button
-            ghost
-            size="xs"
-            className="absolute right-1.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-            onClick={() => setSearch("")}
-            aria-label={t.common.clear}
-          >
-            <X />
-          </Button>
-        )}
+      <div className="flex w-full min-w-0 items-center justify-end gap-2">
+        <Link
+          to="/run-inspector"
+          title="Open Run Inspector diagnostics"
+          className="inline-flex h-8 shrink-0 items-center gap-1.5 border border-current/20 px-2 text-[0.65rem] font-medium uppercase tracking-wide text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-midground"
+        >
+          <Activity className="h-3.5 w-3.5 shrink-0" />
+          <span className="hidden sm:inline">Run Inspector</span>
+        </Link>
+        <div className="relative min-w-[180px] flex-1 sm:max-w-xs">
+          {searching ? (
+            <Spinner className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[0.875rem] text-primary" />
+          ) : (
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+          )}
+          <Input
+            placeholder={t.sessions.searchPlaceholder}
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="h-8 pr-7 pl-8 text-xs"
+          />
+          {search && (
+            <Button
+              ghost
+              size="xs"
+              className="absolute right-1.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+              onClick={() => setSearch("")}
+              aria-label={t.common.clear}
+            >
+              <X />
+            </Button>
+          )}
+        </div>
       </div>,
     );
     return () => {
