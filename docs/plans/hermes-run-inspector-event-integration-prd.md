@@ -170,6 +170,28 @@ The dashboard proxy should:
 
 The Run Inspector page should add a compact start control in the existing Gateway Run Follow card. A successful start fills the `run_id`, starts the forwarder, updates the local recent-runs list optimistically, and refreshes the timeline.
 
+## P8 Gateway Run Controls
+
+The next slice lets the Run Inspector page handle the two most common operator actions on a known gateway run:
+
+- stop a running gateway run
+- respond to a pending approval request
+
+Add protected dashboard proxies:
+
+- `POST /api/run-inspector/gateway-runs/{run_id}/stop`
+- `POST /api/run-inspector/gateway-runs/{run_id}/approval`
+
+The dashboard proxies should:
+
+- Resolve the gateway URL/key server-side.
+- Call the existing gateway `/v1/runs/{run_id}/stop` and `/v1/runs/{run_id}/approval` routes.
+- Accept approval choices from the existing gateway vocabulary: `once`, `session`, `always`, `deny`.
+- Return only safe action summaries: run id, status, choice, and resolved count.
+- Never return gateway credentials, raw prompts, raw errors, output, tool previews, or usage.
+
+The Run Inspector page should add compact `Allow`, `Deny`, and `Stop` actions inside the Gateway Run Follow card. Each action requires an explicit click, uses the selected run id, updates the recent-runs list optimistically, and refreshes the timeline.
+
 ## Acceptance
 
 - Recent events API returns an envelope with `ok`, `events`, and `refreshed_at`.
@@ -182,6 +204,8 @@ The Run Inspector page should add a compact start control in the existing Gatewa
 - Sensitive-looking event values render as `Redacted`.
 - Gateway launch starts only after an explicit UI action.
 - Gateway launch response exposes only safe run identity/status and backend forwarder state.
+- Gateway stop and approval controls start only after explicit UI actions.
+- Gateway stop and approval responses expose only safe action summaries.
 
 ## Risks
 
@@ -199,6 +223,8 @@ The Run Inspector page should add a compact start control in the existing Gatewa
 - Runtime tests for gateway launch request construction and safe launch response normalization.
 - API tests for the protected gateway follow endpoint, missing config, and status lookup.
 - API tests for the protected gateway launch endpoint and auto-follow behavior.
+- Runtime tests for gateway stop and approval request construction and safe response normalization.
+- API tests for the protected gateway stop and approval endpoints.
 - Frontend tests for hook error classification, event formatting, and overflow/privacy guards.
 - Frontend tests that the Run Inspector page exposes gateway follow controls without gateway secret names or values.
 - Gateway route tests that recent run summaries omit output/error payloads.

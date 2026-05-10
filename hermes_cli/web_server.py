@@ -59,9 +59,11 @@ from hermes_cli.run_inspector_gateway_forwarder import (
     fetch_gateway_run_summaries,
     get_gateway_run_event_forwarder_status,
     launch_gateway_run,
+    respond_gateway_run_approval,
     resolve_gateway_event_api_key,
     resolve_gateway_event_base_url,
     start_gateway_run_event_forwarder,
+    stop_gateway_run,
 )
 from hermes_cli.status import get_run_inspector_status_payload
 from gateway.status import get_running_pid, read_runtime_status
@@ -610,6 +612,11 @@ class GatewayRunLaunchBody(BaseModel):
     auto_follow: bool = True
 
 
+class GatewayRunApprovalBody(BaseModel):
+    choice: str
+    resolve_all: bool = False
+
+
 def _gateway_event_forwarder_timeout() -> float:
     raw = os.getenv(
         "HERMES_RUN_INSPECTOR_GATEWAY_TIMEOUT",
@@ -694,6 +701,73 @@ async def launch_run_inspector_gateway_run(body: GatewayRunLaunchBody):
         "ok": True,
         "run": run,
         "forwarder": forwarder,
+        "refreshed_at": _utc_now_iso(),
+    }
+
+
+@app.post("/api/run-inspector/gateway-runs/{run_id}/stop")
+async def stop_run_inspector_gateway_run(run_id: str):
+    """Request a configured gateway run stop without exposing gateway credentials."""
+    base_url, api_key = _resolve_gateway_event_config()
+    loop = asyncio.get_running_loop()
+    try:
+        run = await loop.run_in_executor(
+            None,
+            lambda: stop_gateway_run(
+                run_id,
+                base_url=base_url,
+                api_key=api_key,
+                timeout=_gateway_event_forwarder_timeout(),
+            ),
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    except Exception as exc:
+        _log.debug("Gateway run stop failed: %s", exc)
+        raise HTTPException(
+            status_code=502,
+            detail=f"Gateway run stop failed: {type(exc).__name__}",
+        )
+
+    return {
+        "ok": True,
+        "run": run,
+        "refreshed_at": _utc_now_iso(),
+    }
+
+
+@app.post("/api/run-inspector/gateway-runs/{run_id}/approval")
+async def approve_run_inspector_gateway_run(
+    run_id: str,
+    body: GatewayRunApprovalBody,
+):
+    """Resolve a configured gateway run approval without exposing credentials."""
+    base_url, api_key = _resolve_gateway_event_config()
+    loop = asyncio.get_running_loop()
+    try:
+        approval = await loop.run_in_executor(
+            None,
+            lambda: respond_gateway_run_approval(
+                run_id,
+                base_url=base_url,
+                api_key=api_key,
+                choice=body.choice,
+                resolve_all=body.resolve_all,
+                timeout=_gateway_event_forwarder_timeout(),
+            ),
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    except Exception as exc:
+        _log.debug("Gateway approval response failed: %s", exc)
+        raise HTTPException(
+            status_code=502,
+            detail=f"Gateway approval response failed: {type(exc).__name__}",
+        )
+
+    return {
+        "ok": True,
+        "approval": approval,
         "refreshed_at": _utc_now_iso(),
     }
 

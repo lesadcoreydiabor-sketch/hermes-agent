@@ -87,6 +87,10 @@ export default function RunInspectorPage() {
   );
   const [gatewayLaunchError, setGatewayLaunchError] = useState<string | null>(null);
   const [gatewayLaunchBusy, setGatewayLaunchBusy] = useState(false);
+  const [gatewayControlError, setGatewayControlError] = useState<string | null>(null);
+  const [gatewayControlBusy, setGatewayControlBusy] = useState<
+    "stop" | "allow" | "deny" | null
+  >(null);
   const { setAfterTitle, setEnd, setTitle } = usePageHeader();
   const stateDisplay = describeRunInspectorState(inspector.state, inspector.snapshot);
 
@@ -192,6 +196,62 @@ export default function RunInspectorPage() {
     [launchGatewayRun],
   );
 
+  const stopGatewayRun = useCallback(async () => {
+    const runId = gatewayRunId.trim();
+    if (!runId) {
+      setGatewayControlError("Run ID is required");
+      return;
+    }
+
+    setGatewayControlBusy("stop");
+    setGatewayControlError(null);
+    try {
+      const response = await api.stopGatewayRun(runId);
+      setGatewayRuns((runs) =>
+        runs.map((run) =>
+          run.run_id === response.run.run_id
+            ? { ...run, status: response.run.status, last_event: "run.stopping" }
+            : run,
+        ),
+      );
+      eventStream.refresh();
+    } catch (err) {
+      setGatewayControlError(errorMessage(err));
+    } finally {
+      setGatewayControlBusy(null);
+    }
+  }, [eventStream, gatewayRunId]);
+
+  const respondGatewayApproval = useCallback(
+    async (choice: "once" | "deny") => {
+      const runId = gatewayRunId.trim();
+      if (!runId) {
+        setGatewayControlError("Run ID is required");
+        return;
+      }
+
+      const busyState = choice === "deny" ? "deny" : "allow";
+      setGatewayControlBusy(busyState);
+      setGatewayControlError(null);
+      try {
+        const response = await api.respondGatewayRunApproval(runId, { choice });
+        setGatewayRuns((runs) =>
+          runs.map((run) =>
+            run.run_id === response.approval.run_id
+              ? { ...run, status: "running", last_event: "approval.responded" }
+              : run,
+          ),
+        );
+        eventStream.refresh();
+      } catch (err) {
+        setGatewayControlError(errorMessage(err));
+      } finally {
+        setGatewayControlBusy(null);
+      }
+    },
+    [eventStream, gatewayRunId],
+  );
+
   const handleGatewayFollowSubmit = useCallback(
     (event: FormEvent<HTMLFormElement>) => {
       event.preventDefault();
@@ -281,6 +341,8 @@ export default function RunInspectorPage() {
             <HealthCard snapshot={snapshot} />
             <GatewayRunFollowCard
               busy={gatewayForwarderBusy}
+              controlBusy={gatewayControlBusy}
+              controlError={gatewayControlError}
               error={gatewayForwarderError}
               forwarder={gatewayForwarder}
               launchBusy={gatewayLaunchBusy}
@@ -290,7 +352,10 @@ export default function RunInspectorPage() {
               onRefreshRuns={refreshGatewayRuns}
               onLaunchInputChange={setGatewayLaunchInput}
               onLaunchSubmit={handleGatewayLaunchSubmit}
+              onApprovalDeny={() => void respondGatewayApproval("deny")}
+              onApprovalOnce={() => void respondGatewayApproval("once")}
               onRunIdChange={setGatewayRunId}
+              onStop={stopGatewayRun}
               recentRuns={gatewayRuns}
               recentRunsBusy={gatewayRunsBusy}
               recentRunsError={gatewayRunsError}
@@ -555,16 +620,21 @@ function PrivacyCard({ snapshot }: { snapshot: RunInspectorSnapshot | null }) {
 
 function GatewayRunFollowCard({
   busy,
+  controlBusy,
+  controlError,
   error,
   forwarder,
   launchBusy,
   launchError,
   launchInput,
+  onApprovalDeny,
+  onApprovalOnce,
   onRefresh,
   onRefreshRuns,
   onLaunchInputChange,
   onLaunchSubmit,
   onRunIdChange,
+  onStop,
   recentRuns,
   recentRunsBusy,
   recentRunsError,
@@ -572,16 +642,21 @@ function GatewayRunFollowCard({
   runId,
 }: {
   busy: boolean;
+  controlBusy: "stop" | "allow" | "deny" | null;
+  controlError: string | null;
   error: string | null;
   forwarder: RunInspectorGatewayForwarder | null;
   launchBusy: boolean;
   launchError: string | null;
   launchInput: string;
+  onApprovalDeny: () => void;
+  onApprovalOnce: () => void;
   onRefresh: () => void;
   onRefreshRuns: () => void;
   onLaunchInputChange: (value: string) => void;
   onLaunchSubmit: (event: FormEvent<HTMLFormElement>) => void;
   onRunIdChange: (value: string) => void;
+  onStop: () => void;
   recentRuns: RunInspectorGatewayRun[];
   recentRunsBusy: boolean;
   recentRunsError: string | null;
@@ -591,6 +666,7 @@ function GatewayRunFollowCard({
   const display = describeGatewayForwarder(forwarder);
   const canSubmit = runId.trim().length > 0 && !busy;
   const canLaunch = launchInput.trim().length > 0 && !launchBusy;
+  const canControl = runId.trim().length > 0 && !controlBusy && !busy && !launchBusy;
 
   return (
     <Card>
@@ -672,6 +748,45 @@ function GatewayRunFollowCard({
             Status
           </Button>
         </form>
+
+        <div className="grid min-w-0 gap-2 sm:grid-cols-3">
+          <Button
+            type="button"
+            size="sm"
+            outlined
+            disabled={!canControl}
+            onClick={onApprovalOnce}
+            prefix={controlBusy === "allow" ? <Spinner /> : <CheckCircle2 />}
+          >
+            Allow
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            outlined
+            disabled={!canControl}
+            onClick={onApprovalDeny}
+            prefix={controlBusy === "deny" ? <Spinner /> : <Shield />}
+          >
+            Deny
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            outlined
+            disabled={!canControl}
+            onClick={onStop}
+            prefix={controlBusy === "stop" ? <Spinner /> : <XCircle />}
+          >
+            Stop
+          </Button>
+        </div>
+
+        {controlError ? (
+          <p className="break-words border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive">
+            {formatDisplayValue(controlError)}
+          </p>
+        ) : null}
 
         {recentRuns.length > 0 ? (
           <div className="flex min-w-0 flex-col divide-y divide-border/70 border border-border">

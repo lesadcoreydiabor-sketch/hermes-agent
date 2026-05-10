@@ -488,6 +488,26 @@ tasks:
     status: completed
     risk: high
 
+  - id: HRIGF-08
+    title: Add gateway run stop and approval controls
+    description: Let Run Inspector stop a selected gateway run and respond to pending approval requests through backend-only gateway proxies.
+    depends_on:
+      - HRIGF-07
+    acceptance:
+      - Dashboard exposes POST /api/run-inspector/gateway-runs/{run_id}/stop behind the existing session-token guard.
+      - Dashboard exposes POST /api/run-inspector/gateway-runs/{run_id}/approval behind the existing session-token guard.
+      - Stop and approval proxies resolve gateway URL/key server-side and never expose gateway credentials to frontend code.
+      - Stop response returns only safe run identity/status.
+      - Approval response returns only safe run identity, choice, and resolved count.
+      - Run Inspector UI exposes explicit Allow, Deny, and Stop controls for the selected run id.
+    verify:
+      - venv/Scripts/python.exe -m pytest tests/runtime/test_run_inspector_gateway_forwarder.py tests/hermes_cli/test_run_inspector_gateway_forwarder_api.py tests/web/test_run_inspector_status_policy.py -q -o addopts=
+      - npm.cmd run build
+      - Playwright smoke for /run-inspector
+      - git diff --check for HRIGF control files
+    status: completed
+    risk: high
+
 risk_flags:
   destructive_file_change:
     pause: true
@@ -870,6 +890,21 @@ progress_report:
       verification_result: "passed: venv/Scripts/python.exe -m pytest tests/runtime/test_run_inspector_gateway_forwarder.py tests/hermes_cli/test_run_inspector_gateway_forwarder_api.py tests/web/test_run_inspector_status_policy.py -q -o addopts= (31 passed); reran tests/web/test_run_inspector_status_policy.py -q -o addopts= after frontend launch adjustment (15 passed); passed: npm.cmd run build; browser smoke passed in in-app browser and Playwright desktop/narrow viewports without horizontal overflow"
       blockers: []
       next_step: "Run Inspector P7 gateway run launch and auto-follow complete; stage/commit/push, or add stop/approval controls."
+    - task_id: HRIGF-08
+      status: completed
+      changed_files:
+        - hermes_cli/run_inspector_gateway_forwarder.py
+        - hermes_cli/web_server.py
+        - web/src/lib/api.ts
+        - web/src/pages/RunInspectorPage.tsx
+        - tests/runtime/test_run_inspector_gateway_forwarder.py
+        - tests/hermes_cli/test_run_inspector_gateway_forwarder_api.py
+        - tests/web/test_run_inspector_status_policy.py
+        - docs/plans/hermes-run-inspector-event-integration-prd.md
+        - .hermes/task.yaml
+      verification_result: "passed: venv/Scripts/python.exe -m pytest tests/runtime/test_run_inspector_gateway_forwarder.py tests/hermes_cli/test_run_inspector_gateway_forwarder_api.py tests/web/test_run_inspector_status_policy.py -q -o addopts= (38 passed); reran tests/web/test_run_inspector_status_policy.py -q -o addopts= after frontend busy-state adjustment (15 passed); passed: npm.cmd run build; browser smoke passed in in-app browser and Playwright desktop/narrow viewports without horizontal overflow"
+      blockers: []
+      next_step: "Run Inspector P8 gateway stop and approval controls complete; stage/commit/push, or add approval-event driven button state."
 
 failure_review:
   enabled: true

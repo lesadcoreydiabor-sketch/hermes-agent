@@ -233,6 +233,60 @@ def launch_gateway_run(
     return _normalize_gateway_launch_response(payload)
 
 
+def stop_gateway_run(
+    run_id: str,
+    *,
+    base_url: str,
+    api_key: Optional[str] = None,
+    timeout: float = DEFAULT_GATEWAY_EVENT_TIMEOUT_SECONDS,
+    urlopen: Callable[..., Any] = urllib.request.urlopen,
+) -> dict[str, Any]:
+    """Request a gateway run stop and return a safe status summary."""
+
+    safe_run_id = _validate_run_id(run_id)
+    request = _build_gateway_run_control_request(
+        safe_run_id,
+        base_url,
+        api_key,
+        "stop",
+    )
+    with urlopen(request, timeout=timeout) as response:
+        raw_body = response.read()
+    payload = json_loads_bytes(raw_body)
+    return _normalize_gateway_stop_response(payload, fallback_run_id=safe_run_id)
+
+
+def respond_gateway_run_approval(
+    run_id: str,
+    *,
+    base_url: str,
+    choice: str,
+    resolve_all: bool = False,
+    api_key: Optional[str] = None,
+    timeout: float = DEFAULT_GATEWAY_EVENT_TIMEOUT_SECONDS,
+    urlopen: Callable[..., Any] = urllib.request.urlopen,
+) -> dict[str, Any]:
+    """Resolve a pending gateway approval and return a safe response summary."""
+
+    safe_run_id = _validate_run_id(run_id)
+    safe_choice = _validate_approval_choice(choice)
+    request = _build_gateway_run_control_request(
+        safe_run_id,
+        base_url,
+        api_key,
+        "approval",
+        {"choice": safe_choice, "resolve_all": bool(resolve_all)},
+    )
+    with urlopen(request, timeout=timeout) as response:
+        raw_body = response.read()
+    payload = json_loads_bytes(raw_body)
+    return _normalize_gateway_approval_response(
+        payload,
+        fallback_run_id=safe_run_id,
+        fallback_choice=safe_choice,
+    )
+
+
 def _run_gateway_forwarder_thread(
     run_id: str,
     base_url: str,
@@ -321,6 +375,27 @@ def _build_gateway_launch_request(
     return urllib.request.Request(url, data=body, headers=headers, method="POST")
 
 
+def _build_gateway_run_control_request(
+    run_id: str,
+    base_url: str,
+    api_key: Optional[str],
+    action: str,
+    payload: Optional[dict[str, Any]] = None,
+) -> urllib.request.Request:
+    import json
+
+    quoted_run_id = urllib.parse.quote(_validate_run_id(run_id), safe="")
+    url = f"{_normalize_gateway_base_url(base_url)}/v1/runs/{quoted_run_id}/{action}"
+    headers = {"Accept": "application/json"}
+    body = b""
+    if payload is not None:
+        body = json.dumps(payload).encode("utf-8")
+        headers["Content-Type"] = "application/json"
+    if api_key:
+        headers["Authorization"] = f"Bearer {api_key}"
+    return urllib.request.Request(url, data=body, headers=headers, method="POST")
+
+
 def _normalize_gateway_run_summary(value: Any) -> Optional[dict[str, Any]]:
     if not isinstance(value, dict):
         return None
@@ -336,6 +411,38 @@ def _normalize_gateway_run_summary(value: Any) -> Optional[dict[str, Any]]:
         "model": _safe_summary_text(value.get("model")),
         "last_event": _safe_summary_text(value.get("last_event")),
         "has_error": bool(value.get("has_error")),
+    }
+
+
+def _normalize_gateway_stop_response(
+    value: Any,
+    *,
+    fallback_run_id: str,
+) -> dict[str, Any]:
+    if not isinstance(value, dict):
+        return {"run_id": fallback_run_id, "status": "stopping"}
+    return {
+        "run_id": _safe_summary_text(value.get("run_id")) or fallback_run_id,
+        "status": _safe_summary_text(value.get("status")) or "stopping",
+    }
+
+
+def _normalize_gateway_approval_response(
+    value: Any,
+    *,
+    fallback_run_id: str,
+    fallback_choice: str,
+) -> dict[str, Any]:
+    if not isinstance(value, dict):
+        return {
+            "run_id": fallback_run_id,
+            "choice": fallback_choice,
+            "resolved": 0,
+        }
+    return {
+        "run_id": _safe_summary_text(value.get("run_id")) or fallback_run_id,
+        "choice": _safe_summary_text(value.get("choice")) or fallback_choice,
+        "resolved": int(_safe_number(value.get("resolved")) or 0),
     }
 
 
@@ -416,6 +523,15 @@ def _validate_gateway_launch_input(value: Any) -> str:
     if len(text) > 4000:
         raise ValueError("input is too long")
     return text
+
+
+def _validate_approval_choice(value: Any) -> str:
+    text = str(value or "").strip().lower()
+    aliases = {"approve": "once", "approved": "once", "allow": "once"}
+    choice = aliases.get(text, text)
+    if choice not in {"once", "session", "always", "deny"}:
+        raise ValueError("approval choice must be one of: once, session, always, deny")
+    return choice
 
 
 def _optional_launch_text(value: Any) -> Optional[str]:

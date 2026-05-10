@@ -384,12 +384,17 @@ def test_run_inspector_page_exposes_gateway_follow_without_gateway_secret() -> N
 
     assert "Gateway Run Follow" in page_source
     assert "api.launchGatewayRun" in page_source
+    assert "api.stopGatewayRun" in page_source
+    assert "api.respondGatewayRunApproval" in page_source
     assert "api.getGatewayRuns" in page_source
     assert "api.followGatewayRunEvents" in page_source
     assert "api.getGatewayRunEventForwarder" in page_source
     assert 'aria-label="Gateway launch input"' in page_source
     assert 'aria-label="Gateway run id"' in page_source
     assert "Runs" in page_source
+    assert "Allow" in page_source
+    assert "Deny" in page_source
+    assert "Stop" in page_source
     assert "HERMES_RUN_INSPECTOR_GATEWAY_KEY" not in page_source
     assert "HERMES_RUN_INSPECTOR_GATEWAY_KEY" not in api_source
 

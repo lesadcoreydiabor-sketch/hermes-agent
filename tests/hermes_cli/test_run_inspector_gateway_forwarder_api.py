@@ -74,6 +74,39 @@ def test_gateway_run_launch_api_requires_session_token(_isolate_hermes_home):
     assert response.status_code == 401
 
 
+def test_gateway_run_stop_api_requires_session_token(_isolate_hermes_home):
+    try:
+        from starlette.testclient import TestClient
+    except ImportError:
+        pytest.skip("fastapi/starlette not installed")
+
+    from hermes_cli import web_server
+
+    client = TestClient(web_server.app)
+
+    response = client.post("/api/run-inspector/gateway-runs/run_1/stop")
+
+    assert response.status_code == 401
+
+
+def test_gateway_run_approval_api_requires_session_token(_isolate_hermes_home):
+    try:
+        from starlette.testclient import TestClient
+    except ImportError:
+        pytest.skip("fastapi/starlette not installed")
+
+    from hermes_cli import web_server
+
+    client = TestClient(web_server.app)
+
+    response = client.post(
+        "/api/run-inspector/gateway-runs/run_1/approval",
+        json={"choice": "once"},
+    )
+
+    assert response.status_code == 401
+
+
 def test_gateway_forwarder_api_requires_config(
     monkeypatch,
     run_inspector_gateway_client,
@@ -255,6 +288,85 @@ def test_gateway_run_launch_api_returns_run_and_forwarder(
             {
                 "base_url": "http://127.0.0.1:8642",
                 "api_key": "sk-secret",
+                "timeout": web_server._gateway_event_forwarder_timeout(),
+            },
+        )
+    ]
+
+
+def test_gateway_run_stop_api_returns_safe_status(
+    monkeypatch,
+    run_inspector_gateway_client,
+):
+    from hermes_cli import web_server
+
+    calls = []
+
+    def fake_stop(run_id, **kwargs):
+        calls.append((run_id, kwargs))
+        return {"run_id": run_id, "status": "stopping"}
+
+    monkeypatch.setattr(web_server, "resolve_gateway_event_base_url", lambda: "http://127.0.0.1:8642")
+    monkeypatch.setattr(web_server, "resolve_gateway_event_api_key", lambda: "sk-secret")
+    monkeypatch.setattr(web_server, "stop_gateway_run", fake_stop)
+
+    response = run_inspector_gateway_client.post(
+        "/api/run-inspector/gateway-runs/run_abc/stop"
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["ok"] is True
+    assert payload["run"] == {"run_id": "run_abc", "status": "stopping"}
+    assert calls == [
+        (
+            "run_abc",
+            {
+                "base_url": "http://127.0.0.1:8642",
+                "api_key": "sk-secret",
+                "timeout": web_server._gateway_event_forwarder_timeout(),
+            },
+        )
+    ]
+
+
+def test_gateway_run_approval_api_returns_safe_summary(
+    monkeypatch,
+    run_inspector_gateway_client,
+):
+    from hermes_cli import web_server
+
+    calls = []
+
+    def fake_approval(run_id, **kwargs):
+        calls.append((run_id, kwargs))
+        return {"run_id": run_id, "choice": "once", "resolved": 1}
+
+    monkeypatch.setattr(web_server, "resolve_gateway_event_base_url", lambda: "http://127.0.0.1:8642")
+    monkeypatch.setattr(web_server, "resolve_gateway_event_api_key", lambda: "sk-secret")
+    monkeypatch.setattr(web_server, "respond_gateway_run_approval", fake_approval)
+
+    response = run_inspector_gateway_client.post(
+        "/api/run-inspector/gateway-runs/run_abc/approval",
+        json={"choice": "once", "resolve_all": True},
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["ok"] is True
+    assert payload["approval"] == {
+        "run_id": "run_abc",
+        "choice": "once",
+        "resolved": 1,
+    }
+    assert calls == [
+        (
+            "run_abc",
+            {
+                "base_url": "http://127.0.0.1:8642",
+                "api_key": "sk-secret",
+                "choice": "once",
+                "resolve_all": True,
                 "timeout": web_server._gateway_event_forwarder_timeout(),
             },
         )

@@ -84,6 +84,23 @@ export const api = {
         body: JSON.stringify(body),
       },
     ),
+  stopGatewayRun: (runId: string) =>
+    fetchJSON<RunInspectorGatewayStopResponse>(
+      `/api/run-inspector/gateway-runs/${encodeURIComponent(runId)}/stop`,
+      { method: "POST" },
+    ),
+  respondGatewayRunApproval: (
+    runId: string,
+    body: RunInspectorGatewayApprovalRequest,
+  ) =>
+    fetchJSON<RunInspectorGatewayApprovalResponse>(
+      `/api/run-inspector/gateway-runs/${encodeURIComponent(runId)}/approval`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      },
+    ),
   followGatewayRunEvents: (runId: string) =>
     fetchJSON<RunInspectorGatewayForwarderResponse>(
       `/api/run-inspector/gateway-runs/${encodeURIComponent(runId)}/follow`,
@@ -560,6 +577,27 @@ export interface RunInspectorGatewayLaunchResponse {
   ok: boolean;
   run: Pick<RunInspectorGatewayRun, "run_id" | "status">;
   forwarder: RunInspectorGatewayForwarder | null;
+  refreshed_at: string;
+}
+
+export interface RunInspectorGatewayStopResponse {
+  ok: boolean;
+  run: Pick<RunInspectorGatewayRun, "run_id" | "status">;
+  refreshed_at: string;
+}
+
+export interface RunInspectorGatewayApprovalRequest {
+  choice: "once" | "session" | "always" | "deny";
+  resolve_all?: boolean;
+}
+
+export interface RunInspectorGatewayApprovalResponse {
+  ok: boolean;
+  approval: {
+    run_id: string;
+    choice: string;
+    resolved: number;
+  };
   refreshed_at: string;
 }
 

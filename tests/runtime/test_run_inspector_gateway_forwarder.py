@@ -12,8 +12,10 @@ from hermes_cli.run_inspector_gateway_forwarder import (
     fetch_gateway_run_summaries,
     forward_gateway_run_events,
     launch_gateway_run,
+    respond_gateway_run_approval,
     resolve_gateway_event_api_key,
     resolve_gateway_event_base_url,
+    stop_gateway_run,
 )
 
 
@@ -245,5 +247,82 @@ def test_launch_gateway_run_rejects_empty_input():
         launch_gateway_run(
             base_url="http://127.0.0.1:8642",
             input_text="",
+            urlopen=lambda *_args, **_kwargs: None,
+        )
+
+
+def test_stop_gateway_run_posts_control_request_and_returns_safe_status():
+    requests = []
+
+    def fake_urlopen(request, timeout):
+        requests.append((request, timeout))
+        return _FakeJsonResponse(
+            {
+                "run_id": "run_1",
+                "status": "stopping",
+                "output": "should not cross dashboard boundary",
+            }
+        )
+
+    run = stop_gateway_run(
+        "run_1",
+        base_url="http://127.0.0.1:8642/health",
+        api_key="sk-secret",
+        timeout=3,
+        urlopen=fake_urlopen,
+    )
+
+    request, timeout = requests[0]
+    assert request.full_url == "http://127.0.0.1:8642/v1/runs/run_1/stop"
+    assert request.get_method() == "POST"
+    assert request.get_header("Authorization") == "Bearer sk-secret"
+    assert request.data == b""
+    assert timeout == 3
+    assert run == {"run_id": "run_1", "status": "stopping"}
+
+
+def test_respond_gateway_run_approval_posts_choice_and_returns_safe_summary():
+    requests = []
+
+    def fake_urlopen(request, timeout):
+        requests.append((request, timeout))
+        return _FakeJsonResponse(
+            {
+                "object": "hermes.run.approval_response",
+                "run_id": "run_1",
+                "choice": "once",
+                "resolved": 1,
+                "secret": "should not cross dashboard boundary",
+            }
+        )
+
+    approval = respond_gateway_run_approval(
+        "run_1",
+        base_url="http://127.0.0.1:8642/health",
+        api_key="sk-secret",
+        choice="allow",
+        resolve_all=True,
+        timeout=3,
+        urlopen=fake_urlopen,
+    )
+
+    request, timeout = requests[0]
+    assert request.full_url == "http://127.0.0.1:8642/v1/runs/run_1/approval"
+    assert request.get_method() == "POST"
+    assert request.get_header("Authorization") == "Bearer sk-secret"
+    assert json.loads(request.data.decode()) == {
+        "choice": "once",
+        "resolve_all": True,
+    }
+    assert timeout == 3
+    assert approval == {"run_id": "run_1", "choice": "once", "resolved": 1}
+
+
+def test_respond_gateway_run_approval_rejects_invalid_choice():
+    with pytest.raises(ValueError, match="approval choice"):
+        respond_gateway_run_approval(
+            "run_1",
+            base_url="http://127.0.0.1:8642",
+            choice="maybe",
             urlopen=lambda *_args, **_kwargs: None,
         )
