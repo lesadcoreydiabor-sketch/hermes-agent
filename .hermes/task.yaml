@@ -6,6 +6,7 @@ related_prds:
   - docs/plans/hermes-run-inspector-prd.md
   - docs/plans/hermes-run-inspector-desktop-panel-requirements.md
   - docs/plans/hermes-run-inspector-desktop-panel-prd.md
+  - docs/plans/hermes-run-inspector-event-integration-prd.md
 owner: product-manager
 mode: implementation
 
@@ -235,6 +236,99 @@ tasks:
     status: completed
     risk: low
 
+  - id: HRIE-01
+    title: Define Run Inspector event contract
+    description: Add an issue- and code-grounded P2 PRD plus .hermes execution slice for read-only event integration.
+    depends_on:
+      - HRIDP-08
+    acceptance:
+      - PRD defines event fields, privacy exclusions, non-goals, risks, and verification.
+      - Task contract separates ledger, API, WebSocket, UI timeline, and verification work.
+      - P2 scope stays read-only and excludes run mutation or gateway controls.
+    verify:
+      - manual review of docs/plans/hermes-run-inspector-event-integration-prd.md
+      - git diff --check -- docs/plans/hermes-run-inspector-event-integration-prd.md .hermes/task.yaml
+    status: completed
+    risk: low
+
+  - id: HRIE-02
+    title: Add bounded redacted event ledger
+    description: Create a local in-memory event ledger for normalized Run Inspector events.
+    depends_on:
+      - HRIE-01
+    acceptance:
+      - Ledger stores bounded recent events only.
+      - Ledger redacts secret-looking values and truncates long summaries.
+      - Ledger normalizes dashboard chat event frames into the P2 event contract.
+      - Ledger exposes a replayable subscriber queue without blocking event producers.
+    verify:
+      - venv/Scripts/python.exe -m pytest tests/runtime/test_run_inspector_events.py -q -o addopts=
+    status: completed
+    risk: medium
+
+  - id: HRIE-03
+    title: Expose read-only Run Inspector event APIs
+    description: Add dashboard-protected recent-events and live event subscription endpoints.
+    depends_on:
+      - HRIE-02
+    acceptance:
+      - GET /api/run-inspector/events returns ok, events, and refreshed_at.
+      - WS /api/run-inspector/events sends initial replay and new events.
+      - Endpoints do not start, stop, resume, retry, reconnect, or dispatch tools.
+      - Missing events returns an empty list, not a dashboard failure.
+    verify:
+      - venv/Scripts/python.exe -m pytest tests/hermes_cli/test_run_inspector_events_api.py -q -o addopts=
+    status: completed
+    risk: medium
+
+  - id: HRIE-04
+    title: Record dashboard chat events into the ledger
+    description: Record sanitized events received by /api/pub before rebroadcasting them to existing chat subscribers.
+    depends_on:
+      - HRIE-03
+    acceptance:
+      - Existing /api/pub to /api/events broadcast behavior is unchanged.
+      - tool.start, tool.progress, and tool.complete frames produce ledger events.
+      - Invalid or malformed frames are ignored safely.
+      - Event recording never blocks or crashes chat event broadcast.
+    verify:
+      - venv/Scripts/python.exe -m pytest tests/hermes_cli/test_web_server.py::TestWebServerWebSockets tests/hermes_cli/test_run_inspector_events_api.py -q -o addopts=
+    status: completed
+    risk: medium
+
+  - id: HRIE-05
+    title: Add Run Inspector event timeline UI
+    description: Add a frontend hook and timeline card that show recent and live Run Inspector events.
+    depends_on:
+      - HRIE-04
+    acceptance:
+      - Timeline shows empty, connected, disconnected, and populated states.
+      - Timeline values are formatted safely and do not overflow.
+      - Auth failure stops live event retries.
+      - UI remains read-only.
+    verify:
+      - venv/Scripts/python.exe -m pytest tests/web/test_run_inspector_status_policy.py -q -o addopts=
+      - npm.cmd run build
+    status: completed
+    risk: medium
+
+  - id: HRIE-06
+    title: Verify event integration slice
+    description: Re-run backend, frontend, build, and browser smoke checks for the event timeline.
+    depends_on:
+      - HRIE-05
+    acceptance:
+      - Backend event tests pass.
+      - Frontend event tests pass.
+      - Build passes.
+      - Browser smoke confirms /run-inspector renders with the timeline and no horizontal overflow.
+    verify:
+      - venv/Scripts/python.exe -m pytest tests/runtime/test_run_inspector_events.py tests/hermes_cli/test_run_inspector_events_api.py tests/web/test_run_inspector_status_policy.py -q -o addopts=
+      - npm.cmd run build
+      - Playwright smoke for /run-inspector
+    status: completed
+    risk: high
+
 risk_flags:
   destructive_file_change:
     pause: true
@@ -444,6 +538,61 @@ progress_report:
       verification_result: "passed: manual review of docs/plans/hermes-desktop-wrapper-decision.md; passed: git diff --check -- docs/plans/hermes-desktop-wrapper-decision.md .hermes/task.yaml"
       blockers: []
       next_step: "Run Inspector Desktop Panel P1 slice complete; prepare review, stage/commit, or start Run Inspector P2 event integration."
+    - task_id: HRIE-01
+      status: completed
+      changed_files:
+        - docs/plans/hermes-run-inspector-event-integration-prd.md
+        - .hermes/task.yaml
+      verification_result: "pending full validation after HRIE implementation; initial scope reviewed against existing /api/pub, /api/events, and gateway /v1/runs/{run_id}/events code paths"
+      blockers: []
+      next_step: HRIE-02
+    - task_id: HRIE-02
+      status: completed
+      changed_files:
+        - hermes_cli/run_inspector_events.py
+        - tests/runtime/test_run_inspector_events.py
+        - .hermes/task.yaml
+      verification_result: "passed: venv/Scripts/python.exe -m pytest tests/runtime/test_run_inspector_events.py -q -o addopts= (5 passed)"
+      blockers: []
+      next_step: HRIE-03
+    - task_id: HRIE-03
+      status: completed
+      changed_files:
+        - hermes_cli/web_server.py
+        - tests/hermes_cli/test_run_inspector_events_api.py
+        - .hermes/task.yaml
+      verification_result: "passed: venv/Scripts/python.exe -m pytest tests/runtime/test_run_inspector_events.py tests/hermes_cli/test_run_inspector_events_api.py -q -o addopts= (9 passed)"
+      blockers: []
+      next_step: HRIE-04
+    - task_id: HRIE-04
+      status: completed
+      changed_files:
+        - hermes_cli/web_server.py
+        - tests/hermes_cli/test_run_inspector_events_api.py
+        - .hermes/task.yaml
+      verification_result: "passed: venv/Scripts/python.exe -m pytest tests/hermes_cli/test_web_server.py::TestPtyWebSocket -q -o addopts= (11 skipped on native Windows PTY constraints); passed: pub recording regression in tests/hermes_cli/test_run_inspector_events_api.py"
+      blockers:
+        - "Existing TestPtyWebSocket cases are skipped in this native Windows environment because embedded PTY tests require POSIX PTY support."
+      next_step: HRIE-05
+    - task_id: HRIE-05
+      status: completed
+      changed_files:
+        - web/src/lib/api.ts
+        - web/src/hooks/useRunInspectorEvents.ts
+        - web/src/pages/runInspectorEventTimeline.ts
+        - web/src/pages/RunInspectorPage.tsx
+        - tests/web/test_run_inspector_status_policy.py
+        - .hermes/task.yaml
+      verification_result: "passed: venv/Scripts/python.exe -m pytest tests/web/test_run_inspector_status_policy.py -q -o addopts= (14 passed); passed: npm.cmd run build"
+      blockers: []
+      next_step: HRIE-06
+    - task_id: HRIE-06
+      status: completed
+      changed_files:
+        - .hermes/task.yaml
+      verification_result: "passed: venv/Scripts/python.exe -m pytest tests/runtime/test_run_inspector_events.py tests/hermes_cli/test_run_inspector_events_api.py tests/hermes_cli/test_run_inspector_api.py tests/web/test_run_inspector_status_policy.py -q -o addopts= (27 passed); passed: npm.cmd run build; passed: git diff --check for HRIE files; smoke passed: /run-inspector page=200, /api/run-inspector/events ok=True, Playwright desktop/narrow Event Timeline visible with no horizontal overflow"
+      blockers: []
+      next_step: "Run Inspector P2 event timeline slice complete; review, stage/commit/push, or continue with gateway /v1/runs/{run_id}/events bridge."
 
 failure_review:
   enabled: true

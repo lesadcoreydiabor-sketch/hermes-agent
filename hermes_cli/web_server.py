@@ -48,6 +48,12 @@ from hermes_cli.config import (
     check_config_version,
     redact_key,
 )
+from hermes_cli.run_inspector_events import (
+    get_recent_run_inspector_events,
+    record_run_inspector_event_frame,
+    subscribe_run_inspector_events,
+    unregister_run_inspector_event_subscriber,
+)
 from hermes_cli.status import get_run_inspector_status_payload
 from gateway.status import get_running_pid, read_runtime_status
 
@@ -559,6 +565,62 @@ async def get_run_inspector():
         "snapshot": snapshot,
         "refreshed_at": _utc_now_iso(),
     }
+
+
+@app.get("/api/run-inspector/events")
+async def get_run_inspector_events(limit: int = 50):
+    """Return recent privacy-safe Run Inspector events for dashboard UI."""
+    return {
+        "ok": True,
+        "events": get_recent_run_inspector_events(limit=limit),
+        "refreshed_at": _utc_now_iso(),
+    }
+
+
+@app.websocket("/api/run-inspector/events")
+async def run_inspector_events_ws(ws: WebSocket) -> None:
+    """Read-only live Run Inspector event stream for dashboard UI."""
+    token = ws.query_params.get("token", "")
+    if not hmac.compare_digest(token.encode(), _SESSION_TOKEN.encode()):
+        await ws.close(code=4401)
+        return
+
+    if not _ws_client_is_allowed(ws):
+        await ws.close(code=4403)
+        return
+
+    await ws.accept()
+    queue, replay = subscribe_run_inspector_events(replay=20)
+    try:
+        await ws.send_text(
+            json.dumps(
+                {
+                    "type": "replay",
+                    "events": replay,
+                    "timestamp": _utc_now_iso(),
+                }
+            )
+        )
+        while True:
+            try:
+                event = await asyncio.wait_for(queue.get(), timeout=30.0)
+            except asyncio.TimeoutError:
+                await ws.send_text(
+                    json.dumps(
+                        {
+                            "type": "keepalive",
+                            "timestamp": _utc_now_iso(),
+                        }
+                    )
+                )
+                continue
+            await ws.send_text(json.dumps({"type": "event", "event": event}))
+    except WebSocketDisconnect:
+        pass
+    except Exception as exc:
+        _log.debug("Run Inspector events websocket closed: %s", exc)
+    finally:
+        unregister_run_inspector_event_subscriber(queue)
 
 
 @app.get("/api/status")
@@ -3355,7 +3417,12 @@ async def pub_ws(ws: WebSocket) -> None:
 
     try:
         while True:
-            await _broadcast_event(channel, await ws.receive_text())
+            frame = await ws.receive_text()
+            try:
+                record_run_inspector_event_frame(frame, session_id=channel)
+            except Exception as exc:
+                _log.debug("Run Inspector event record failed: %s", exc)
+            await _broadcast_event(channel, frame)
     except WebSocketDisconnect:
         pass
 

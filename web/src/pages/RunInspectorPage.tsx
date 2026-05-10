@@ -17,8 +17,10 @@ import { Button } from "@nous-research/ui/ui/components/button";
 import { Spinner } from "@nous-research/ui/ui/components/spinner";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { usePageHeader } from "@/contexts/usePageHeader";
+import { useRunInspectorEvents } from "@/hooks/useRunInspectorEvents";
 import { useRunInspectorStatus } from "@/hooks/useRunInspectorStatus";
 import type {
+  RunInspectorEvent,
   RunInspectorMcpHealth,
   RunInspectorResponse,
   RunInspectorSnapshot,
@@ -39,6 +41,12 @@ import {
   type StateDisplay,
   type Tone,
 } from "@/pages/runInspectorViewModel";
+import {
+  describeRunInspectorEvent,
+  describeRunInspectorEventStream,
+  formatRunInspectorEventTime,
+  type RunInspectorEventStreamState,
+} from "@/pages/runInspectorEventTimeline";
 
 type BadgeTone = "success" | "warning" | "destructive" | "secondary" | "outline";
 
@@ -52,6 +60,7 @@ const BADGE_TONE: Record<Tone, BadgeTone> = {
 
 export default function RunInspectorPage() {
   const inspector = useRunInspectorStatus();
+  const eventStream = useRunInspectorEvents();
   const { setAfterTitle, setEnd, setTitle } = usePageHeader();
   const stateDisplay = describeRunInspectorState(inspector.state, inspector.snapshot);
 
@@ -134,6 +143,12 @@ export default function RunInspectorPage() {
           <div className="flex min-w-0 flex-col gap-4">
             <RuntimeCard snapshot={snapshot} />
             <HealthCard snapshot={snapshot} />
+            <EventTimelineCard
+              error={eventStream.error}
+              events={eventStream.events}
+              lastUpdatedAt={eventStream.lastUpdatedAt}
+              state={eventStream.state}
+            />
             <PrivacyCard snapshot={snapshot} />
           </div>
         </div>
@@ -378,6 +393,92 @@ function PrivacyCard({ snapshot }: { snapshot: RunInspectorSnapshot | null }) {
           </div>
         ) : (
           <p className="text-sm text-muted-foreground">No privacy flags</p>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+function EventTimelineCard({
+  error,
+  events,
+  lastUpdatedAt,
+  state,
+}: {
+  error: string | null;
+  events: RunInspectorEvent[];
+  lastUpdatedAt: string | null;
+  state: RunInspectorEventStreamState;
+}) {
+  const stream = describeRunInspectorEventStream(state);
+  const newestFirst = [...events].reverse();
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex min-w-0 items-center justify-between gap-2">
+          <span className="flex min-w-0 items-center gap-2">
+            <Activity className="h-4 w-4 shrink-0" />
+            <span className="truncate">Event Timeline</span>
+          </span>
+          <Badge tone={BADGE_TONE[stream.tone]} className="shrink-0 text-[10px]">
+            {stream.label}
+          </Badge>
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="flex min-w-0 flex-col gap-3">
+        <div className="flex min-w-0 flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
+          <span className="min-w-0 truncate">
+            {formatDisplayValue(error, stream.message)}
+          </span>
+          <span className="shrink-0">
+            {lastUpdatedAt ? formatDateTime(lastUpdatedAt) : "Not refreshed"}
+          </span>
+        </div>
+
+        {newestFirst.length === 0 ? (
+          <p className="border border-border bg-secondary/20 px-3 py-4 text-sm text-muted-foreground">
+            No recent events
+          </p>
+        ) : (
+          <div className="flex min-w-0 flex-col divide-y divide-border/70 border border-border">
+            {newestFirst.map((event) => {
+              const display = describeRunInspectorEvent(event);
+              return (
+                <div
+                  key={event.id}
+                  className="grid min-w-0 gap-2 px-3 py-2 sm:grid-cols-[84px_minmax(0,1fr)]"
+                >
+                  <span className="font-mono-ui text-xs text-muted-foreground">
+                    {formatRunInspectorEventTime(event.timestamp)}
+                  </span>
+                  <div className="min-w-0">
+                    <div className="flex min-w-0 flex-wrap items-center gap-2">
+                      <span className={cn("truncate text-sm font-medium", TONE_CLASSES[display.tone])}>
+                        {formatDisplayValue(display.label)}
+                      </span>
+                      {event.status ? (
+                        <Badge tone={BADGE_TONE[display.tone]} className="text-[10px]">
+                          {formatDisplayValue(event.status)}
+                        </Badge>
+                      ) : null}
+                      <Badge tone="outline" className="text-[10px]">
+                        {formatDisplayValue(event.source)}
+                      </Badge>
+                    </div>
+                    <p className="mt-1 break-words text-xs text-muted-foreground">
+                      {formatDisplayValue(display.message, "No details")}
+                    </p>
+                    {event.tool ? (
+                      <p className="mt-1 truncate font-mono-ui text-[10px] text-muted-foreground/80">
+                        {formatDisplayValue(event.tool)}
+                      </p>
+                    ) : null}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
         )}
       </CardContent>
     </Card>

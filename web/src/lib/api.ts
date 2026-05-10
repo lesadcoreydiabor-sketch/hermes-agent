@@ -65,6 +65,11 @@ export const api = {
   getStatus: () => fetchJSON<StatusResponse>("/api/status"),
   getRunInspector: (init?: RequestInit) =>
     fetchJSON<RunInspectorResponse>("/api/run-inspector", init),
+  getRunInspectorEvents: (limit = 50, init?: RequestInit) =>
+    fetchJSON<RunInspectorEventsResponse>(
+      `/api/run-inspector/events?limit=${limit}`,
+      init,
+    ),
   getSessions: (limit = 20, offset = 0) =>
     fetchJSON<PaginatedSessions>(`/api/sessions?limit=${limit}&offset=${offset}`),
   getSessionMessages: (id: string) =>
@@ -458,6 +463,31 @@ export interface RunInspectorSnapshot {
 export interface RunInspectorResponse {
   ok: boolean;
   snapshot: RunInspectorSnapshot;
+  refreshed_at: string;
+}
+
+export type RunInspectorEventSource =
+  | "dashboard_chat"
+  | "gateway_run"
+  | "run_inspector"
+  | "unknown"
+  | string;
+
+export interface RunInspectorEvent {
+  id: number;
+  type: string;
+  source: RunInspectorEventSource;
+  timestamp: string;
+  run_id: string | null;
+  session_id: string | null;
+  tool: string | null;
+  status: string | null;
+  message: string | null;
+}
+
+export interface RunInspectorEventsResponse {
+  ok: boolean;
+  events: RunInspectorEvent[];
   refreshed_at: string;
 }
 

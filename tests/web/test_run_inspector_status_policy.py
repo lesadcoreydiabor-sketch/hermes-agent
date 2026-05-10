@@ -64,6 +64,34 @@ const viewModel = moduleRef.exports;
     return json.loads(completed.stdout)
 
 
+def run_event_timeline_script(script: str) -> dict:
+    node_script = f"""
+const fs = require("node:fs");
+const vm = require("node:vm");
+const ts = require("typescript");
+const source = fs.readFileSync("src/pages/runInspectorEventTimeline.ts", "utf8");
+const output = ts.transpileModule(source, {{
+  compilerOptions: {{
+    module: ts.ModuleKind.CommonJS,
+    target: ts.ScriptTarget.ES2022,
+  }},
+}}).outputText;
+const moduleRef = {{ exports: {{}} }};
+const sandbox = {{ module: moduleRef, exports: moduleRef.exports, require, console }};
+vm.runInNewContext(output, sandbox, {{ filename: "runInspectorEventTimeline.js" }});
+const timeline = moduleRef.exports;
+{script}
+"""
+    completed = subprocess.run(
+        ["node", "-e", node_script],
+        cwd=WEB_DIR,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    return json.loads(completed.stdout)
+
+
 def test_run_inspector_policy_derives_loaded_states():
     payload = run_policy_script(
         textwrap.dedent(
@@ -357,3 +385,71 @@ def test_run_inspector_frontend_slice_avoids_unix_shell_assumptions() -> None:
 
     assert "/bin/bash" not in combined
     assert "bash -n" not in combined
+
+
+def test_run_inspector_event_timeline_merges_dedupes_and_caps():
+    payload = run_event_timeline_script(
+        textwrap.dedent(
+            """
+            const base = [
+              { id: 1, type: "tool.started", source: "dashboard_chat", timestamp: "2026-05-11T00:00:00Z", run_id: null, session_id: null, tool: "shell", status: "running", message: null },
+              { id: 2, type: "tool.progress", source: "dashboard_chat", timestamp: "2026-05-11T00:00:01Z", run_id: null, session_id: null, tool: "shell", status: "running", message: "working" },
+            ];
+            const incoming = [
+              { id: 2, type: "tool.progress", source: "dashboard_chat", timestamp: "2026-05-11T00:00:01Z", run_id: null, session_id: null, tool: "shell", status: "running", message: "updated" },
+              { id: 3, type: "tool.completed", source: "dashboard_chat", timestamp: "2026-05-11T00:00:02Z", run_id: null, session_id: null, tool: "shell", status: "completed", message: "done" },
+            ];
+            const events = timeline.mergeRunInspectorEvents(base, incoming, 2);
+            console.log(JSON.stringify({ events }));
+            """
+        )
+    )
+
+    assert [event["id"] for event in payload["events"]] == [2, 3]
+    assert payload["events"][0]["message"] == "updated"
+
+
+def test_run_inspector_event_timeline_describes_event_and_stream_states():
+    payload = run_event_timeline_script(
+        textwrap.dedent(
+            """
+            const failed = timeline.describeRunInspectorEvent({
+              id: 1,
+              type: "tool.completed",
+              source: "dashboard_chat",
+              timestamp: "2026-05-11T00:00:00Z",
+              run_id: null,
+              session_id: null,
+              tool: "shell",
+              status: "failed",
+              message: "Redacted",
+            });
+            const connected = timeline.describeRunInspectorEventStream("connected");
+            const auth = timeline.describeRunInspectorEventStream("auth_failed");
+            console.log(JSON.stringify({ failed, connected, auth }));
+            """
+        )
+    )
+
+    assert payload["failed"] == {
+        "label": "Tool completed",
+        "tone": "destructive",
+        "message": "Redacted",
+    }
+    assert payload["connected"]["tone"] == "success"
+    assert payload["auth"]["tone"] == "destructive"
+
+
+def test_run_inspector_events_hook_uses_tokened_websocket_and_auth_stop() -> None:
+    hook_source = (
+        ROOT / "web" / "src" / "hooks" / "useRunInspectorEvents.ts"
+    ).read_text(encoding="utf-8")
+    page_source = (
+        ROOT / "web" / "src" / "pages" / "RunInspectorPage.tsx"
+    ).read_text(encoding="utf-8")
+
+    assert "new WebSocket(" in hook_source
+    assert "__HERMES_SESSION_TOKEN__" in hook_source
+    assert "/api/run-inspector/events?token=" in hook_source
+    assert 'event.code === 4401' in hook_source
+    assert "<EventTimelineCard" in page_source
