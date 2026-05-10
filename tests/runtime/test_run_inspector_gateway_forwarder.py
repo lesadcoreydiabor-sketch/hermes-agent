@@ -11,6 +11,7 @@ from hermes_cli.run_inspector_gateway_forwarder import (
     clear_gateway_run_event_forwarders_for_tests,
     fetch_gateway_run_summaries,
     forward_gateway_run_events,
+    launch_gateway_run,
     resolve_gateway_event_api_key,
     resolve_gateway_event_base_url,
 )
@@ -201,3 +202,48 @@ def test_fetch_gateway_run_summaries_returns_redacted_safe_list():
             "has_error": False,
         }
     ]
+
+
+def test_launch_gateway_run_posts_prompt_and_returns_safe_summary():
+    requests = []
+
+    def fake_urlopen(request, timeout):
+        requests.append((request, timeout))
+        return _FakeJsonResponse(
+            {
+                "run_id": "run_1",
+                "status": "started",
+                "output": "should not cross dashboard boundary",
+            }
+        )
+
+    run = launch_gateway_run(
+        base_url="http://127.0.0.1:8642/health",
+        api_key="sk-secret",
+        input_text="ping gateway",
+        model="hermes",
+        session_id="session-1",
+        timeout=3,
+        urlopen=fake_urlopen,
+    )
+
+    request, timeout = requests[0]
+    assert request.full_url == "http://127.0.0.1:8642/v1/runs"
+    assert request.get_method() == "POST"
+    assert request.get_header("Authorization") == "Bearer sk-secret"
+    assert json.loads(request.data.decode()) == {
+        "input": "ping gateway",
+        "model": "hermes",
+        "session_id": "session-1",
+    }
+    assert timeout == 3
+    assert run == {"run_id": "run_1", "status": "started"}
+
+
+def test_launch_gateway_run_rejects_empty_input():
+    with pytest.raises(ValueError, match="input is required"):
+        launch_gateway_run(
+            base_url="http://127.0.0.1:8642",
+            input_text="",
+            urlopen=lambda *_args, **_kwargs: None,
+        )

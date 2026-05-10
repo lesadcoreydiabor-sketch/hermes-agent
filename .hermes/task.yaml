@@ -469,6 +469,25 @@ tasks:
     status: completed
     risk: medium
 
+  - id: HRIGF-07
+    title: Add gateway run launch and auto-follow
+    description: Let Run Inspector start a bounded gateway run through the dashboard backend and automatically follow its event stream.
+    depends_on:
+      - HRIGF-06
+    acceptance:
+      - Dashboard exposes POST /api/run-inspector/gateway-runs/launch behind the existing session-token guard.
+      - The launch proxy resolves gateway URL/key server-side and never exposes gateway credentials to frontend code.
+      - Launch request accepts bounded input and optional model/session/instructions fields.
+      - Launch response returns only safe run identity/status plus local forwarder state.
+      - Run Inspector UI can start a gateway run, fill the run id, optimistically list it, and refresh the timeline.
+    verify:
+      - venv/Scripts/python.exe -m pytest tests/runtime/test_run_inspector_gateway_forwarder.py tests/hermes_cli/test_run_inspector_gateway_forwarder_api.py tests/web/test_run_inspector_status_policy.py -q -o addopts=
+      - npm.cmd run build
+      - Playwright smoke for /run-inspector
+      - git diff --check for HRIGF launch files
+    status: completed
+    risk: high
+
 risk_flags:
   destructive_file_change:
     pause: true
@@ -836,6 +855,21 @@ progress_report:
       verification_result: "passed: venv/Scripts/python.exe -m pytest tests/gateway/test_api_server_runs.py::TestRunEvents tests/gateway/test_api_server_runs.py::TestRunStatus tests/hermes_cli/test_run_inspector_gateway_forwarder_api.py tests/runtime/test_run_inspector_gateway_forwarder.py tests/web/test_run_inspector_status_policy.py -q -o addopts= (37 passed, 10 warnings); passed: npm.cmd run build; passed: git diff --check for HRIGF discovery files; browser smoke passed in in-app browser and Playwright desktop/narrow viewports without horizontal overflow"
       blockers: []
       next_step: "Run Inspector P6 recent gateway runs discovery complete; stage/commit/push, or add automatic run launcher integration."
+    - task_id: HRIGF-07
+      status: completed
+      changed_files:
+        - hermes_cli/run_inspector_gateway_forwarder.py
+        - hermes_cli/web_server.py
+        - web/src/lib/api.ts
+        - web/src/pages/RunInspectorPage.tsx
+        - tests/runtime/test_run_inspector_gateway_forwarder.py
+        - tests/hermes_cli/test_run_inspector_gateway_forwarder_api.py
+        - tests/web/test_run_inspector_status_policy.py
+        - docs/plans/hermes-run-inspector-event-integration-prd.md
+        - .hermes/task.yaml
+      verification_result: "passed: venv/Scripts/python.exe -m pytest tests/runtime/test_run_inspector_gateway_forwarder.py tests/hermes_cli/test_run_inspector_gateway_forwarder_api.py tests/web/test_run_inspector_status_policy.py -q -o addopts= (31 passed); reran tests/web/test_run_inspector_status_policy.py -q -o addopts= after frontend launch adjustment (15 passed); passed: npm.cmd run build; browser smoke passed in in-app browser and Playwright desktop/narrow viewports without horizontal overflow"
+      blockers: []
+      next_step: "Run Inspector P7 gateway run launch and auto-follow complete; stage/commit/push, or add stop/approval controls."
 
 failure_review:
   enabled: true
@@ -900,4 +934,12 @@ failure_review:
       what_changed: "Added a local summary secret regex in run_inspector_gateway_forwarder.py and updated the runtime test to assert session-Redacted."
       how_it_was_verified: "Re-ran venv/Scripts/python.exe -m pytest tests/gateway/test_api_server_runs.py::TestRunStatus tests/runtime/test_run_inspector_gateway_forwarder.py tests/hermes_cli/test_run_inspector_gateway_forwarder_api.py -q -o addopts= and got 17 passed, 5 warnings."
       added_eval_or_badcase: "tests/runtime/test_run_inspector_gateway_forwarder.py::test_fetch_gateway_run_summaries_returns_redacted_safe_list"
+      blocker: false
+    - trigger: failed_verification
+      task_id: HRIGF-07
+      what_happened: "Initial Playwright smoke used a non-exact button name lookup for Start and also matched the sidebar Restart Gateway button."
+      why_it_failed: "The smoke script used broad accessible-name matching, so a valid page looked ambiguous."
+      what_changed: "Changed the smoke check to exact button and label matching for Gateway launch input, Gateway run id, Start, and Runs."
+      how_it_was_verified: "Re-ran the Playwright desktop/narrow smoke and both viewports passed with no horizontal overflow."
+      added_eval_or_badcase: "manual Playwright smoke for /run-inspector gateway launch controls"
       blocker: false

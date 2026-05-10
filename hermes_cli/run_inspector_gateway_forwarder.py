@@ -202,6 +202,37 @@ def fetch_gateway_run_summaries(
     ]
 
 
+def launch_gateway_run(
+    *,
+    base_url: str,
+    input_text: str,
+    api_key: Optional[str] = None,
+    model: Optional[str] = None,
+    session_id: Optional[str] = None,
+    instructions: Optional[str] = None,
+    timeout: float = DEFAULT_GATEWAY_EVENT_TIMEOUT_SECONDS,
+    urlopen: Callable[..., Any] = urllib.request.urlopen,
+) -> dict[str, Any]:
+    """Start a gateway run and return only the dashboard-safe launch summary."""
+
+    safe_input = _validate_gateway_launch_input(input_text)
+    payload: dict[str, Any] = {"input": safe_input}
+    for key, value in (
+        ("model", model),
+        ("session_id", session_id),
+        ("instructions", instructions),
+    ):
+        text = _optional_launch_text(value)
+        if text:
+            payload[key] = text
+
+    request = _build_gateway_launch_request(base_url, api_key, payload)
+    with urlopen(request, timeout=timeout) as response:
+        raw_body = response.read()
+    payload = json_loads_bytes(raw_body)
+    return _normalize_gateway_launch_response(payload)
+
+
 def _run_gateway_forwarder_thread(
     run_id: str,
     base_url: str,
@@ -272,6 +303,24 @@ def _build_gateway_runs_request(
     return urllib.request.Request(url, headers=headers, method="GET")
 
 
+def _build_gateway_launch_request(
+    base_url: str,
+    api_key: Optional[str],
+    payload: dict[str, Any],
+) -> urllib.request.Request:
+    import json
+
+    url = f"{_normalize_gateway_base_url(base_url)}/v1/runs"
+    body = json.dumps(payload).encode("utf-8")
+    headers = {
+        "Accept": "application/json",
+        "Content-Type": "application/json",
+    }
+    if api_key:
+        headers["Authorization"] = f"Bearer {api_key}"
+    return urllib.request.Request(url, data=body, headers=headers, method="POST")
+
+
 def _normalize_gateway_run_summary(value: Any) -> Optional[dict[str, Any]]:
     if not isinstance(value, dict):
         return None
@@ -287,6 +336,18 @@ def _normalize_gateway_run_summary(value: Any) -> Optional[dict[str, Any]]:
         "model": _safe_summary_text(value.get("model")),
         "last_event": _safe_summary_text(value.get("last_event")),
         "has_error": bool(value.get("has_error")),
+    }
+
+
+def _normalize_gateway_launch_response(value: Any) -> dict[str, Any]:
+    if not isinstance(value, dict):
+        raise ValueError("gateway run launch response must be a JSON object")
+    run_id = _safe_summary_text(value.get("run_id"))
+    if not run_id:
+        raise ValueError("gateway run launch response missing run_id")
+    return {
+        "run_id": run_id,
+        "status": _safe_summary_text(value.get("status")) or "started",
     }
 
 
@@ -346,6 +407,24 @@ def _validate_run_id(run_id: str) -> str:
     if len(text) > 120:
         raise ValueError("run_id is too long")
     return text
+
+
+def _validate_gateway_launch_input(value: Any) -> str:
+    text = str(value or "").strip()
+    if not text:
+        raise ValueError("input is required")
+    if len(text) > 4000:
+        raise ValueError("input is too long")
+    return text
+
+
+def _optional_launch_text(value: Any) -> Optional[str]:
+    if value is None:
+        return None
+    text = str(value).strip()
+    if not text:
+        return None
+    return text[:4000]
 
 
 def _safe_summary_text(value: Any) -> Optional[str]:

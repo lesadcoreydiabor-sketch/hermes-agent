@@ -28,10 +28,9 @@ When a run stalls, fails, waits for approval, or has tool/MCP churn, the user ne
 
 ## Non-Goals
 
-- Do not start, stop, resume, retry, reconnect, or mutate a run.
+- Do not stop, resume, retry, reconnect, or mutate an existing run.
 - Do not replace existing `/api/events` chat sidebar behavior.
 - Do not persist raw event payloads.
-- Do not add remote event forwarding.
 - Do not add a desktop wrapper in this slice.
 
 ## Event Contract
@@ -152,6 +151,25 @@ The dashboard proxy should resolve the gateway URL/key server-side, fetch the re
 
 The Run Inspector page should add a `Runs` refresh action and a compact selectable recent-runs list inside the existing Gateway Run Follow card. Selecting a recent run fills the run id input; following still uses the existing P4 forwarder endpoint.
 
+## P7 Gateway Run Launch And Auto-Follow
+
+The next slice lets the Run Inspector page start a small gateway run through the dashboard backend and automatically follow its event stream.
+
+Add a protected dashboard proxy:
+
+- `POST /api/run-inspector/gateway-runs/launch`
+
+The dashboard proxy should:
+
+- Resolve the gateway URL/key server-side.
+- Accept a bounded `input` string plus optional `model`, `session_id`, and `instructions`.
+- Call gateway `POST /v1/runs` from the backend.
+- Return only `run_id` and `status` from the launch response.
+- Start the existing gateway event forwarder by default.
+- Never return gateway credentials, raw prompt echo, final output, tool previews, usage, or raw errors.
+
+The Run Inspector page should add a compact start control in the existing Gateway Run Follow card. A successful start fills the `run_id`, starts the forwarder, updates the local recent-runs list optimistically, and refreshes the timeline.
+
 ## Acceptance
 
 - Recent events API returns an envelope with `ok`, `events`, and `refreshed_at`.
@@ -162,6 +180,8 @@ The Run Inspector page should add a `Runs` refresh action and a compact selectab
 - UI shows empty, connected, disconnected, and event states.
 - Long event values do not overflow.
 - Sensitive-looking event values render as `Redacted`.
+- Gateway launch starts only after an explicit UI action.
+- Gateway launch response exposes only safe run identity/status and backend forwarder state.
 
 ## Risks
 
@@ -176,7 +196,9 @@ The Run Inspector page should add a `Runs` refresh action and a compact selectab
 - API tests for auth, recent-events response, and WebSocket replay/new event delivery.
 - Gateway run endpoint tests for source-side lifecycle mirroring.
 - Runtime tests for gateway SSE parsing, configured URL/key resolution, and cross-process forwarding redaction.
+- Runtime tests for gateway launch request construction and safe launch response normalization.
 - API tests for the protected gateway follow endpoint, missing config, and status lookup.
+- API tests for the protected gateway launch endpoint and auto-follow behavior.
 - Frontend tests for hook error classification, event formatting, and overflow/privacy guards.
 - Frontend tests that the Run Inspector page exposes gateway follow controls without gateway secret names or values.
 - Gateway route tests that recent run summaries omit output/error payloads.

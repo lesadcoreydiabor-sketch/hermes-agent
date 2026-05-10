@@ -68,6 +68,9 @@ const BADGE_TONE: Record<Tone, BadgeTone> = {
   primary: "secondary",
 };
 
+const DEFAULT_GATEWAY_LAUNCH_INPUT =
+  "Report current Hermes gateway health in one concise sentence.";
+
 export default function RunInspectorPage() {
   const inspector = useRunInspectorStatus();
   const eventStream = useRunInspectorEvents();
@@ -79,6 +82,11 @@ export default function RunInspectorPage() {
   const [gatewayRuns, setGatewayRuns] = useState<RunInspectorGatewayRun[]>([]);
   const [gatewayRunsError, setGatewayRunsError] = useState<string | null>(null);
   const [gatewayRunsBusy, setGatewayRunsBusy] = useState(false);
+  const [gatewayLaunchInput, setGatewayLaunchInput] = useState(
+    DEFAULT_GATEWAY_LAUNCH_INPUT,
+  );
+  const [gatewayLaunchError, setGatewayLaunchError] = useState<string | null>(null);
+  const [gatewayLaunchBusy, setGatewayLaunchBusy] = useState(false);
   const { setAfterTitle, setEnd, setTitle } = usePageHeader();
   const stateDisplay = describeRunInspectorState(inspector.state, inspector.snapshot);
 
@@ -137,6 +145,52 @@ export default function RunInspectorPage() {
       setGatewayRunsBusy(false);
     }
   }, [gatewayRunId]);
+
+  const launchGatewayRun = useCallback(async () => {
+    const input = gatewayLaunchInput.trim();
+    if (!input) {
+      setGatewayLaunchError("Input is required");
+      return;
+    }
+
+    setGatewayLaunchBusy(true);
+    setGatewayLaunchError(null);
+    try {
+      const response = await api.launchGatewayRun({
+        input,
+        auto_follow: true,
+      });
+      const launchedRun: RunInspectorGatewayRun = {
+        run_id: response.run.run_id,
+        status: response.run.status,
+        created_at: null,
+        updated_at: null,
+        session_id: null,
+        model: null,
+        last_event: "run.started",
+        has_error: false,
+      };
+      setGatewayRunId(response.run.run_id);
+      setGatewayForwarder(response.forwarder);
+      setGatewayRuns((runs) => [
+        launchedRun,
+        ...runs.filter((run) => run.run_id !== response.run.run_id),
+      ]);
+      eventStream.refresh();
+    } catch (err) {
+      setGatewayLaunchError(errorMessage(err));
+    } finally {
+      setGatewayLaunchBusy(false);
+    }
+  }, [eventStream, gatewayLaunchInput]);
+
+  const handleGatewayLaunchSubmit = useCallback(
+    (event: FormEvent<HTMLFormElement>) => {
+      event.preventDefault();
+      void launchGatewayRun();
+    },
+    [launchGatewayRun],
+  );
 
   const handleGatewayFollowSubmit = useCallback(
     (event: FormEvent<HTMLFormElement>) => {
@@ -229,8 +283,13 @@ export default function RunInspectorPage() {
               busy={gatewayForwarderBusy}
               error={gatewayForwarderError}
               forwarder={gatewayForwarder}
+              launchBusy={gatewayLaunchBusy}
+              launchError={gatewayLaunchError}
+              launchInput={gatewayLaunchInput}
               onRefresh={refreshGatewayFollowStatus}
               onRefreshRuns={refreshGatewayRuns}
+              onLaunchInputChange={setGatewayLaunchInput}
+              onLaunchSubmit={handleGatewayLaunchSubmit}
               onRunIdChange={setGatewayRunId}
               recentRuns={gatewayRuns}
               recentRunsBusy={gatewayRunsBusy}
@@ -498,8 +557,13 @@ function GatewayRunFollowCard({
   busy,
   error,
   forwarder,
+  launchBusy,
+  launchError,
+  launchInput,
   onRefresh,
   onRefreshRuns,
+  onLaunchInputChange,
+  onLaunchSubmit,
   onRunIdChange,
   recentRuns,
   recentRunsBusy,
@@ -510,8 +574,13 @@ function GatewayRunFollowCard({
   busy: boolean;
   error: string | null;
   forwarder: RunInspectorGatewayForwarder | null;
+  launchBusy: boolean;
+  launchError: string | null;
+  launchInput: string;
   onRefresh: () => void;
   onRefreshRuns: () => void;
+  onLaunchInputChange: (value: string) => void;
+  onLaunchSubmit: (event: FormEvent<HTMLFormElement>) => void;
   onRunIdChange: (value: string) => void;
   recentRuns: RunInspectorGatewayRun[];
   recentRunsBusy: boolean;
@@ -521,6 +590,7 @@ function GatewayRunFollowCard({
 }) {
   const display = describeGatewayForwarder(forwarder);
   const canSubmit = runId.trim().length > 0 && !busy;
+  const canLaunch = launchInput.trim().length > 0 && !launchBusy;
 
   return (
     <Card>
@@ -536,6 +606,32 @@ function GatewayRunFollowCard({
         </CardTitle>
       </CardHeader>
       <CardContent className="flex min-w-0 flex-col gap-3">
+        <form className="grid min-w-0 gap-2" onSubmit={onLaunchSubmit}>
+          <textarea
+            aria-label="Gateway launch input"
+            className="min-h-[72px] w-full resize-y border border-input bg-transparent px-3 py-2 text-xs shadow-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+            onChange={(event) => onLaunchInputChange(event.target.value)}
+            placeholder="Ask gateway to inspect current run health"
+            value={launchInput}
+          />
+          <div className="flex min-w-0 justify-end">
+            <Button
+              type="submit"
+              size="sm"
+              disabled={!canLaunch}
+              prefix={launchBusy ? <Spinner /> : <Play />}
+            >
+              Start
+            </Button>
+          </div>
+        </form>
+
+        {launchError ? (
+          <p className="break-words border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive">
+            {formatDisplayValue(launchError)}
+          </p>
+        ) : null}
+
         <form
           className="grid min-w-0 gap-2 sm:grid-cols-[minmax(0,1fr)_auto_auto_auto]"
           onSubmit={onSubmit}

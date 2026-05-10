@@ -58,6 +58,7 @@ from hermes_cli.run_inspector_gateway_forwarder import (
     DEFAULT_GATEWAY_EVENT_TIMEOUT_SECONDS,
     fetch_gateway_run_summaries,
     get_gateway_run_event_forwarder_status,
+    launch_gateway_run,
     resolve_gateway_event_api_key,
     resolve_gateway_event_base_url,
     start_gateway_run_event_forwarder,
@@ -601,6 +602,14 @@ def _resolve_gateway_event_config() -> tuple[str, Optional[str]]:
     return base_url, resolve_gateway_event_api_key()
 
 
+class GatewayRunLaunchBody(BaseModel):
+    input: str
+    model: Optional[str] = None
+    session_id: Optional[str] = None
+    instructions: Optional[str] = None
+    auto_follow: bool = True
+
+
 def _gateway_event_forwarder_timeout() -> float:
     raw = os.getenv(
         "HERMES_RUN_INSPECTOR_GATEWAY_TIMEOUT",
@@ -638,6 +647,53 @@ async def list_run_inspector_gateway_runs(limit: int = 20):
     return {
         "ok": True,
         "runs": runs,
+        "refreshed_at": _utc_now_iso(),
+    }
+
+
+@app.post("/api/run-inspector/gateway-runs/launch")
+async def launch_run_inspector_gateway_run(body: GatewayRunLaunchBody):
+    """Start a configured gateway run and optionally follow its event stream."""
+    base_url, api_key = _resolve_gateway_event_config()
+    loop = asyncio.get_running_loop()
+    try:
+        run = await loop.run_in_executor(
+            None,
+            lambda: launch_gateway_run(
+                base_url=base_url,
+                api_key=api_key,
+                input_text=body.input,
+                model=body.model,
+                session_id=body.session_id,
+                instructions=body.instructions,
+                timeout=_gateway_event_forwarder_timeout(),
+            ),
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    except Exception as exc:
+        _log.debug("Gateway run launch failed: %s", exc)
+        raise HTTPException(
+            status_code=502,
+            detail=f"Gateway run launch failed: {type(exc).__name__}",
+        )
+
+    forwarder = None
+    if body.auto_follow:
+        try:
+            forwarder = start_gateway_run_event_forwarder(
+                run["run_id"],
+                base_url=base_url,
+                api_key=api_key,
+                timeout=_gateway_event_forwarder_timeout(),
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc))
+
+    return {
+        "ok": True,
+        "run": run,
+        "forwarder": forwarder,
         "refreshed_at": _utc_now_iso(),
     }
 

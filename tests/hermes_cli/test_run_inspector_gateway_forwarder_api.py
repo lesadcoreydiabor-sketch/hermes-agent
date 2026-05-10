@@ -56,6 +56,24 @@ def test_gateway_runs_api_requires_session_token(_isolate_hermes_home):
     assert response.status_code == 401
 
 
+def test_gateway_run_launch_api_requires_session_token(_isolate_hermes_home):
+    try:
+        from starlette.testclient import TestClient
+    except ImportError:
+        pytest.skip("fastapi/starlette not installed")
+
+    from hermes_cli import web_server
+
+    client = TestClient(web_server.app)
+
+    response = client.post(
+        "/api/run-inspector/gateway-runs/launch",
+        json={"input": "ping gateway"},
+    )
+
+    assert response.status_code == 401
+
+
 def test_gateway_forwarder_api_requires_config(
     monkeypatch,
     run_inspector_gateway_client,
@@ -185,6 +203,61 @@ def test_gateway_runs_api_returns_safe_summaries(
             "limit": 7,
             "timeout": web_server._gateway_event_forwarder_timeout(),
         }
+    ]
+
+
+def test_gateway_run_launch_api_returns_run_and_forwarder(
+    monkeypatch,
+    run_inspector_gateway_client,
+):
+    from hermes_cli import web_server
+
+    launch_calls = []
+    follow_calls = []
+
+    def fake_launch(**kwargs):
+        launch_calls.append(kwargs)
+        return {"run_id": "run_abc", "status": "started"}
+
+    def fake_start(run_id, **kwargs):
+        follow_calls.append((run_id, kwargs))
+        return {"run_id": run_id, "state": "running"}
+
+    monkeypatch.setattr(web_server, "resolve_gateway_event_base_url", lambda: "http://127.0.0.1:8642")
+    monkeypatch.setattr(web_server, "resolve_gateway_event_api_key", lambda: "sk-secret")
+    monkeypatch.setattr(web_server, "launch_gateway_run", fake_launch)
+    monkeypatch.setattr(web_server, "start_gateway_run_event_forwarder", fake_start)
+
+    response = run_inspector_gateway_client.post(
+        "/api/run-inspector/gateway-runs/launch",
+        json={"input": "ping gateway", "auto_follow": True},
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["ok"] is True
+    assert payload["run"] == {"run_id": "run_abc", "status": "started"}
+    assert payload["forwarder"] == {"run_id": "run_abc", "state": "running"}
+    assert launch_calls == [
+        {
+            "base_url": "http://127.0.0.1:8642",
+            "api_key": "sk-secret",
+            "input_text": "ping gateway",
+            "model": None,
+            "session_id": None,
+            "instructions": None,
+            "timeout": web_server._gateway_event_forwarder_timeout(),
+        }
+    ]
+    assert follow_calls == [
+        (
+            "run_abc",
+            {
+                "base_url": "http://127.0.0.1:8642",
+                "api_key": "sk-secret",
+                "timeout": web_server._gateway_event_forwarder_timeout(),
+            },
+        )
     ]
 
 
