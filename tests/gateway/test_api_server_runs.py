@@ -24,6 +24,10 @@ from gateway.platforms.api_server import (
     cors_middleware,
     security_headers_middleware,
 )
+from hermes_cli.run_inspector_events import (
+    clear_run_inspector_events_for_tests,
+    get_recent_run_inspector_events,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -93,6 +97,13 @@ def adapter():
 @pytest.fixture
 def auth_adapter():
     return _make_adapter(api_key="sk-secret")
+
+
+@pytest.fixture(autouse=True)
+def _clear_run_inspector_events():
+    clear_run_inspector_events_for_tests()
+    yield
+    clear_run_inspector_events_for_tests()
 
 
 # ---------------------------------------------------------------------------
@@ -305,6 +316,54 @@ class TestRunEvents:
                 # Should contain run.completed
                 assert "run.completed" in body
                 assert "Hello!" in body
+                inspector_events = get_recent_run_inspector_events(limit=10)
+                assert any(
+                    event["source"] == "gateway_run"
+                    and event["type"] == "run.completed"
+                    and event["run_id"] == run_id
+                    for event in inspector_events
+                )
+
+    @pytest.mark.asyncio
+    async def test_gateway_tool_events_are_mirrored_to_run_inspector(self, adapter):
+        app = _create_runs_app(adapter)
+        async with TestClient(TestServer(app)) as cli:
+            with patch.object(adapter, "_create_agent") as mock_create:
+                mock_agent = MagicMock()
+
+                def _run_conversation(**kwargs):
+                    callback = mock_create.call_args.kwargs["tool_progress_callback"]
+                    callback("tool.started", tool_name="shell", preview="token=secret-value")
+                    callback("tool.completed", tool_name="shell", duration=1.2, is_error=False)
+                    return {"final_response": "done"}
+
+                mock_agent.run_conversation.side_effect = _run_conversation
+                mock_agent.session_prompt_tokens = 0
+                mock_agent.session_completion_tokens = 0
+                mock_agent.session_total_tokens = 0
+                mock_create.return_value = mock_agent
+
+                resp = await cli.post("/v1/runs", json={"input": "hello"})
+                assert resp.status == 202
+                data = await resp.json()
+                run_id = data["run_id"]
+                events_resp = await cli.get(f"/v1/runs/{run_id}/events")
+                assert events_resp.status == 200
+                await events_resp.text()
+
+        inspector_events = get_recent_run_inspector_events(limit=20)
+        assert any(
+            event["type"] == "tool.started"
+            and event["source"] == "gateway_run"
+            and event["tool"] == "shell"
+            and event["message"] is None
+            for event in inspector_events
+        )
+        assert any(
+            event["type"] == "tool.completed"
+            and event["status"] == "completed"
+            for event in inspector_events
+        )
 
 
 

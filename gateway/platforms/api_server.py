@@ -63,6 +63,32 @@ MAX_NORMALIZED_TEXT_LENGTH = 65_536  # 64 KB cap for normalized content parts
 MAX_CONTENT_LIST_SIZE = 1_000  # Max items when content is an array
 
 
+def _record_run_inspector_gateway_event(
+    event_type: str,
+    *,
+    run_id: Optional[str] = None,
+    session_id: Optional[str] = None,
+    tool: Optional[str] = None,
+    status: Optional[str] = None,
+    message: Optional[str] = None,
+) -> None:
+    """Best-effort mirror into the Run Inspector event ledger."""
+    try:
+        from hermes_cli.run_inspector_events import record_run_inspector_event
+
+        record_run_inspector_event(
+            event_type,
+            source="gateway_run",
+            run_id=run_id,
+            session_id=session_id,
+            tool=tool,
+            status=status,
+            message=message,
+        )
+    except Exception as exc:
+        logger.debug("Run Inspector gateway event mirror failed: %s", exc)
+
+
 def _coerce_port(value: Any, default: int = DEFAULT_PORT) -> int:
     """Parse a listen port without letting malformed env/config values crash startup."""
     try:
@@ -2780,15 +2806,28 @@ class APIServerAdapter(BasePlatformAdapter):
                     "tool": tool_name,
                     "preview": preview,
                 })
+                _record_run_inspector_gateway_event(
+                    "tool.started",
+                    run_id=run_id,
+                    tool=tool_name,
+                    status="running",
+                )
             elif event_type == "tool.completed":
+                is_error = bool(kwargs.get("is_error", False))
                 _push({
                     "event": "tool.completed",
                     "run_id": run_id,
                     "timestamp": ts,
                     "tool": tool_name,
                     "duration": round(kwargs.get("duration", 0), 3),
-                    "error": kwargs.get("is_error", False),
+                    "error": is_error,
                 })
+                _record_run_inspector_gateway_event(
+                    "tool.completed",
+                    run_id=run_id,
+                    tool=tool_name,
+                    status="failed" if is_error else "completed",
+                )
             elif event_type == "reasoning.available":
                 _push({
                     "event": "reasoning.available",
@@ -2912,10 +2951,22 @@ class APIServerAdapter(BasePlatformAdapter):
             session_id=session_id,
             model=body.get("model", self._model_name),
         )
+        _record_run_inspector_gateway_event(
+            "run.started",
+            run_id=run_id,
+            session_id=session_id,
+            status="queued",
+        )
 
         async def _run_and_close():
             try:
                 self._set_run_status(run_id, "running")
+                _record_run_inspector_gateway_event(
+                    "run.running",
+                    run_id=run_id,
+                    session_id=session_id,
+                    status="running",
+                )
                 agent = self._create_agent(
                     ephemeral_system_prompt=ephemeral_system_prompt,
                     session_id=session_id,
@@ -2937,6 +2988,13 @@ class APIServerAdapter(BasePlatformAdapter):
                         run_id,
                         "waiting_for_approval",
                         last_event="approval.request",
+                    )
+                    _record_run_inspector_gateway_event(
+                        "approval.request",
+                        run_id=run_id,
+                        session_id=session_id,
+                        status="waiting",
+                        message="approval requested",
                     )
                     try:
                         loop.call_soon_threadsafe(q.put_nowait, event)
@@ -3009,6 +3067,13 @@ class APIServerAdapter(BasePlatformAdapter):
                         error=error_msg,
                         last_event="run.failed",
                     )
+                    _record_run_inspector_gateway_event(
+                        "run.failed",
+                        run_id=run_id,
+                        session_id=session_id,
+                        status="failed",
+                        message=error_msg,
+                    )
                 else:
                     final_response = result.get("final_response", "") if isinstance(result, dict) else ""
                     q.put_nowait({
@@ -3025,11 +3090,23 @@ class APIServerAdapter(BasePlatformAdapter):
                         usage=usage,
                         last_event="run.completed",
                     )
+                    _record_run_inspector_gateway_event(
+                        "run.completed",
+                        run_id=run_id,
+                        session_id=session_id,
+                        status="completed",
+                    )
             except asyncio.CancelledError:
                 self._set_run_status(
                     run_id,
                     "cancelled",
                     last_event="run.cancelled",
+                )
+                _record_run_inspector_gateway_event(
+                    "run.cancelled",
+                    run_id=run_id,
+                    session_id=session_id,
+                    status="cancelled",
                 )
                 try:
                     q.put_nowait({
@@ -3047,6 +3124,13 @@ class APIServerAdapter(BasePlatformAdapter):
                     "failed",
                     error=str(exc),
                     last_event="run.failed",
+                )
+                _record_run_inspector_gateway_event(
+                    "run.failed",
+                    run_id=run_id,
+                    session_id=session_id,
+                    status="failed",
+                    message=str(exc),
                 )
                 try:
                     q.put_nowait({

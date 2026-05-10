@@ -21,6 +21,8 @@ const EVENT_LABELS: Record<string, string> = {
   "tool.started": "Tool started",
   "tool.progress": "Tool progress",
   "tool.completed": "Tool completed",
+  "run.started": "Run started",
+  "run.running": "Run running",
   "run.completed": "Run completed",
   "run.failed": "Run failed",
   "run.cancelled": "Run cancelled",
@@ -93,6 +95,8 @@ function eventTone(event: RunInspectorEvent): Tone {
   }
   if (
     event.status === "running" ||
+    event.type === "run.started" ||
+    event.type === "run.running" ||
     event.type === "tool.started" ||
     event.type === "tool.progress"
   ) {

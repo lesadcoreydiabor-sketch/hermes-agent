@@ -69,6 +69,25 @@ The first implementation slice is intentionally narrow:
 
 Gateway `/v1/runs/{run_id}/events` bridging can follow after this slice if it needs network/adapter configuration discovery.
 
+## P3 Gateway Source Mirroring
+
+The next safe slice is source-side mirroring inside `APIServerAdapter`.
+
+When the gateway API server creates run lifecycle events for `/v1/runs/{run_id}/events`, it should also emit the same lifecycle facts into the Run Inspector event contract:
+
+- `run.started`
+- `run.running`
+- `approval.request`
+- `tool.started`
+- `tool.completed`
+- `run.completed`
+- `run.failed`
+- `run.cancelled`
+
+This must be best-effort only. If Run Inspector event recording fails, the gateway API server must keep serving `/v1/runs`, `/v1/runs/{run_id}`, and `/v1/runs/{run_id}/events` exactly as before.
+
+Important boundary: the in-memory ledger is process-local. If the dashboard and gateway API server run as separate processes, source mirroring alone does not make gateway events appear in the dashboard process. Cross-process forwarding should be a separate slice with explicit gateway URL/key configuration, reconnect policy, and secret handling.
+
 ## Acceptance
 
 - Recent events API returns an envelope with `ok`, `events`, and `refreshed_at`.
@@ -91,6 +110,7 @@ Gateway `/v1/runs/{run_id}/events` bridging can follow after this slice if it ne
 
 - Unit tests for event normalization, redaction, ordering, and bounded ledger.
 - API tests for auth, recent-events response, and WebSocket replay/new event delivery.
+- Gateway run endpoint tests for source-side lifecycle mirroring.
 - Frontend tests for hook error classification, event formatting, and overflow/privacy guards.
 - `npm.cmd run build`.
 - Manual or Playwright smoke for `/run-inspector`.

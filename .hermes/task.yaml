@@ -329,6 +329,39 @@ tasks:
     status: completed
     risk: high
 
+  - id: HRIG-01
+    title: Mirror gateway run lifecycle events into Run Inspector
+    description: Add best-effort source-side mirroring from APIServerAdapter run lifecycle events into the Run Inspector event ledger.
+    depends_on:
+      - HRIE-06
+    acceptance:
+      - Gateway /v1/runs/{run_id}/events SSE behavior is unchanged.
+      - run.started, run.running, run.completed, run.failed, run.cancelled, approval.request, tool.started, and tool.completed events can be mirrored as gateway_run events.
+      - Tool previews and raw final output are not mirrored into the Run Inspector event ledger.
+      - Run Inspector mirroring failures never break gateway run handling.
+      - PRD documents that in-memory mirroring is process-local and cross-process forwarding needs a later explicit bridge.
+    verify:
+      - venv/Scripts/python.exe -m pytest tests/gateway/test_api_server_runs.py::TestRunEvents -q -o addopts=
+    status: completed
+    risk: medium
+
+  - id: HRIG-02
+    title: Verify gateway event source mirroring slice
+    description: Re-run gateway, frontend event timeline, build, and diff checks for the gateway source mirroring slice.
+    depends_on:
+      - HRIG-01
+    acceptance:
+      - Gateway run event tests pass.
+      - Frontend event timeline tests pass.
+      - Build passes.
+      - Diff check passes.
+    verify:
+      - venv/Scripts/python.exe -m pytest tests/gateway/test_api_server_runs.py::TestRunEvents tests/web/test_run_inspector_status_policy.py -q -o addopts=
+      - npm.cmd run build
+      - git diff --check for HRIG files
+    status: completed
+    risk: medium
+
 risk_flags:
   destructive_file_change:
     pause: true
@@ -593,6 +626,25 @@ progress_report:
       verification_result: "passed: venv/Scripts/python.exe -m pytest tests/runtime/test_run_inspector_events.py tests/hermes_cli/test_run_inspector_events_api.py tests/hermes_cli/test_run_inspector_api.py tests/web/test_run_inspector_status_policy.py -q -o addopts= (27 passed); passed: npm.cmd run build; passed: git diff --check for HRIE files; smoke passed: /run-inspector page=200, /api/run-inspector/events ok=True, Playwright desktop/narrow Event Timeline visible with no horizontal overflow"
       blockers: []
       next_step: "Run Inspector P2 event timeline slice complete; review, stage/commit/push, or continue with gateway /v1/runs/{run_id}/events bridge."
+    - task_id: HRIG-01
+      status: completed
+      changed_files:
+        - gateway/platforms/api_server.py
+        - tests/gateway/test_api_server_runs.py
+        - web/src/pages/runInspectorEventTimeline.ts
+        - docs/plans/hermes-run-inspector-event-integration-prd.md
+        - .hermes/task.yaml
+      verification_result: "passed: venv/Scripts/python.exe -m pytest tests/gateway/test_api_server_runs.py::TestRunEvents -q -o addopts= (5 passed, 5 warnings)"
+      blockers: []
+      next_step: HRIG-02
+    - task_id: HRIG-02
+      status: completed
+      changed_files:
+        - .hermes/task.yaml
+      verification_result: "passed: venv/Scripts/python.exe -m pytest tests/gateway/test_api_server_runs.py::TestRunEvents tests/web/test_run_inspector_status_policy.py tests/runtime/test_run_inspector_events.py tests/hermes_cli/test_run_inspector_events_api.py -q -o addopts= (28 passed, 5 warnings); passed: npm.cmd run build; passed: git diff --check for HRIG files"
+      blockers:
+        - "Gateway source mirroring is process-local. If dashboard and gateway run in different processes, a later explicit cross-process forwarder is required."
+      next_step: "Review, stage/commit/push gateway event source mirroring, or design cross-process gateway event forwarder."
 
 failure_review:
   enabled: true
