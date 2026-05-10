@@ -129,7 +129,10 @@ def normalize_run_inspector_event_frame(
         "tool_id",
     )
     error_message = _first_text(payload, "error", "last_error", "exception")
-    message = _first_text(payload, "message", "preview", "summary", "status", "state")
+    message_keys = ("message", "summary", "status", "state")
+    if source != "gateway_run":
+        message_keys = ("message", "preview", "summary", "status", "state")
+    message = _first_text(payload, *message_keys)
     status = _status_for_event(normalized_type, payload, error_message)
 
     if error_message:
@@ -190,7 +193,12 @@ def _normalize_event_type(raw_type: str) -> str:
         "run.completed": "run.completed",
         "run.failed": "run.failed",
         "run.cancelled": "run.cancelled",
+        "run.started": "run.started",
+        "run.running": "run.running",
         "approval.request": "approval.request",
+        "gateway.forwarder.started": "gateway.forwarder.started",
+        "gateway.forwarder.completed": "gateway.forwarder.completed",
+        "gateway.forwarder.failed": "gateway.forwarder.failed",
         "message.delta": "message.delta",
     }
     return mapping.get(raw_type, raw_type)
@@ -213,6 +221,16 @@ def _status_for_event(
         return "failed"
     if event_type == "run.cancelled":
         return "cancelled"
+    if event_type == "run.started":
+        return "queued"
+    if event_type == "run.running":
+        return "running"
+    if event_type == "gateway.forwarder.started":
+        return "running"
+    if event_type == "gateway.forwarder.completed":
+        return "completed"
+    if event_type == "gateway.forwarder.failed":
+        return "failed"
     return _first_text(payload, "status", "state")
 
 

@@ -54,6 +54,13 @@ from hermes_cli.run_inspector_events import (
     subscribe_run_inspector_events,
     unregister_run_inspector_event_subscriber,
 )
+from hermes_cli.run_inspector_gateway_forwarder import (
+    DEFAULT_GATEWAY_EVENT_TIMEOUT_SECONDS,
+    get_gateway_run_event_forwarder_status,
+    resolve_gateway_event_api_key,
+    resolve_gateway_event_base_url,
+    start_gateway_run_event_forwarder,
+)
 from hermes_cli.status import get_run_inspector_status_payload
 from gateway.status import get_running_pid, read_runtime_status
 
@@ -573,6 +580,61 @@ async def get_run_inspector_events(limit: int = 50):
     return {
         "ok": True,
         "events": get_recent_run_inspector_events(limit=limit),
+        "refreshed_at": _utc_now_iso(),
+    }
+
+
+def _gateway_event_forwarder_timeout() -> float:
+    raw = os.getenv(
+        "HERMES_RUN_INSPECTOR_GATEWAY_TIMEOUT",
+        str(DEFAULT_GATEWAY_EVENT_TIMEOUT_SECONDS),
+    )
+    try:
+        timeout = float(raw)
+    except (TypeError, ValueError):
+        return DEFAULT_GATEWAY_EVENT_TIMEOUT_SECONDS
+    return max(1.0, min(timeout, 3600.0))
+
+
+@app.post("/api/run-inspector/gateway-runs/{run_id}/follow")
+async def follow_run_inspector_gateway_run(run_id: str):
+    """Follow a configured gateway run SSE stream into the local event ledger."""
+    try:
+        base_url = resolve_gateway_event_base_url()
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    if not base_url:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "Gateway event forwarding is not configured. Set "
+                "HERMES_RUN_INSPECTOR_GATEWAY_URL or API_SERVER_* env vars."
+            ),
+        )
+
+    try:
+        forwarder = start_gateway_run_event_forwarder(
+            run_id,
+            base_url=base_url,
+            api_key=resolve_gateway_event_api_key(),
+            timeout=_gateway_event_forwarder_timeout(),
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+    return {
+        "ok": True,
+        "forwarder": forwarder,
+        "refreshed_at": _utc_now_iso(),
+    }
+
+
+@app.get("/api/run-inspector/gateway-runs/{run_id}/follow")
+async def get_run_inspector_gateway_follow_status(run_id: str):
+    """Return local status for a gateway run event forwarder."""
+    return {
+        "ok": True,
+        "forwarder": get_gateway_run_event_forwarder_status(run_id) or None,
         "refreshed_at": _utc_now_iso(),
     }
 

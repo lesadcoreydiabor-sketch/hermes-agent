@@ -88,6 +88,27 @@ This must be best-effort only. If Run Inspector event recording fails, the gatew
 
 Important boundary: the in-memory ledger is process-local. If the dashboard and gateway API server run as separate processes, source mirroring alone does not make gateway events appear in the dashboard process. Cross-process forwarding should be a separate slice with explicit gateway URL/key configuration, reconnect policy, and secret handling.
 
+## P4 Cross-Process Gateway Event Forwarder
+
+The next implementation slice lets the dashboard process follow a specific gateway API run without exposing gateway credentials to the browser.
+
+Add a protected dashboard endpoint:
+
+- `POST /api/run-inspector/gateway-runs/{run_id}/follow`
+
+When called, the dashboard backend resolves the gateway base URL from `HERMES_RUN_INSPECTOR_GATEWAY_URL`, `GATEWAY_HEALTH_URL`, or configured `API_SERVER_*` environment values. It resolves the gateway bearer token from `HERMES_RUN_INSPECTOR_GATEWAY_KEY` or `API_SERVER_KEY`, opens `GET /v1/runs/{run_id}/events`, normalizes the SSE frames, and records them into the existing Run Inspector event ledger.
+
+This must remain additive and best-effort:
+
+- Browser code never receives the gateway key.
+- Missing gateway configuration returns a clear `409`, not a background failure loop.
+- Invalid gateway URLs return `400`.
+- Gateway SSE payloads are normalized through the existing privacy contract.
+- `tool.started` preview text and `run.completed` output are not recorded into the event ledger.
+- A failed follower records a short `gateway.forwarder.failed` event but does not break the dashboard event API.
+
+This slice does not yet auto-discover run ids. The caller must provide a `run_id` created by `/v1/runs`; automatic discovery or UI input can follow after this bridge is stable.
+
 ## Acceptance
 
 - Recent events API returns an envelope with `ok`, `events`, and `refreshed_at`.
@@ -111,6 +132,8 @@ Important boundary: the in-memory ledger is process-local. If the dashboard and 
 - Unit tests for event normalization, redaction, ordering, and bounded ledger.
 - API tests for auth, recent-events response, and WebSocket replay/new event delivery.
 - Gateway run endpoint tests for source-side lifecycle mirroring.
+- Runtime tests for gateway SSE parsing, configured URL/key resolution, and cross-process forwarding redaction.
+- API tests for the protected gateway follow endpoint, missing config, and status lookup.
 - Frontend tests for hook error classification, event formatting, and overflow/privacy guards.
 - `npm.cmd run build`.
 - Manual or Playwright smoke for `/run-inspector`.

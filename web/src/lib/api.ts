@@ -70,6 +70,15 @@ export const api = {
       `/api/run-inspector/events?limit=${limit}`,
       init,
     ),
+  followGatewayRunEvents: (runId: string) =>
+    fetchJSON<RunInspectorGatewayForwarderResponse>(
+      `/api/run-inspector/gateway-runs/${encodeURIComponent(runId)}/follow`,
+      { method: "POST" },
+    ),
+  getGatewayRunEventForwarder: (runId: string) =>
+    fetchJSON<RunInspectorGatewayForwarderResponse>(
+      `/api/run-inspector/gateway-runs/${encodeURIComponent(runId)}/follow`,
+    ),
   getSessions: (limit = 20, offset = 0) =>
     fetchJSON<PaginatedSessions>(`/api/sessions?limit=${limit}&offset=${offset}`),
   getSessionMessages: (id: string) =>
@@ -488,6 +497,23 @@ export interface RunInspectorEvent {
 export interface RunInspectorEventsResponse {
   ok: boolean;
   events: RunInspectorEvent[];
+  refreshed_at: string;
+}
+
+export interface RunInspectorGatewayForwarder {
+  run_id: string;
+  state: "running" | "completed" | "failed" | string;
+  started_at?: string;
+  updated_at?: string;
+  events_forwarded?: number;
+  last_error?: string | null;
+  gateway_url?: string;
+  already_running?: boolean;
+}
+
+export interface RunInspectorGatewayForwarderResponse {
+  ok: boolean;
+  forwarder: RunInspectorGatewayForwarder | null;
   refreshed_at: string;
 }
 

@@ -362,6 +362,40 @@ tasks:
     status: completed
     risk: medium
 
+  - id: HRIGF-01
+    title: Add cross-process gateway run event forwarder
+    description: Add a protected dashboard backend bridge that follows configured gateway /v1/runs/{run_id}/events SSE streams into the Run Inspector event ledger.
+    depends_on:
+      - HRIG-02
+    acceptance:
+      - Browser code does not receive or submit gateway bearer tokens.
+      - Missing gateway event configuration returns a clear 409.
+      - Invalid gateway event URL or run id returns a bounded validation error.
+      - Gateway SSE frames are normalized through the Run Inspector event contract.
+      - Tool preview text and final run output are not recorded into the event ledger.
+      - Forwarder failures record a short gateway.forwarder.failed event without breaking /api/run-inspector/events.
+    verify:
+      - venv/Scripts/python.exe -m pytest tests/runtime/test_run_inspector_gateway_forwarder.py tests/hermes_cli/test_run_inspector_gateway_forwarder_api.py -q -o addopts=
+    status: completed
+    risk: high
+
+  - id: HRIGF-02
+    title: Verify cross-process gateway event forwarder slice
+    description: Re-run runtime, API, frontend event timeline, build, and diff checks for the gateway event forwarder.
+    depends_on:
+      - HRIGF-01
+    acceptance:
+      - Gateway forwarder runtime and API tests pass.
+      - Existing Run Inspector event API tests pass.
+      - Frontend event timeline tests and build pass.
+      - Diff check passes.
+    verify:
+      - venv/Scripts/python.exe -m pytest tests/runtime/test_run_inspector_gateway_forwarder.py tests/hermes_cli/test_run_inspector_gateway_forwarder_api.py tests/hermes_cli/test_run_inspector_events_api.py tests/web/test_run_inspector_status_policy.py -q -o addopts=
+      - npm.cmd run build
+      - git diff --check for HRIGF files
+    status: completed
+    risk: medium
+
 risk_flags:
   destructive_file_change:
     pause: true
@@ -645,6 +679,36 @@ progress_report:
       blockers:
         - "Gateway source mirroring is process-local. If dashboard and gateway run in different processes, a later explicit cross-process forwarder is required."
       next_step: "Review, stage/commit/push gateway event source mirroring, or design cross-process gateway event forwarder."
+    - task_id: HRIGF-01
+      status: completed
+      changed_files:
+        - hermes_cli/run_inspector_gateway_forwarder.py
+        - hermes_cli/run_inspector_events.py
+        - hermes_cli/web_server.py
+        - web/src/lib/api.ts
+        - web/src/pages/runInspectorEventTimeline.ts
+        - tests/runtime/test_run_inspector_gateway_forwarder.py
+        - tests/hermes_cli/test_run_inspector_gateway_forwarder_api.py
+        - docs/plans/hermes-run-inspector-event-integration-prd.md
+        - .hermes/task.yaml
+      verification_result: "passed: venv/Scripts/python.exe -m pytest tests/runtime/test_run_inspector_gateway_forwarder.py -q -o addopts= (4 passed); passed: venv/Scripts/python.exe -m pytest tests/hermes_cli/test_run_inspector_gateway_forwarder_api.py -q -o addopts= (4 passed)"
+      blockers: []
+      next_step: HRIGF-02
+    - task_id: HRIGF-02
+      status: completed
+      changed_files:
+        - hermes_cli/run_inspector_gateway_forwarder.py
+        - hermes_cli/run_inspector_events.py
+        - hermes_cli/web_server.py
+        - web/src/lib/api.ts
+        - web/src/pages/runInspectorEventTimeline.ts
+        - tests/runtime/test_run_inspector_gateway_forwarder.py
+        - tests/hermes_cli/test_run_inspector_gateway_forwarder_api.py
+        - docs/plans/hermes-run-inspector-event-integration-prd.md
+        - .hermes/task.yaml
+      verification_result: "passed: venv/Scripts/python.exe -m pytest tests/runtime/test_run_inspector_gateway_forwarder.py tests/hermes_cli/test_run_inspector_gateway_forwarder_api.py tests/hermes_cli/test_run_inspector_events_api.py tests/runtime/test_run_inspector_events.py tests/web/test_run_inspector_status_policy.py -q -o addopts= (31 passed); passed: venv/Scripts/python.exe -m pytest tests/gateway/test_api_server_runs.py::TestRunEvents tests/hermes_cli/test_run_inspector_gateway_forwarder_api.py tests/runtime/test_run_inspector_gateway_forwarder.py -q -o addopts= (13 passed, 5 warnings); passed: venv/Scripts/python.exe -m pytest tests/hermes_cli/test_run_inspector_api.py tests/hermes_cli/test_status.py -q -o addopts= (8 passed); passed: npm.cmd run build; passed: git diff --check for HRIGF files"
+      blockers: []
+      next_step: "Run Inspector P4 cross-process gateway event forwarder complete; review, stage/commit/push, or add UI control for entering a gateway run_id."
 
 failure_review:
   enabled: true

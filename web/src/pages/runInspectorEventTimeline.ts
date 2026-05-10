@@ -27,6 +27,9 @@ const EVENT_LABELS: Record<string, string> = {
   "run.failed": "Run failed",
   "run.cancelled": "Run cancelled",
   "approval.request": "Approval requested",
+  "gateway.forwarder.started": "Gateway forwarder started",
+  "gateway.forwarder.completed": "Gateway forwarder completed",
+  "gateway.forwarder.failed": "Gateway forwarder failed",
   "message.delta": "Message delta",
 };
 
@@ -95,6 +98,7 @@ function eventTone(event: RunInspectorEvent): Tone {
   }
   if (
     event.status === "running" ||
+    event.type === "gateway.forwarder.started" ||
     event.type === "run.started" ||
     event.type === "run.running" ||
     event.type === "tool.started" ||
