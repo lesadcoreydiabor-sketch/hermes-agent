@@ -21,6 +21,11 @@ export interface GatewayApprovalDetail {
   tool: string | null;
 }
 
+interface GatewayRunSelectionCandidate {
+  runId: string;
+  score: number;
+}
+
 const ACTIVE_STATUSES = new Set([
   "queued",
   "running",
@@ -43,6 +48,72 @@ const APPROVAL_CLEARING_EVENTS = new Set([
   "run.running",
   "run.stopping",
 ]);
+
+export function findLatestPendingApprovalRunId({
+  events,
+  recentRuns,
+  selectedRunId,
+}: {
+  events: RunInspectorEvent[];
+  recentRuns: RunInspectorGatewayRun[];
+  selectedRunId: string;
+}): string | null {
+  const currentRunId = selectedRunId.trim();
+  if (
+    currentRunId &&
+    describeGatewayRunControlState({
+      events,
+      recentRuns,
+      runId: currentRunId,
+    }).approvalPending
+  ) {
+    return null;
+  }
+
+  const candidates = new Map<string, GatewayRunSelectionCandidate>();
+  const addCandidate = (runId: string, score: number) => {
+    const current = candidates.get(runId);
+    if (!current || score > current.score) {
+      candidates.set(runId, { runId, score });
+    }
+  };
+
+  recentRuns.forEach((run, index) => {
+    const runId = normalizeRunId(run.run_id);
+    if (!runId) {
+      return;
+    }
+    const controlState = describeGatewayRunControlState({
+      events,
+      recentRuns,
+      runId,
+    });
+    if (controlState.approvalPending) {
+      addCandidate(runId, scoreRunSummary(run, index));
+    }
+  });
+
+  events.forEach((event) => {
+    if (!APPROVAL_PENDING_EVENTS.has(normalize(event.type) ?? "")) {
+      return;
+    }
+    const runId = normalizeRunId(event.run_id) ?? normalizeRunId(event.session_id);
+    if (!runId) {
+      return;
+    }
+    const controlState = describeGatewayRunControlState({
+      events,
+      recentRuns,
+      runId,
+    });
+    if (controlState.approvalPending) {
+      addCandidate(runId, scoreEvent(event));
+    }
+  });
+
+  return [...candidates.values()].sort((left, right) => right.score - left.score)[0]
+    ?.runId ?? null;
+}
 
 export function describeGatewayRunControlState({
   events,
@@ -168,6 +239,24 @@ function approvalDetailFromEvent(
 function normalize(value: string | null | undefined): string | null {
   const text = String(value ?? "").trim().toLowerCase();
   return text || null;
+}
+
+function normalizeRunId(value: string | null | undefined): string | null {
+  const text = String(value ?? "").trim();
+  return text || null;
+}
+
+function scoreRunSummary(run: RunInspectorGatewayRun, index: number): number {
+  const seconds = run.updated_at ?? run.created_at ?? 0;
+  return seconds * 1000 - index / 1000;
+}
+
+function scoreEvent(event: RunInspectorEvent): number {
+  const parsed = Date.parse(event.timestamp);
+  if (Number.isFinite(parsed)) {
+    return parsed + event.id / 1000000;
+  }
+  return event.id;
 }
 
 function formatStatus(value: string): string {

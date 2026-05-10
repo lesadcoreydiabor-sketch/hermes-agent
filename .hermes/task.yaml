@@ -545,6 +545,25 @@ tasks:
     status: completed
     risk: medium
 
+  - id: HRIGF-11
+    title: Auto-select newest pending approval run
+    description: Let Run Inspector focus the newest pending approval run while preserving manual operator selection.
+    depends_on:
+      - HRIGF-10
+    acceptance:
+      - The selected run is not changed when it already has a pending approval.
+      - Manual run id typing or recent-run selection prevents automatic selection from stealing focus.
+      - Stale approvals cleared by approval.responded or terminal run events are not auto-selected.
+      - No approval, denial, or stop action is triggered automatically.
+      - Auto-selection logic is covered by frontend tests.
+    verify:
+      - venv/Scripts/python.exe -m pytest tests/web/test_run_inspector_status_policy.py -q -o addopts=
+      - cd web; npm.cmd run build
+      - Playwright smoke for /run-inspector
+      - git diff --check for HRIGF auto-selection files
+    status: completed
+    risk: medium
+
 risk_flags:
   destructive_file_change:
     pause: true
@@ -964,6 +983,17 @@ progress_report:
       verification_result: "passed: venv/Scripts/python.exe -m pytest tests/web/test_run_inspector_status_policy.py -q -o addopts= (16 passed); passed: npm.cmd run build; browser smoke passed for gateway controls on desktop and narrow viewports without horizontal overflow"
       blockers: []
       next_step: "Run Inspector P10 pending approval detail complete; stage/commit/push, or add event-driven auto-selection of the most recent waiting run."
+    - task_id: HRIGF-11
+      status: completed
+      changed_files:
+        - web/src/pages/RunInspectorPage.tsx
+        - web/src/pages/runInspectorGatewayControls.ts
+        - tests/web/test_run_inspector_status_policy.py
+        - docs/plans/hermes-run-inspector-event-integration-prd.md
+        - .hermes/task.yaml
+      verification_result: "passed: venv/Scripts/python.exe -m pytest tests/web/test_run_inspector_status_policy.py -q -o addopts= (17 passed); passed: cd web; npm.cmd run build; Playwright smoke passed for /run-inspector desktop and narrow viewports without horizontal overflow"
+      blockers: []
+      next_step: "Run Inspector P11 pending approval auto-selection complete; stage/commit/push, or move to richer gateway run detail and desktop shell packaging decisions."
 
 failure_review:
   enabled: true
@@ -1044,4 +1074,12 @@ failure_review:
       what_changed: "Changed the smoke check to exact button and label matching for Gateway launch input, Gateway run id, Start, and Runs."
       how_it_was_verified: "Re-ran the Playwright desktop/narrow smoke and both viewports passed with no horizontal overflow."
       added_eval_or_badcase: "manual Playwright smoke for /run-inspector gateway launch controls"
+      blocker: false
+    - trigger: failed_verification
+      task_id: HRIGF-11
+      what_happened: "Initial verification ran npm.cmd run build from the repository root, which has no build script, and the first Playwright smoke targeted a stale dashboard process with no active listener."
+      why_it_failed: "The frontend build contract belongs to the web workspace, and the local smoke needs a fresh listening dashboard plus a wait for the Run Inspector data load."
+      what_changed: "Re-ran the build from web and restarted the local dashboard before using a text locator wait for Gateway Run Follow."
+      how_it_was_verified: "Re-ran venv/Scripts/python.exe -m pytest tests/web/test_run_inspector_status_policy.py -q -o addopts=, cd web; npm.cmd run build, and Playwright desktop/narrow smoke; all passed."
+      added_eval_or_badcase: "P11 smoke now waits for Gateway Run Follow before asserting controls and overflow."
       blocker: false

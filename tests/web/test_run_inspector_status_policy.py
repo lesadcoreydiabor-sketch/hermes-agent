@@ -418,6 +418,10 @@ def test_run_inspector_page_exposes_gateway_follow_without_gateway_secret() -> N
     assert "api.followGatewayRunEvents" in page_source
     assert "api.getGatewayRunEventForwarder" in page_source
     assert "describeGatewayRunControlState" in page_source
+    assert "findLatestPendingApprovalRunId" in page_source
+    assert "gatewayRunSelectionMode" in page_source
+    assert "pendingApprovalRunId" in page_source
+    assert "handleGatewayRunIdChange" in page_source
     assert "controlState.approvalPending" in page_source
     assert "controlState.approvalDetail" in page_source
     assert "controlState.stopHighlighted" in page_source
@@ -571,6 +575,80 @@ def test_run_inspector_gateway_controls_follow_run_state_and_events():
     assert payload["approvalCleared"]["approvalPending"] is False
     assert payload["approvalCleared"]["approvalDetail"] is None
     assert payload["completed"]["stopAvailable"] is False
+
+
+def test_run_inspector_gateway_controls_auto_selects_pending_approval():
+    payload = run_gateway_controls_script(
+        textwrap.dedent(
+            """
+            const event = (id, type, runId, timestamp = `2026-05-11T00:00:0${id}Z`) => ({
+              id,
+              type,
+              source: "gateway_run",
+              timestamp,
+              run_id: runId,
+              session_id: null,
+              tool: "shell",
+              status: type === "approval.responded" ? "running" : "waiting",
+              message: null,
+            });
+            const recentRun = (run_id, status, updated_at) => ({
+              run_id,
+              status,
+              created_at: updated_at - 10,
+              updated_at,
+              session_id: null,
+              model: null,
+              last_event: status === "waiting_for_approval" ? "approval.request" : "run.running",
+              has_error: false,
+            });
+            const latestFromEvents = controls.findLatestPendingApprovalRunId({
+              selectedRunId: "",
+              recentRuns: [],
+              events: [
+                event(1, "approval.request", "run_1"),
+                event(2, "approval.request", "run_2"),
+              ],
+            });
+            const clearedLatest = controls.findLatestPendingApprovalRunId({
+              selectedRunId: "",
+              recentRuns: [],
+              events: [
+                event(1, "approval.request", "run_1"),
+                event(2, "approval.request", "run_2"),
+                event(3, "approval.responded", "run_2"),
+              ],
+            });
+            const keepSelectedPending = controls.findLatestPendingApprovalRunId({
+              selectedRunId: "run_1",
+              recentRuns: [],
+              events: [
+                event(1, "approval.request", "run_1"),
+                event(2, "approval.request", "run_2"),
+              ],
+            });
+            const latestFromRecentRuns = controls.findLatestPendingApprovalRunId({
+              selectedRunId: "",
+              recentRuns: [
+                recentRun("run_old", "waiting_for_approval", 100),
+                recentRun("run_recent", "waiting_for_approval", 200),
+              ],
+              events: [],
+            });
+            console.log(JSON.stringify({
+              latestFromEvents,
+              clearedLatest,
+              keepSelectedPending,
+              latestFromRecentRuns,
+            }));
+            """
+        )
+    )
+
+    assert payload["latestFromEvents"] == "run_2"
+    assert payload["clearedLatest"] == "run_1"
+    assert payload["keepSelectedPending"] is None
+    assert payload["latestFromRecentRuns"] == "run_recent"
 
 
 def test_run_inspector_events_hook_uses_tokened_websocket_and_auth_stop() -> None:

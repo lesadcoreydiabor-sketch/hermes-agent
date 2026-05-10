@@ -1,4 +1,11 @@
-import { useCallback, useLayoutEffect, useState, type FormEvent, type ReactNode } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useState,
+  type FormEvent,
+  type ReactNode,
+} from "react";
 import {
   Activity,
   AlertTriangle,
@@ -55,6 +62,7 @@ import {
 } from "@/pages/runInspectorEventTimeline";
 import {
   describeGatewayRunControlState,
+  findLatestPendingApprovalRunId,
   type GatewayRunControlState,
 } from "@/pages/runInspectorGatewayControls";
 
@@ -74,11 +82,14 @@ const BADGE_TONE: Record<Tone, BadgeTone> = {
 
 const DEFAULT_GATEWAY_LAUNCH_INPUT =
   "Report current Hermes gateway health in one concise sentence.";
+type GatewayRunSelectionMode = "auto" | "manual";
 
 export default function RunInspectorPage() {
   const inspector = useRunInspectorStatus();
   const eventStream = useRunInspectorEvents();
   const [gatewayRunId, setGatewayRunId] = useState("");
+  const [gatewayRunSelectionMode, setGatewayRunSelectionMode] =
+    useState<GatewayRunSelectionMode>("auto");
   const [gatewayForwarder, setGatewayForwarder] =
     useState<RunInspectorGatewayForwarder | null>(null);
   const [gatewayForwarderError, setGatewayForwarderError] = useState<string | null>(null);
@@ -102,6 +113,16 @@ export default function RunInspectorPage() {
     recentRuns: gatewayRuns,
     runId: gatewayRunId,
   });
+  const pendingApprovalRunId = findLatestPendingApprovalRunId({
+    events: eventStream.events,
+    recentRuns: gatewayRuns,
+    selectedRunId: gatewayRunId,
+  });
+
+  const handleGatewayRunIdChange = useCallback((value: string) => {
+    setGatewayRunSelectionMode(value.trim() ? "manual" : "auto");
+    setGatewayRunId(value);
+  }, []);
 
   const followGatewayRun = useCallback(async () => {
     const runId = gatewayRunId.trim();
@@ -183,6 +204,7 @@ export default function RunInspectorPage() {
         last_event: "run.started",
         has_error: false,
       };
+      setGatewayRunSelectionMode("manual");
       setGatewayRunId(response.run.run_id);
       setGatewayForwarder(response.forwarder);
       setGatewayRuns((runs) => [
@@ -268,6 +290,17 @@ export default function RunInspectorPage() {
     },
     [followGatewayRun],
   );
+
+  useEffect(() => {
+    if (
+      gatewayRunSelectionMode === "manual" ||
+      !pendingApprovalRunId ||
+      pendingApprovalRunId === gatewayRunId.trim()
+    ) {
+      return;
+    }
+    setGatewayRunId(pendingApprovalRunId);
+  }, [gatewayRunId, gatewayRunSelectionMode, pendingApprovalRunId]);
 
   useLayoutEffect(() => {
     setTitle("Run Inspector");
@@ -364,7 +397,7 @@ export default function RunInspectorPage() {
               onLaunchSubmit={handleGatewayLaunchSubmit}
               onApprovalDeny={() => void respondGatewayApproval("deny")}
               onApprovalOnce={() => void respondGatewayApproval("once")}
-              onRunIdChange={setGatewayRunId}
+              onRunIdChange={handleGatewayRunIdChange}
               onStop={stopGatewayRun}
               recentRuns={gatewayRuns}
               recentRunsBusy={gatewayRunsBusy}

@@ -225,6 +225,19 @@ When the selected run has a pending approval signal, the Gateway Run Follow card
 
 The summary must not expose raw prompts, raw tool arguments, raw command output, file bodies, diffs, stack traces, gateway credentials, or environment values. A later clearing event should remove the summary along with the approval-highlighted button state.
 
+## P11 Pending Approval Auto-Selection
+
+The next dashboard slice should reduce missed approvals when the selected run is empty or still controlled by automatic selection.
+
+The Run Inspector page should derive the newest pending approval run from recent gateway run summaries and Run Inspector events. If a newer `approval.request`, `waiting`, or `waiting_for_approval` signal appears, the page may fill the Gateway Run ID field automatically so the existing approval summary and `Allow` / `Deny` buttons target the waiting run.
+
+Selection must respect operator intent:
+
+- If the currently selected run already has a pending approval, do not change it.
+- If the operator has manually typed or clicked a run id, do not steal focus to another run.
+- If a later `approval.responded`, `run.running`, `run.completed`, `run.failed`, `run.cancelled`, or `run.stopping` event clears a run, do not auto-select that stale approval.
+- This slice remains frontend-only and must not add new gateway operations or trigger approval/stop actions automatically.
+
 ## Acceptance
 
 - Recent events API returns an envelope with `ok`, `events`, and `refreshed_at`.
@@ -241,6 +254,7 @@ The summary must not expose raw prompts, raw tool arguments, raw command output,
 - Gateway stop and approval responses expose only safe action summaries.
 - Gateway control buttons reflect selected-run lifecycle state and clear stale approval prompts.
 - Pending approval detail shows only safe, normalized summary fields.
+- The page auto-selects the newest pending approval only while selection is automatic, and never responds to the approval without an explicit click.
 
 ## Risks
 
@@ -262,6 +276,7 @@ The summary must not expose raw prompts, raw tool arguments, raw command output,
 - API tests for the protected gateway stop and approval endpoints.
 - Frontend tests for selected-run control-state derivation from recent runs and events.
 - Frontend tests for pending approval detail extraction and clearing.
+- Frontend tests for pending approval auto-selection, stale approval clearing, and manual selection preservation.
 - Frontend tests for hook error classification, event formatting, and overflow/privacy guards.
 - Frontend tests that the Run Inspector page exposes gateway follow controls without gateway secret names or values.
 - Gateway route tests that recent run summaries omit output/error payloads.
