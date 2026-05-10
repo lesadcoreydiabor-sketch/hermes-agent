@@ -802,6 +802,35 @@ function GatewayRunFollowCard({
           </p>
         ) : null}
 
+        {controlState.approvalDetail ? (
+          <div className="flex min-w-0 flex-col divide-y divide-warning/30 border border-warning/30 bg-warning/10">
+            <DetailRow
+              label="Approval"
+              value={formatDisplayValue(
+                controlState.approvalDetail.message,
+                "Pending request",
+              )}
+            />
+            <DetailRow
+              label="Tool"
+              value={formatDisplayValue(controlState.approvalDetail.tool, "Unknown")}
+            />
+            <DetailRow
+              label="Status"
+              value={formatDisplayValue(
+                controlState.approvalDetail.status,
+                "waiting",
+              )}
+            />
+            <DetailRow
+              label="Time"
+              value={formatRunInspectorEventTime(
+                controlState.approvalDetail.timestamp,
+              )}
+            />
+          </div>
+        ) : null}
+
         {recentRuns.length > 0 ? (
           <div className="flex min-w-0 flex-col divide-y divide-border/70 border border-border">
             {recentRuns.map((run) => (

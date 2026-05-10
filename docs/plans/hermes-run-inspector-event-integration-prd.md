@@ -212,6 +212,19 @@ The control rules should be:
 
 This slice should remain frontend-only and must not add new gateway operations.
 
+## P10 Inline Approval Request Summary
+
+The next dashboard slice makes pending approvals easier to understand without opening raw logs.
+
+When the selected run has a pending approval signal, the Gateway Run Follow card should show a compact approval summary using only already-normalized Run Inspector event fields:
+
+- short redacted message
+- safe tool name
+- safe status
+- event timestamp
+
+The summary must not expose raw prompts, raw tool arguments, raw command output, file bodies, diffs, stack traces, gateway credentials, or environment values. A later clearing event should remove the summary along with the approval-highlighted button state.
+
 ## Acceptance
 
 - Recent events API returns an envelope with `ok`, `events`, and `refreshed_at`.
@@ -227,6 +240,7 @@ This slice should remain frontend-only and must not add new gateway operations.
 - Gateway stop and approval controls start only after explicit UI actions.
 - Gateway stop and approval responses expose only safe action summaries.
 - Gateway control buttons reflect selected-run lifecycle state and clear stale approval prompts.
+- Pending approval detail shows only safe, normalized summary fields.
 
 ## Risks
 
@@ -247,6 +261,7 @@ This slice should remain frontend-only and must not add new gateway operations.
 - Runtime tests for gateway stop and approval request construction and safe response normalization.
 - API tests for the protected gateway stop and approval endpoints.
 - Frontend tests for selected-run control-state derivation from recent runs and events.
+- Frontend tests for pending approval detail extraction and clearing.
 - Frontend tests for hook error classification, event formatting, and overflow/privacy guards.
 - Frontend tests that the Run Inspector page exposes gateway follow controls without gateway secret names or values.
 - Gateway route tests that recent run summaries omit output/error payloads.

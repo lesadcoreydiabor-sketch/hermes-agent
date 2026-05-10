@@ -527,6 +527,24 @@ tasks:
     status: completed
     risk: medium
 
+  - id: HRIGF-10
+    title: Show pending approval request summary
+    description: Display a compact safe approval summary for the selected gateway run when approval is pending.
+    depends_on:
+      - HRIGF-09
+    acceptance:
+      - Pending approval detail shows only normalized message, tool, status, and timestamp.
+      - The detail is removed when approval state is cleared by approval.responded or terminal events.
+      - Raw prompts, tool arguments, logs, command output, gateway credentials, and environment values are not rendered.
+      - Approval detail extraction is covered by frontend tests.
+    verify:
+      - venv/Scripts/python.exe -m pytest tests/web/test_run_inspector_status_policy.py -q -o addopts=
+      - npm.cmd run build
+      - Playwright smoke for /run-inspector
+      - git diff --check for HRIGF approval-detail files
+    status: completed
+    risk: medium
+
 risk_flags:
   destructive_file_change:
     pause: true
@@ -935,6 +953,17 @@ progress_report:
       verification_result: "passed: venv/Scripts/python.exe -m pytest tests/web/test_run_inspector_status_policy.py -q -o addopts= (16 passed); passed: npm.cmd run build; browser smoke passed for manual run id control state on desktop and narrow viewports without horizontal overflow"
       blockers: []
       next_step: "Run Inspector P9 event-driven gateway control state complete; stage/commit/push, or add inline approval request detail display."
+    - task_id: HRIGF-10
+      status: completed
+      changed_files:
+        - web/src/pages/RunInspectorPage.tsx
+        - web/src/pages/runInspectorGatewayControls.ts
+        - tests/web/test_run_inspector_status_policy.py
+        - docs/plans/hermes-run-inspector-event-integration-prd.md
+        - .hermes/task.yaml
+      verification_result: "passed: venv/Scripts/python.exe -m pytest tests/web/test_run_inspector_status_policy.py -q -o addopts= (16 passed); passed: npm.cmd run build; browser smoke passed for gateway controls on desktop and narrow viewports without horizontal overflow"
+      blockers: []
+      next_step: "Run Inspector P10 pending approval detail complete; stage/commit/push, or add event-driven auto-selection of the most recent waiting run."
 
 failure_review:
   enabled: true

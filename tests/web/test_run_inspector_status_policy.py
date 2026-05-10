@@ -419,6 +419,7 @@ def test_run_inspector_page_exposes_gateway_follow_without_gateway_secret() -> N
     assert "api.getGatewayRunEventForwarder" in page_source
     assert "describeGatewayRunControlState" in page_source
     assert "controlState.approvalPending" in page_source
+    assert "controlState.approvalDetail" in page_source
     assert "controlState.stopHighlighted" in page_source
     assert 'aria-label="Gateway launch input"' in page_source
     assert 'aria-label="Gateway run id"' in page_source
@@ -426,6 +427,7 @@ def test_run_inspector_page_exposes_gateway_follow_without_gateway_secret() -> N
     assert "Allow" in page_source
     assert "Deny" in page_source
     assert "Stop" in page_source
+    assert "Pending request" in page_source
     assert "HERMES_RUN_INSPECTOR_GATEWAY_KEY" not in page_source
     assert "HERMES_RUN_INSPECTOR_GATEWAY_KEY" not in api_source
 
@@ -535,7 +537,7 @@ def test_run_inspector_gateway_controls_follow_run_state_and_events():
               runId: "run_1",
               recentRuns: [{ ...baseRun, status: "waiting_for_approval", last_event: "approval.request" }],
               events: [
-                { id: 1, type: "approval.request", source: "gateway_run", timestamp: "2026-05-11T00:00:00Z", run_id: "run_1", session_id: null, tool: null, status: "waiting", message: null },
+                { id: 1, type: "approval.request", source: "gateway_run", timestamp: "2026-05-11T00:00:00Z", run_id: "run_1", session_id: null, tool: "shell", status: "waiting", message: "approval requested" },
               ],
             });
             const approvalCleared = controls.describeGatewayRunControlState({
@@ -560,7 +562,14 @@ def test_run_inspector_gateway_controls_follow_run_state_and_events():
     assert payload["running"]["approvalPending"] is False
     assert payload["approvalPending"]["approvalHighlighted"] is True
     assert payload["approvalPending"]["approvalPending"] is True
+    assert payload["approvalPending"]["approvalDetail"] == {
+        "message": "approval requested",
+        "status": "waiting",
+        "timestamp": "2026-05-11T00:00:00Z",
+        "tool": "shell",
+    }
     assert payload["approvalCleared"]["approvalPending"] is False
+    assert payload["approvalCleared"]["approvalDetail"] is None
     assert payload["completed"]["stopAvailable"] is False
 
 
