@@ -374,6 +374,22 @@ def test_run_inspector_page_uses_safe_display_and_overflow_guards() -> None:
     assert "min-w-0" in page_source
 
 
+def test_run_inspector_page_exposes_gateway_follow_without_gateway_secret() -> None:
+    page_source = (
+        ROOT / "web" / "src" / "pages" / "RunInspectorPage.tsx"
+    ).read_text(encoding="utf-8")
+    api_source = (ROOT / "web" / "src" / "lib" / "api.ts").read_text(
+        encoding="utf-8"
+    )
+
+    assert "Gateway Run Follow" in page_source
+    assert "api.followGatewayRunEvents" in page_source
+    assert "api.getGatewayRunEventForwarder" in page_source
+    assert 'aria-label="Gateway run id"' in page_source
+    assert "HERMES_RUN_INSPECTOR_GATEWAY_KEY" not in page_source
+    assert "HERMES_RUN_INSPECTOR_GATEWAY_KEY" not in api_source
+
+
 def test_run_inspector_frontend_slice_avoids_unix_shell_assumptions() -> None:
     paths = [
         ROOT / "web" / "src" / "pages" / "RunInspectorPage.tsx",
@@ -426,7 +442,18 @@ def test_run_inspector_event_timeline_describes_event_and_stream_states():
             });
             const connected = timeline.describeRunInspectorEventStream("connected");
             const auth = timeline.describeRunInspectorEventStream("auth_failed");
-            console.log(JSON.stringify({ failed, connected, auth }));
+            const forwarder = timeline.describeRunInspectorEvent({
+              id: 2,
+              type: "gateway.forwarder.started",
+              source: "run_inspector",
+              timestamp: "2026-05-11T00:00:00Z",
+              run_id: "run_1",
+              session_id: null,
+              tool: null,
+              status: "running",
+              message: null,
+            });
+            console.log(JSON.stringify({ failed, connected, auth, forwarder }));
             """
         )
     )
@@ -438,6 +465,11 @@ def test_run_inspector_event_timeline_describes_event_and_stream_states():
     }
     assert payload["connected"]["tone"] == "success"
     assert payload["auth"]["tone"] == "destructive"
+    assert payload["forwarder"] == {
+        "label": "Gateway forwarder started",
+        "tone": "primary",
+        "message": "running",
+    }
 
 
 def test_run_inspector_events_hook_uses_tokened_websocket_and_auth_stop() -> None:

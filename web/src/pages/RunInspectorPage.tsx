@@ -1,4 +1,4 @@
-import { useLayoutEffect, type ReactNode } from "react";
+import { useCallback, useLayoutEffect, useState, type FormEvent, type ReactNode } from "react";
 import {
   Activity,
   AlertTriangle,
@@ -6,6 +6,8 @@ import {
   Clock,
   Database,
   FileWarning,
+  Link,
+  Play,
   RefreshCw,
   Shield,
   Terminal,
@@ -21,11 +23,14 @@ import { useRunInspectorEvents } from "@/hooks/useRunInspectorEvents";
 import { useRunInspectorStatus } from "@/hooks/useRunInspectorStatus";
 import type {
   RunInspectorEvent,
+  RunInspectorGatewayForwarder,
   RunInspectorMcpHealth,
   RunInspectorResponse,
   RunInspectorSnapshot,
   RunInspectorToolHealth,
 } from "@/lib/api";
+import { api } from "@/lib/api";
+import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { PluginSlot } from "@/plugins";
 import {
@@ -50,6 +55,10 @@ import {
 
 type BadgeTone = "success" | "warning" | "destructive" | "secondary" | "outline";
 
+interface GatewayForwarderDisplay extends StateDisplay {
+  message: string;
+}
+
 const BADGE_TONE: Record<Tone, BadgeTone> = {
   success: "success",
   warning: "warning",
@@ -61,8 +70,61 @@ const BADGE_TONE: Record<Tone, BadgeTone> = {
 export default function RunInspectorPage() {
   const inspector = useRunInspectorStatus();
   const eventStream = useRunInspectorEvents();
+  const [gatewayRunId, setGatewayRunId] = useState("");
+  const [gatewayForwarder, setGatewayForwarder] =
+    useState<RunInspectorGatewayForwarder | null>(null);
+  const [gatewayForwarderError, setGatewayForwarderError] = useState<string | null>(null);
+  const [gatewayForwarderBusy, setGatewayForwarderBusy] = useState(false);
   const { setAfterTitle, setEnd, setTitle } = usePageHeader();
   const stateDisplay = describeRunInspectorState(inspector.state, inspector.snapshot);
+
+  const followGatewayRun = useCallback(async () => {
+    const runId = gatewayRunId.trim();
+    if (!runId) {
+      setGatewayForwarderError("Run ID is required");
+      return;
+    }
+
+    setGatewayForwarderBusy(true);
+    setGatewayForwarderError(null);
+    try {
+      const response = await api.followGatewayRunEvents(runId);
+      setGatewayForwarder(response.forwarder);
+      eventStream.refresh();
+    } catch (err) {
+      setGatewayForwarderError(errorMessage(err));
+    } finally {
+      setGatewayForwarderBusy(false);
+    }
+  }, [eventStream, gatewayRunId]);
+
+  const refreshGatewayFollowStatus = useCallback(async () => {
+    const runId = gatewayForwarder?.run_id ?? gatewayRunId.trim();
+    if (!runId) {
+      setGatewayForwarderError("Run ID is required");
+      return;
+    }
+
+    setGatewayForwarderBusy(true);
+    setGatewayForwarderError(null);
+    try {
+      const response = await api.getGatewayRunEventForwarder(runId);
+      setGatewayForwarder(response.forwarder);
+      eventStream.refresh();
+    } catch (err) {
+      setGatewayForwarderError(errorMessage(err));
+    } finally {
+      setGatewayForwarderBusy(false);
+    }
+  }, [eventStream, gatewayForwarder?.run_id, gatewayRunId]);
+
+  const handleGatewayFollowSubmit = useCallback(
+    (event: FormEvent<HTMLFormElement>) => {
+      event.preventDefault();
+      void followGatewayRun();
+    },
+    [followGatewayRun],
+  );
 
   useLayoutEffect(() => {
     setTitle("Run Inspector");
@@ -143,6 +205,15 @@ export default function RunInspectorPage() {
           <div className="flex min-w-0 flex-col gap-4">
             <RuntimeCard snapshot={snapshot} />
             <HealthCard snapshot={snapshot} />
+            <GatewayRunFollowCard
+              busy={gatewayForwarderBusy}
+              error={gatewayForwarderError}
+              forwarder={gatewayForwarder}
+              onRefresh={refreshGatewayFollowStatus}
+              onRunIdChange={setGatewayRunId}
+              onSubmit={handleGatewayFollowSubmit}
+              runId={gatewayRunId}
+            />
             <EventTimelineCard
               error={eventStream.error}
               events={eventStream.events}
@@ -399,6 +470,113 @@ function PrivacyCard({ snapshot }: { snapshot: RunInspectorSnapshot | null }) {
   );
 }
 
+function GatewayRunFollowCard({
+  busy,
+  error,
+  forwarder,
+  onRefresh,
+  onRunIdChange,
+  onSubmit,
+  runId,
+}: {
+  busy: boolean;
+  error: string | null;
+  forwarder: RunInspectorGatewayForwarder | null;
+  onRefresh: () => void;
+  onRunIdChange: (value: string) => void;
+  onSubmit: (event: FormEvent<HTMLFormElement>) => void;
+  runId: string;
+}) {
+  const display = describeGatewayForwarder(forwarder);
+  const canSubmit = runId.trim().length > 0 && !busy;
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex min-w-0 items-center justify-between gap-2">
+          <span className="flex min-w-0 items-center gap-2">
+            <Link className="h-4 w-4 shrink-0" />
+            <span className="truncate">Gateway Run Follow</span>
+          </span>
+          <Badge tone={BADGE_TONE[display.tone]} className="shrink-0 text-[10px]">
+            {display.label}
+          </Badge>
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="flex min-w-0 flex-col gap-3">
+        <form
+          className="grid min-w-0 gap-2 sm:grid-cols-[minmax(0,1fr)_auto_auto]"
+          onSubmit={onSubmit}
+        >
+          <Input
+            aria-label="Gateway run id"
+            className="h-9 font-mono-ui text-xs"
+            onChange={(event) => onRunIdChange(event.target.value)}
+            placeholder="run_..."
+            value={runId}
+          />
+          <Button
+            type="submit"
+            size="sm"
+            disabled={!canSubmit}
+            prefix={busy ? <Spinner /> : <Play />}
+          >
+            Follow
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            outlined
+            disabled={busy || (!forwarder && !runId.trim())}
+            onClick={onRefresh}
+            prefix={busy ? <Spinner /> : <RefreshCw />}
+          >
+            Status
+          </Button>
+        </form>
+
+        <div className="grid min-w-0 gap-2 sm:grid-cols-2">
+          <Metric
+            icon={<Activity className="h-4 w-4" />}
+            label="Forwarder"
+            tone={display.tone}
+            value={display.message}
+          />
+          <Metric
+            icon={<Clock className="h-4 w-4" />}
+            label="Updated"
+            value={formatDateTime(forwarder?.updated_at ?? null)}
+          />
+        </div>
+
+        {forwarder ? (
+          <div className="flex min-w-0 flex-col divide-y divide-border/70 border border-border">
+            <DetailRow label="Run ID" value={formatDisplayValue(forwarder.run_id)} />
+            <DetailRow
+              label="Events"
+              value={String(forwarder.events_forwarded ?? 0)}
+            />
+            <DetailRow
+              label="Gateway"
+              value={formatDisplayValue(forwarder.gateway_url, "Unknown")}
+            />
+            <DetailRow
+              label="Error"
+              value={formatDisplayValue(forwarder.last_error, "None")}
+            />
+          </div>
+        ) : null}
+
+        {error ? (
+          <p className="break-words border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive">
+            {formatDisplayValue(error)}
+          </p>
+        ) : null}
+      </CardContent>
+    </Card>
+  );
+}
+
 function EventTimelineCard({
   error,
   events,
@@ -612,4 +790,48 @@ function mcpDetail(item: RunInspectorMcpHealth): string {
     ? `${item.affected_tools.length} tools`
     : "No affected tools";
   return item.last_error_class ? `${item.last_error_class} - ${affected}` : affected;
+}
+
+function describeGatewayForwarder(
+  forwarder: RunInspectorGatewayForwarder | null,
+): GatewayForwarderDisplay {
+  if (!forwarder) {
+    return { label: "Idle", tone: "muted", message: "No run followed" };
+  }
+  if (forwarder.state === "running") {
+    return {
+      label: "Following",
+      tone: "primary",
+      message: `${forwarder.events_forwarded ?? 0} events`,
+    };
+  }
+  if (forwarder.state === "completed") {
+    return {
+      label: "Completed",
+      tone: "success",
+      message: `${forwarder.events_forwarded ?? 0} events`,
+    };
+  }
+  if (forwarder.state === "failed") {
+    return {
+      label: "Failed",
+      tone: "destructive",
+      message: forwarder.last_error ?? "Forwarder failed",
+    };
+  }
+  return {
+    label: formatDisplayValue(forwarder.state, "Unknown"),
+    tone: "muted",
+    message: `${forwarder.events_forwarded ?? 0} events`,
+  };
+}
+
+function errorMessage(error: unknown): string {
+  if (error instanceof Error) {
+    return error.message;
+  }
+  if (typeof error === "string") {
+    return error;
+  }
+  return "Request failed";
 }

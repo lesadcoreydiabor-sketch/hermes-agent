@@ -109,6 +109,20 @@ This must remain additive and best-effort:
 
 This slice does not yet auto-discover run ids. The caller must provide a `run_id` created by `/v1/runs`; automatic discovery or UI input can follow after this bridge is stable.
 
+## P5 Dashboard Gateway Follow Control
+
+The next dashboard slice adds a small control inside the Run Inspector page for a known gateway `run_id`.
+
+The control should:
+
+- Accept a `run_id` string from the operator.
+- Call `POST /api/run-inspector/gateway-runs/{run_id}/follow`.
+- Show the local forwarder state, last update time, event count, gateway base URL, and short error state.
+- Refresh the existing event timeline after follow/status calls.
+- Keep the gateway key fully backend-only.
+
+This is not a gateway run launcher and not an automatic run discovery mechanism. It only connects an already-created gateway run to the dashboard timeline.
+
 ## Acceptance
 
 - Recent events API returns an envelope with `ok`, `events`, and `refreshed_at`.
@@ -135,5 +149,6 @@ This slice does not yet auto-discover run ids. The caller must provide a `run_id
 - Runtime tests for gateway SSE parsing, configured URL/key resolution, and cross-process forwarding redaction.
 - API tests for the protected gateway follow endpoint, missing config, and status lookup.
 - Frontend tests for hook error classification, event formatting, and overflow/privacy guards.
+- Frontend tests that the Run Inspector page exposes gateway follow controls without gateway secret names or values.
 - `npm.cmd run build`.
 - Manual or Playwright smoke for `/run-inspector`.

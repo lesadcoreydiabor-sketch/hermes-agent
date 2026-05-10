@@ -396,6 +396,42 @@ tasks:
     status: completed
     risk: medium
 
+  - id: HRIGF-03
+    title: Add dashboard gateway run follow control
+    description: Add a Run Inspector panel control for entering a known gateway run_id and starting the cross-process event forwarder.
+    depends_on:
+      - HRIGF-02
+    acceptance:
+      - Run Inspector page exposes a run_id input, Follow action, and Status refresh action.
+      - The UI calls the protected dashboard forwarder endpoints, not the gateway directly.
+      - Gateway bearer token names or values are never exposed in frontend code.
+      - Forwarder state, updated time, event count, gateway URL, and short error state are rendered with overflow guards.
+      - The existing event timeline refreshes after follow/status calls.
+    verify:
+      - venv/Scripts/python.exe -m pytest tests/web/test_run_inspector_status_policy.py -q -o addopts=
+      - npm.cmd run build
+      - Playwright smoke for /run-inspector
+    status: completed
+    risk: medium
+
+  - id: HRIGF-04
+    title: Verify dashboard gateway follow control slice
+    description: Re-run frontend, backend forwarder, build, and browser smoke checks for the gateway follow control.
+    depends_on:
+      - HRIGF-03
+    acceptance:
+      - Frontend policy tests pass.
+      - Gateway forwarder API/runtime tests pass.
+      - Build passes.
+      - Browser smoke confirms /run-inspector renders the Gateway Run Follow card without horizontal overflow.
+    verify:
+      - venv/Scripts/python.exe -m pytest tests/web/test_run_inspector_status_policy.py tests/runtime/test_run_inspector_gateway_forwarder.py tests/hermes_cli/test_run_inspector_gateway_forwarder_api.py -q -o addopts=
+      - npm.cmd run build
+      - Playwright smoke for /run-inspector
+      - git diff --check for HRIGF UI files
+    status: completed
+    risk: medium
+
 risk_flags:
   destructive_file_change:
     pause: true
@@ -709,6 +745,26 @@ progress_report:
       verification_result: "passed: venv/Scripts/python.exe -m pytest tests/runtime/test_run_inspector_gateway_forwarder.py tests/hermes_cli/test_run_inspector_gateway_forwarder_api.py tests/hermes_cli/test_run_inspector_events_api.py tests/runtime/test_run_inspector_events.py tests/web/test_run_inspector_status_policy.py -q -o addopts= (31 passed); passed: venv/Scripts/python.exe -m pytest tests/gateway/test_api_server_runs.py::TestRunEvents tests/hermes_cli/test_run_inspector_gateway_forwarder_api.py tests/runtime/test_run_inspector_gateway_forwarder.py -q -o addopts= (13 passed, 5 warnings); passed: venv/Scripts/python.exe -m pytest tests/hermes_cli/test_run_inspector_api.py tests/hermes_cli/test_status.py -q -o addopts= (8 passed); passed: npm.cmd run build; passed: git diff --check for HRIGF files"
       blockers: []
       next_step: "Run Inspector P4 cross-process gateway event forwarder complete; review, stage/commit/push, or add UI control for entering a gateway run_id."
+    - task_id: HRIGF-03
+      status: completed
+      changed_files:
+        - web/src/pages/RunInspectorPage.tsx
+        - tests/web/test_run_inspector_status_policy.py
+        - docs/plans/hermes-run-inspector-event-integration-prd.md
+        - .hermes/task.yaml
+      verification_result: "passed: venv/Scripts/python.exe -m pytest tests/web/test_run_inspector_status_policy.py -q -o addopts= (15 passed); passed: npm.cmd run build"
+      blockers: []
+      next_step: HRIGF-04
+    - task_id: HRIGF-04
+      status: completed
+      changed_files:
+        - web/src/pages/RunInspectorPage.tsx
+        - tests/web/test_run_inspector_status_policy.py
+        - docs/plans/hermes-run-inspector-event-integration-prd.md
+        - .hermes/task.yaml
+      verification_result: "passed: venv/Scripts/python.exe -m pytest tests/web/test_run_inspector_status_policy.py tests/runtime/test_run_inspector_gateway_forwarder.py tests/hermes_cli/test_run_inspector_gateway_forwarder_api.py -q -o addopts= (23 passed); passed: npm.cmd run build; passed: git diff --check for HRIGF UI files; smoke passed: /run-inspector Gateway Run Follow title/input visible on desktop and narrow viewports with no horizontal overflow"
+      blockers: []
+      next_step: "Run Inspector P5 dashboard gateway follow control complete; review, stage/commit/push, or add automatic gateway run_id discovery."
 
 failure_review:
   enabled: true
@@ -757,4 +813,12 @@ failure_review:
       what_changed: "Kept the runtime degradation behavior and updated the test to assert the existing safe-only empty snapshot contract."
       how_it_was_verified: "Re-ran venv/Scripts/python.exe -m pytest tests/hermes_cli/test_status.py tests/hermes_cli/test_run_status.py tests/runtime/test_run_snapshot_schema.py tests/runtime/test_run_snapshot_session.py tests/runtime/test_run_snapshot_tools_mcp.py tests/runtime/test_run_snapshot_redaction.py tests/runtime/test_run_snapshot_failure_review.py -q -o addopts= and all 39 tests passed."
       added_eval_or_badcase: "tests/hermes_cli/test_run_status.py::test_run_inspector_status_degrades_when_snapshot_build_fails"
+      blocker: false
+    - trigger: failed_verification
+      task_id: HRIGF-04
+      what_happened: "Initial Playwright smoke used document.body.innerText to detect the Gateway Run Follow title even though Playwright's text locator found the card and the input was visible."
+      why_it_failed: "The smoke assertion mixed locator-based visibility with a brittle body text snapshot."
+      what_changed: "Changed the smoke to assert locator counts for the card title and input while keeping the horizontal overflow checks."
+      how_it_was_verified: "Re-ran Playwright smoke for desktop and narrow viewports; both found the title/input and had scrollWidth equal to viewport width."
+      added_eval_or_badcase: "manual Playwright smoke for /run-inspector Gateway Run Follow"
       blocker: false
