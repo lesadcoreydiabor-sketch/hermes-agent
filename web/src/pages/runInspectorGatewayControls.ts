@@ -21,6 +21,23 @@ export interface GatewayApprovalDetail {
   tool: string | null;
 }
 
+export interface GatewayRunDetailState {
+  createdAt: string | null;
+  eventCount: number;
+  hasError: boolean;
+  known: boolean;
+  lastEvent: string | null;
+  lastEventAt: string | null;
+  lastMessage: string | null;
+  model: string | null;
+  runId: string;
+  sessionId: string | null;
+  source: "event_stream" | "manual" | "recent_runs";
+  status: string;
+  tone: Tone;
+  updatedAt: string | null;
+}
+
 interface GatewayRunSelectionCandidate {
   runId: string;
   score: number;
@@ -113,6 +130,52 @@ export function findLatestPendingApprovalRunId({
 
   return [...candidates.values()].sort((left, right) => right.score - left.score)[0]
     ?.runId ?? null;
+}
+
+export function describeGatewayRunDetail({
+  events,
+  recentRuns,
+  runId,
+}: {
+  events: RunInspectorEvent[];
+  recentRuns: RunInspectorGatewayRun[];
+  runId: string;
+}): GatewayRunDetailState | null {
+  const selectedRunId = runId.trim();
+  if (!selectedRunId) {
+    return null;
+  }
+
+  const run = recentRuns.find((item) => item.run_id === selectedRunId) ?? null;
+  const identifiers = new Set(
+    [selectedRunId, run?.session_id].filter((value): value is string => Boolean(value)),
+  );
+  const matchingEvents = events.filter(
+    (event) =>
+      (event.run_id !== null && identifiers.has(event.run_id)) ||
+      (event.session_id !== null && identifiers.has(event.session_id)),
+  );
+  const latestEvent = matchingEvents.at(-1) ?? null;
+  const status =
+    run?.status ?? latestEvent?.status ?? (latestEvent ? latestEvent.type : "unknown");
+  const source = run ? "recent_runs" : latestEvent ? "event_stream" : "manual";
+
+  return {
+    createdAt: secondsToIso(run?.created_at ?? null),
+    eventCount: matchingEvents.length,
+    hasError: run?.has_error ?? statusIndicatesError(status),
+    known: run !== null || latestEvent !== null,
+    lastEvent: latestEvent?.type ?? run?.last_event ?? null,
+    lastEventAt: latestEvent?.timestamp ?? null,
+    lastMessage: latestEvent?.message ?? null,
+    model: run?.model ?? null,
+    runId: selectedRunId,
+    sessionId: run?.session_id ?? latestEvent?.session_id ?? null,
+    source,
+    status,
+    tone: detailTone(status, run?.has_error ?? false),
+    updatedAt: secondsToIso(run?.updated_at ?? null),
+  };
 }
 
 export function describeGatewayRunControlState({
@@ -257,6 +320,39 @@ function scoreEvent(event: RunInspectorEvent): number {
     return parsed + event.id / 1000000;
   }
   return event.id;
+}
+
+function secondsToIso(value: number | null): string | null {
+  if (value === null || !Number.isFinite(value)) {
+    return null;
+  }
+  return new Date(value * 1000).toISOString();
+}
+
+function statusIndicatesError(status: string): boolean {
+  return normalize(status) === "failed";
+}
+
+function detailTone(status: string, hasError: boolean): Tone {
+  const normalized = normalize(status);
+  if (hasError || normalized === "failed" || normalized === "cancelled") {
+    return "destructive";
+  }
+  if (normalized === "completed") {
+    return "success";
+  }
+  if (normalized === "waiting" || normalized === "waiting_for_approval") {
+    return "warning";
+  }
+  if (
+    normalized === "queued" ||
+    normalized === "running" ||
+    normalized === "run.started" ||
+    normalized === "run.running"
+  ) {
+    return "primary";
+  }
+  return "muted";
 }
 
 function formatStatus(value: string): string {

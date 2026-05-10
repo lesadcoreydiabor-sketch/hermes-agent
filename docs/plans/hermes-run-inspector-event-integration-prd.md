@@ -238,6 +238,21 @@ Selection must respect operator intent:
 - If a later `approval.responded`, `run.running`, `run.completed`, `run.failed`, `run.cancelled`, or `run.stopping` event clears a run, do not auto-select that stale approval.
 - This slice remains frontend-only and must not add new gateway operations or trigger approval/stop actions automatically.
 
+## P12 Selected Gateway Run Detail
+
+The next dashboard slice should make the currently selected gateway run inspectable without opening raw logs or copying ids between panels.
+
+The Gateway Run Follow card should show a compact selected-run detail block derived only from already-normalized recent run summaries and Run Inspector events:
+
+- selected run id
+- safe status and source (`recent_runs`, `event_stream`, or `manual`)
+- recent selected-run event count
+- latest lifecycle event and timestamp
+- session id, model, update time, and error flag when available
+- short redacted last event message when available
+
+This must remain a display-only slice. It must not fetch raw gateway output, raw prompts, tool arguments, command output, environment values, credentials, diffs, stack traces, or file bodies. Unknown manually entered run ids should render as manual selections rather than errors.
+
 ## Acceptance
 
 - Recent events API returns an envelope with `ok`, `events`, and `refreshed_at`.
@@ -255,6 +270,7 @@ Selection must respect operator intent:
 - Gateway control buttons reflect selected-run lifecycle state and clear stale approval prompts.
 - Pending approval detail shows only safe, normalized summary fields.
 - The page auto-selects the newest pending approval only while selection is automatic, and never responds to the approval without an explicit click.
+- The selected gateway run detail shows only safe summary/event fields and handles manual unknown run ids without crashing.
 
 ## Risks
 
@@ -277,6 +293,7 @@ Selection must respect operator intent:
 - Frontend tests for selected-run control-state derivation from recent runs and events.
 - Frontend tests for pending approval detail extraction and clearing.
 - Frontend tests for pending approval auto-selection, stale approval clearing, and manual selection preservation.
+- Frontend tests for selected-run detail derivation from recent summaries and events.
 - Frontend tests for hook error classification, event formatting, and overflow/privacy guards.
 - Frontend tests that the Run Inspector page exposes gateway follow controls without gateway secret names or values.
 - Gateway route tests that recent run summaries omit output/error payloads.

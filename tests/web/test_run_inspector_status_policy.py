@@ -417,6 +417,7 @@ def test_run_inspector_page_exposes_gateway_follow_without_gateway_secret() -> N
     assert "api.getGatewayRuns" in page_source
     assert "api.followGatewayRunEvents" in page_source
     assert "api.getGatewayRunEventForwarder" in page_source
+    assert "describeGatewayRunDetail" in page_source
     assert "describeGatewayRunControlState" in page_source
     assert "findLatestPendingApprovalRunId" in page_source
     assert "gatewayRunSelectionMode" in page_source
@@ -431,6 +432,8 @@ def test_run_inspector_page_exposes_gateway_follow_without_gateway_secret() -> N
     assert "Allow" in page_source
     assert "Deny" in page_source
     assert "Stop" in page_source
+    assert "Selected Run" in page_source
+    assert "Last Detail" in page_source
     assert "Pending request" in page_source
     assert "HERMES_RUN_INSPECTOR_GATEWAY_KEY" not in page_source
     assert "HERMES_RUN_INSPECTOR_GATEWAY_KEY" not in api_source
@@ -649,6 +652,67 @@ def test_run_inspector_gateway_controls_auto_selects_pending_approval():
     assert payload["clearedLatest"] == "run_1"
     assert payload["keepSelectedPending"] is None
     assert payload["latestFromRecentRuns"] == "run_recent"
+
+
+def test_run_inspector_gateway_controls_describes_selected_run_detail():
+    payload = run_gateway_controls_script(
+        textwrap.dedent(
+            """
+            const run = {
+              run_id: "run_1",
+              status: "running",
+              created_at: 100,
+              updated_at: 200,
+              session_id: "session_1",
+              model: "hermes-model",
+              last_event: "run.running",
+              has_error: false,
+            };
+            const detail = controls.describeGatewayRunDetail({
+              runId: "run_1",
+              recentRuns: [run],
+              events: [
+                { id: 1, type: "run.started", source: "gateway_run", timestamp: "2026-05-11T00:00:00Z", run_id: "run_1", session_id: "session_1", tool: null, status: "running", message: "started" },
+                { id: 2, type: "tool.completed", source: "gateway_run", timestamp: "2026-05-11T00:00:01Z", run_id: "run_1", session_id: "session_1", tool: "shell", status: "running", message: "safe summary" },
+              ],
+            });
+            const manual = controls.describeGatewayRunDetail({
+              runId: "manual_run",
+              recentRuns: [],
+              events: [],
+            });
+            const failed = controls.describeGatewayRunDetail({
+              runId: "run_failed",
+              recentRuns: [{ ...run, run_id: "run_failed", status: "failed", has_error: true }],
+              events: [],
+            });
+            console.log(JSON.stringify({ detail, manual, failed }));
+            """
+        )
+    )
+
+    assert payload["detail"] == {
+        "createdAt": "1970-01-01T00:01:40.000Z",
+        "eventCount": 2,
+        "hasError": False,
+        "known": True,
+        "lastEvent": "tool.completed",
+        "lastEventAt": "2026-05-11T00:00:01Z",
+        "lastMessage": "safe summary",
+        "model": "hermes-model",
+        "runId": "run_1",
+        "sessionId": "session_1",
+        "source": "recent_runs",
+        "status": "running",
+        "tone": "primary",
+        "updatedAt": "1970-01-01T00:03:20.000Z",
+    }
+    assert payload["manual"]["known"] is False
+    assert payload["manual"]["source"] == "manual"
+    assert payload["manual"]["status"] == "unknown"
+    assert payload["manual"]["tone"] == "muted"
+    assert payload["failed"]["tone"] == "destructive"
+    assert payload["failed"]["hasError"] is True
 
 
 def test_run_inspector_events_hook_uses_tokened_websocket_and_auth_stop() -> None:

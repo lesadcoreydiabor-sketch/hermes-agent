@@ -61,9 +61,11 @@ import {
   type RunInspectorEventStreamState,
 } from "@/pages/runInspectorEventTimeline";
 import {
+  describeGatewayRunDetail,
   describeGatewayRunControlState,
   findLatestPendingApprovalRunId,
   type GatewayRunControlState,
+  type GatewayRunDetailState,
 } from "@/pages/runInspectorGatewayControls";
 
 type BadgeTone = "success" | "warning" | "destructive" | "secondary" | "outline";
@@ -109,6 +111,11 @@ export default function RunInspectorPage() {
   const { setAfterTitle, setEnd, setTitle } = usePageHeader();
   const stateDisplay = describeRunInspectorState(inspector.state, inspector.snapshot);
   const gatewayControlState = describeGatewayRunControlState({
+    events: eventStream.events,
+    recentRuns: gatewayRuns,
+    runId: gatewayRunId,
+  });
+  const gatewayRunDetail = describeGatewayRunDetail({
     events: eventStream.events,
     recentRuns: gatewayRuns,
     runId: gatewayRunId,
@@ -388,6 +395,7 @@ export default function RunInspectorPage() {
               controlState={gatewayControlState}
               error={gatewayForwarderError}
               forwarder={gatewayForwarder}
+              runDetail={gatewayRunDetail}
               launchBusy={gatewayLaunchBusy}
               launchError={gatewayLaunchError}
               launchInput={gatewayLaunchInput}
@@ -668,6 +676,7 @@ function GatewayRunFollowCard({
   controlState,
   error,
   forwarder,
+  runDetail,
   launchBusy,
   launchError,
   launchInput,
@@ -691,6 +700,7 @@ function GatewayRunFollowCard({
   controlState: GatewayRunControlState;
   error: string | null;
   forwarder: RunInspectorGatewayForwarder | null;
+  runDetail: GatewayRunDetailState | null;
   launchBusy: boolean;
   launchError: string | null;
   launchInput: string;
@@ -835,6 +845,8 @@ function GatewayRunFollowCard({
           </p>
         ) : null}
 
+        {runDetail ? <SelectedGatewayRunDetail detail={runDetail} /> : null}
+
         {controlState.approvalDetail ? (
           <div className="flex min-w-0 flex-col divide-y divide-warning/30 border border-warning/30 bg-warning/10">
             <DetailRow
@@ -942,6 +954,44 @@ function GatewayRunFollowCard({
         ) : null}
       </CardContent>
     </Card>
+  );
+}
+
+function SelectedGatewayRunDetail({ detail }: { detail: GatewayRunDetailState }) {
+  return (
+    <div className="flex min-w-0 flex-col divide-y divide-border/70 border border-border bg-secondary/10">
+      <div className="flex min-w-0 flex-wrap items-center justify-between gap-2 px-3 py-2">
+        <span className="text-xs uppercase tracking-[0.12em] text-muted-foreground">
+          Selected Run
+        </span>
+        <span className="flex min-w-0 flex-wrap items-center gap-2">
+          <Badge tone={BADGE_TONE[detail.tone]} className="w-fit text-[10px]">
+            {formatDisplayValue(detail.status)}
+          </Badge>
+          <Badge tone="outline" className="w-fit text-[10px]">
+            {formatDisplayValue(detail.source.replaceAll("_", " "))}
+          </Badge>
+        </span>
+      </div>
+      <DetailRow label="Run ID" value={formatDisplayValue(detail.runId)} />
+      <DetailRow label="Last Event" value={formatDisplayValue(detail.lastEvent)} />
+      <DetailRow label="Events" value={String(detail.eventCount)} />
+      <DetailRow label="Updated" value={formatDateTime(detail.updatedAt)} />
+      <DetailRow label="Last Seen" value={formatDateTime(detail.lastEventAt)} />
+      <DetailRow label="Session" value={formatDisplayValue(detail.sessionId, "Unknown")} />
+      <DetailRow label="Model" value={formatDisplayValue(detail.model, "Unknown")} />
+      <DetailRow
+        label="Known"
+        value={detail.known ? "Summary or event found" : "Manual selection"}
+      />
+      <DetailRow label="Error" value={detail.hasError ? "Yes" : "No"} />
+      {detail.lastMessage ? (
+        <DetailRow
+          label="Last Detail"
+          value={formatDisplayValue(detail.lastMessage, "No details")}
+        />
+      ) : null}
+    </div>
   );
 }
 
