@@ -53,6 +53,10 @@ import {
   formatRunInspectorEventTime,
   type RunInspectorEventStreamState,
 } from "@/pages/runInspectorEventTimeline";
+import {
+  describeGatewayRunControlState,
+  type GatewayRunControlState,
+} from "@/pages/runInspectorGatewayControls";
 
 type BadgeTone = "success" | "warning" | "destructive" | "secondary" | "outline";
 
@@ -93,6 +97,11 @@ export default function RunInspectorPage() {
   >(null);
   const { setAfterTitle, setEnd, setTitle } = usePageHeader();
   const stateDisplay = describeRunInspectorState(inspector.state, inspector.snapshot);
+  const gatewayControlState = describeGatewayRunControlState({
+    events: eventStream.events,
+    recentRuns: gatewayRuns,
+    runId: gatewayRunId,
+  });
 
   const followGatewayRun = useCallback(async () => {
     const runId = gatewayRunId.trim();
@@ -343,6 +352,7 @@ export default function RunInspectorPage() {
               busy={gatewayForwarderBusy}
               controlBusy={gatewayControlBusy}
               controlError={gatewayControlError}
+              controlState={gatewayControlState}
               error={gatewayForwarderError}
               forwarder={gatewayForwarder}
               launchBusy={gatewayLaunchBusy}
@@ -622,6 +632,7 @@ function GatewayRunFollowCard({
   busy,
   controlBusy,
   controlError,
+  controlState,
   error,
   forwarder,
   launchBusy,
@@ -644,6 +655,7 @@ function GatewayRunFollowCard({
   busy: boolean;
   controlBusy: "stop" | "allow" | "deny" | null;
   controlError: string | null;
+  controlState: GatewayRunControlState;
   error: string | null;
   forwarder: RunInspectorGatewayForwarder | null;
   launchBusy: boolean;
@@ -667,6 +679,8 @@ function GatewayRunFollowCard({
   const canSubmit = runId.trim().length > 0 && !busy;
   const canLaunch = launchInput.trim().length > 0 && !launchBusy;
   const canControl = runId.trim().length > 0 && !controlBusy && !busy && !launchBusy;
+  const canApprove = canControl && controlState.approvalPending;
+  const canStop = canControl && controlState.stopAvailable;
 
   return (
     <Card>
@@ -753,8 +767,8 @@ function GatewayRunFollowCard({
           <Button
             type="button"
             size="sm"
-            outlined
-            disabled={!canControl}
+            outlined={!controlState.approvalHighlighted}
+            disabled={!canApprove}
             onClick={onApprovalOnce}
             prefix={controlBusy === "allow" ? <Spinner /> : <CheckCircle2 />}
           >
@@ -763,8 +777,8 @@ function GatewayRunFollowCard({
           <Button
             type="button"
             size="sm"
-            outlined
-            disabled={!canControl}
+            outlined={!controlState.approvalHighlighted}
+            disabled={!canApprove}
             onClick={onApprovalDeny}
             prefix={controlBusy === "deny" ? <Spinner /> : <Shield />}
           >
@@ -773,8 +787,8 @@ function GatewayRunFollowCard({
           <Button
             type="button"
             size="sm"
-            outlined
-            disabled={!canControl}
+            outlined={!controlState.stopHighlighted}
+            disabled={!canStop}
             onClick={onStop}
             prefix={controlBusy === "stop" ? <Spinner /> : <XCircle />}
           >
@@ -822,6 +836,12 @@ function GatewayRunFollowCard({
         ) : null}
 
         <div className="grid min-w-0 gap-2 sm:grid-cols-2">
+          <Metric
+            icon={<Shield className="h-4 w-4" />}
+            label="Control"
+            tone={controlState.tone}
+            value={controlState.message}
+          />
           <Metric
             icon={<Activity className="h-4 w-4" />}
             label="Forwarder"

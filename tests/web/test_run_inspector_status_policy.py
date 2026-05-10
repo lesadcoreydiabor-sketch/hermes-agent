@@ -92,6 +92,34 @@ const timeline = moduleRef.exports;
     return json.loads(completed.stdout)
 
 
+def run_gateway_controls_script(script: str) -> dict:
+    node_script = f"""
+const fs = require("node:fs");
+const vm = require("node:vm");
+const ts = require("typescript");
+const source = fs.readFileSync("src/pages/runInspectorGatewayControls.ts", "utf8");
+const output = ts.transpileModule(source, {{
+  compilerOptions: {{
+    module: ts.ModuleKind.CommonJS,
+    target: ts.ScriptTarget.ES2022,
+  }},
+}}).outputText;
+const moduleRef = {{ exports: {{}} }};
+const sandbox = {{ module: moduleRef, exports: moduleRef.exports, require, console }};
+vm.runInNewContext(output, sandbox, {{ filename: "runInspectorGatewayControls.js" }});
+const controls = moduleRef.exports;
+{script}
+"""
+    completed = subprocess.run(
+        ["node", "-e", node_script],
+        cwd=WEB_DIR,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    return json.loads(completed.stdout)
+
+
 def test_run_inspector_policy_derives_loaded_states():
     payload = run_policy_script(
         textwrap.dedent(
@@ -389,6 +417,9 @@ def test_run_inspector_page_exposes_gateway_follow_without_gateway_secret() -> N
     assert "api.getGatewayRuns" in page_source
     assert "api.followGatewayRunEvents" in page_source
     assert "api.getGatewayRunEventForwarder" in page_source
+    assert "describeGatewayRunControlState" in page_source
+    assert "controlState.approvalPending" in page_source
+    assert "controlState.stopHighlighted" in page_source
     assert 'aria-label="Gateway launch input"' in page_source
     assert 'aria-label="Gateway run id"' in page_source
     assert "Runs" in page_source
@@ -479,6 +510,58 @@ def test_run_inspector_event_timeline_describes_event_and_stream_states():
         "tone": "primary",
         "message": "running",
     }
+
+
+def test_run_inspector_gateway_controls_follow_run_state_and_events():
+    payload = run_gateway_controls_script(
+        textwrap.dedent(
+            """
+            const baseRun = {
+              run_id: "run_1",
+              status: "running",
+              created_at: 1,
+              updated_at: 2,
+              session_id: null,
+              model: null,
+              last_event: "run.running",
+              has_error: false,
+            };
+            const running = controls.describeGatewayRunControlState({
+              runId: "run_1",
+              recentRuns: [baseRun],
+              events: [],
+            });
+            const approvalPending = controls.describeGatewayRunControlState({
+              runId: "run_1",
+              recentRuns: [{ ...baseRun, status: "waiting_for_approval", last_event: "approval.request" }],
+              events: [
+                { id: 1, type: "approval.request", source: "gateway_run", timestamp: "2026-05-11T00:00:00Z", run_id: "run_1", session_id: null, tool: null, status: "waiting", message: null },
+              ],
+            });
+            const approvalCleared = controls.describeGatewayRunControlState({
+              runId: "run_1",
+              recentRuns: [{ ...baseRun, status: "waiting_for_approval", last_event: "approval.request" }],
+              events: [
+                { id: 1, type: "approval.request", source: "gateway_run", timestamp: "2026-05-11T00:00:00Z", run_id: "run_1", session_id: null, tool: null, status: "waiting", message: null },
+                { id: 2, type: "approval.responded", source: "gateway_run", timestamp: "2026-05-11T00:00:01Z", run_id: "run_1", session_id: null, tool: null, status: "running", message: null },
+              ],
+            });
+            const completed = controls.describeGatewayRunControlState({
+              runId: "run_1",
+              recentRuns: [{ ...baseRun, status: "completed", last_event: "run.completed" }],
+              events: [],
+            });
+            console.log(JSON.stringify({ running, approvalPending, approvalCleared, completed }));
+            """
+        )
+    )
+
+    assert payload["running"]["stopHighlighted"] is True
+    assert payload["running"]["approvalPending"] is False
+    assert payload["approvalPending"]["approvalHighlighted"] is True
+    assert payload["approvalPending"]["approvalPending"] is True
+    assert payload["approvalCleared"]["approvalPending"] is False
+    assert payload["completed"]["stopAvailable"] is False
 
 
 def test_run_inspector_events_hook_uses_tokened_websocket_and_auth_stop() -> None:

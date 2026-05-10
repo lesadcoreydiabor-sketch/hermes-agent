@@ -508,6 +508,25 @@ tasks:
     status: completed
     risk: high
 
+  - id: HRIGF-09
+    title: Derive gateway control state from run events
+    description: Make Run Inspector Allow, Deny, and Stop controls follow the selected gateway run lifecycle state.
+    depends_on:
+      - HRIGF-08
+    acceptance:
+      - Allow and Deny are enabled and highlighted only when the selected run has a pending approval signal.
+      - A later approval.responded or terminal run event clears stale approval state.
+      - Stop is highlighted for active selected runs and disabled for known terminal runs.
+      - Manually entered run ids remain stop-capable unless a terminal state is known.
+      - Control-state derivation is covered by frontend tests.
+    verify:
+      - venv/Scripts/python.exe -m pytest tests/web/test_run_inspector_status_policy.py -q -o addopts=
+      - npm.cmd run build
+      - Playwright smoke for /run-inspector
+      - git diff --check for HRIGF control-state files
+    status: completed
+    risk: medium
+
 risk_flags:
   destructive_file_change:
     pause: true
@@ -905,6 +924,17 @@ progress_report:
       verification_result: "passed: venv/Scripts/python.exe -m pytest tests/runtime/test_run_inspector_gateway_forwarder.py tests/hermes_cli/test_run_inspector_gateway_forwarder_api.py tests/web/test_run_inspector_status_policy.py -q -o addopts= (38 passed); reran tests/web/test_run_inspector_status_policy.py -q -o addopts= after frontend busy-state adjustment (15 passed); passed: npm.cmd run build; browser smoke passed in in-app browser and Playwright desktop/narrow viewports without horizontal overflow"
       blockers: []
       next_step: "Run Inspector P8 gateway stop and approval controls complete; stage/commit/push, or add approval-event driven button state."
+    - task_id: HRIGF-09
+      status: completed
+      changed_files:
+        - web/src/pages/RunInspectorPage.tsx
+        - web/src/pages/runInspectorGatewayControls.ts
+        - tests/web/test_run_inspector_status_policy.py
+        - docs/plans/hermes-run-inspector-event-integration-prd.md
+        - .hermes/task.yaml
+      verification_result: "passed: venv/Scripts/python.exe -m pytest tests/web/test_run_inspector_status_policy.py -q -o addopts= (16 passed); passed: npm.cmd run build; browser smoke passed for manual run id control state on desktop and narrow viewports without horizontal overflow"
+      blockers: []
+      next_step: "Run Inspector P9 event-driven gateway control state complete; stage/commit/push, or add inline approval request detail display."
 
 failure_review:
   enabled: true
@@ -961,6 +991,14 @@ failure_review:
       what_changed: "Changed the smoke to assert locator counts for the card title and input while keeping the horizontal overflow checks."
       how_it_was_verified: "Re-ran Playwright smoke for desktop and narrow viewports; both found the title/input and had scrollWidth equal to viewport width."
       added_eval_or_badcase: "manual Playwright smoke for /run-inspector Gateway Run Follow"
+      blocker: false
+    - trigger: failed_verification
+      task_id: HRIGF-09
+      what_happened: "Initial npm.cmd run build failed because TypeScript did not narrow a nullable status value in the terminal-control branch."
+      why_it_failed: "The helper computed terminal from status but the branch did not explicitly guard status before passing it to formatStatus."
+      what_changed: "Changed the terminal branch to require both terminal and status before formatting."
+      how_it_was_verified: "Re-ran tests/web/test_run_inspector_status_policy.py (16 passed) and npm.cmd run build passed."
+      added_eval_or_badcase: "tests/web/test_run_inspector_status_policy.py::test_run_inspector_gateway_controls_follow_run_state_and_events"
       blocker: false
     - trigger: redaction_failure
       task_id: HRIGF-05
