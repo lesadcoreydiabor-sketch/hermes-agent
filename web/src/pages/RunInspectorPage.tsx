@@ -92,6 +92,7 @@ import {
   describeDesktopShellSource,
   describeDesktopShellStatus,
   getDesktopShellNextCommand,
+  getDesktopShellUrl,
   type RunInspectorDesktopStatusState,
 } from "@/pages/runInspectorDesktopStatus";
 import {
@@ -1235,7 +1236,9 @@ function DesktopShellStatusCard({
   const display = describeDesktopShellStatus(state, status, error);
   const nextAction = describeDesktopShellNextAction(status);
   const nextCommand = getDesktopShellNextCommand(status);
+  const desktopUrl = getDesktopShellUrl(status);
   const [copyState, setCopyState] = useState<"idle" | "copied" | "failed">("idle");
+  const [urlCopyState, setUrlCopyState] = useState<"idle" | "copied" | "failed">("idle");
   const handleCopyNextCommand = useCallback(() => {
     if (!nextCommand) {
       return;
@@ -1250,9 +1253,27 @@ function DesktopShellStatusCard({
       .catch(() => setCopyState("failed"));
   }, [nextCommand]);
 
+  const handleCopyDesktopUrl = useCallback(() => {
+    if (!desktopUrl) {
+      return;
+    }
+    if (!navigator.clipboard) {
+      setUrlCopyState("failed");
+      return;
+    }
+    navigator.clipboard
+      .writeText(desktopUrl)
+      .then(() => setUrlCopyState("copied"))
+      .catch(() => setUrlCopyState("failed"));
+  }, [desktopUrl]);
+
   useEffect(() => {
     setCopyState("idle");
   }, [nextCommand]);
+
+  useEffect(() => {
+    setUrlCopyState("idle");
+  }, [desktopUrl]);
 
   useEffect(() => {
     if (copyState === "idle") {
@@ -1261,6 +1282,14 @@ function DesktopShellStatusCard({
     const timeout = window.setTimeout(() => setCopyState("idle"), 1500);
     return () => window.clearTimeout(timeout);
   }, [copyState]);
+
+  useEffect(() => {
+    if (urlCopyState === "idle") {
+      return undefined;
+    }
+    const timeout = window.setTimeout(() => setUrlCopyState("idle"), 1500);
+    return () => window.clearTimeout(timeout);
+  }, [urlCopyState]);
 
   return (
     <Card>
@@ -1304,7 +1333,28 @@ function DesktopShellStatusCard({
           <DetailRow label="Started" value={formatDisplayValue(status?.started_at ? formatDateTime(status.started_at) : null, "Unknown")} />
           <DetailRow label="Host" value={formatDisplayValue(status?.host)} />
           <DetailRow label="Route" value={formatDisplayValue(status?.route)} />
-          <DetailRow label="URL" value={formatDisplayValue(status?.url)} />
+          <DetailRow
+            label="URL"
+            value={formatDisplayValue(desktopUrl)}
+            action={
+              desktopUrl ? (
+                <Button
+                  type="button"
+                  size="sm"
+                  outlined
+                  aria-label="Copy desktop URL"
+                  onClick={handleCopyDesktopUrl}
+                  prefix={<Copy className="h-3 w-3" />}
+                >
+                  {urlCopyState === "copied"
+                    ? "Copied"
+                    : urlCopyState === "failed"
+                      ? "Copy failed"
+                      : "Copy URL"}
+                </Button>
+              ) : null
+            }
+          />
           <DetailRow
             label="Next"
             value={formatDisplayValue(nextAction, "None")}

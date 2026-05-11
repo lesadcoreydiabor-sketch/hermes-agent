@@ -55,6 +55,11 @@ export function getDesktopShellNextCommand(
   return command || null;
 }
 
+export function getDesktopShellUrl(status: RunInspectorDesktopStatus | null): string | null {
+  const url = status?.url?.trim();
+  return url || null;
+}
+
 export function describeDesktopShellAttentionLevel(
   status: RunInspectorDesktopStatus | null,
 ): string {

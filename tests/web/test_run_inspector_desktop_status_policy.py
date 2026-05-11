@@ -109,6 +109,9 @@ def test_run_inspector_desktop_status_formats_next_action_row() -> None:
             const command = desktopStatus.getDesktopShellNextCommand({
               next_command: " hermes desktop --port 9222 ",
             });
+            const url = desktopStatus.getDesktopShellUrl({
+              url: " http://127.0.0.1:9222/run-inspector ",
+            });
             const commandOnly = desktopStatus.describeDesktopShellNextAction({
               next_action: null,
               next_command: "hermes desktop --status",
@@ -119,14 +122,17 @@ def test_run_inspector_desktop_status_formats_next_action_row() -> None:
             const emptyAttention = desktopStatus.describeDesktopShellAttentionLevel({});
             const empty = desktopStatus.describeDesktopShellNextAction({});
             const noCommand = desktopStatus.getDesktopShellNextCommand({});
+            const noUrl = desktopStatus.getDesktopShellUrl({});
             console.log(JSON.stringify({
               action,
               command,
+              url,
               commandOnly,
               attention,
               emptyAttention,
               empty,
               noCommand,
+              noUrl,
             }));
             """
         )
@@ -135,11 +141,13 @@ def test_run_inspector_desktop_status_formats_next_action_row() -> None:
     assert payload == {
         "action": "Reuse compatible dashboard: hermes desktop --port 9222",
         "command": "hermes desktop --port 9222",
+        "url": "http://127.0.0.1:9222/run-inspector",
         "commandOnly": "hermes desktop --status",
         "attention": "Warning",
         "emptyAttention": "Unknown",
         "empty": None,
         "noCommand": None,
+        "noUrl": None,
     }
 
 
@@ -151,9 +159,12 @@ def test_run_inspector_desktop_card_renders_next_action_row() -> None:
     assert "describeDesktopShellNextAction" in page_source
     assert "describeDesktopShellAttentionLevel" in page_source
     assert "getDesktopShellNextCommand" in page_source
+    assert "getDesktopShellUrl" in page_source
     assert 'label="Health reason"' in page_source
     assert 'formatDisplayValue(status?.health_reason, "Unknown")' in page_source
     assert 'label="Attention"' in page_source
+    assert 'aria-label="Copy desktop URL"' in page_source
+    assert "writeText(desktopUrl)" in page_source
     assert 'label="Next"' in page_source
     assert 'formatDisplayValue(nextAction, "None")' in page_source
     assert 'aria-label="Copy desktop next command"' in page_source
