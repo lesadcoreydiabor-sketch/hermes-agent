@@ -62,10 +62,13 @@ import {
 } from "@/pages/runInspectorEventTimeline";
 import {
   describeGatewayRunDetail,
+  describeGatewayRunList,
   describeGatewayRunControlState,
   findLatestPendingApprovalRunId,
   type GatewayRunControlState,
   type GatewayRunDetailState,
+  type GatewayRunListFilter,
+  type GatewayRunListSummary,
 } from "@/pages/runInspectorGatewayControls";
 
 type BadgeTone = "success" | "warning" | "destructive" | "secondary" | "outline";
@@ -97,6 +100,8 @@ export default function RunInspectorPage() {
   const [gatewayForwarderError, setGatewayForwarderError] = useState<string | null>(null);
   const [gatewayForwarderBusy, setGatewayForwarderBusy] = useState(false);
   const [gatewayRuns, setGatewayRuns] = useState<RunInspectorGatewayRun[]>([]);
+  const [gatewayRunFilter, setGatewayRunFilter] =
+    useState<GatewayRunListFilter>("all");
   const [gatewayRunsError, setGatewayRunsError] = useState<string | null>(null);
   const [gatewayRunsBusy, setGatewayRunsBusy] = useState(false);
   const [gatewayLaunchInput, setGatewayLaunchInput] = useState(
@@ -119,6 +124,11 @@ export default function RunInspectorPage() {
     events: eventStream.events,
     recentRuns: gatewayRuns,
     runId: gatewayRunId,
+  });
+  const gatewayRunList = describeGatewayRunList({
+    events: eventStream.events,
+    filter: gatewayRunFilter,
+    recentRuns: gatewayRuns,
   });
   const pendingApprovalRunId = findLatestPendingApprovalRunId({
     events: eventStream.events,
@@ -401,6 +411,7 @@ export default function RunInspectorPage() {
               launchInput={gatewayLaunchInput}
               onRefresh={refreshGatewayFollowStatus}
               onRefreshRuns={refreshGatewayRuns}
+              onRunFilterChange={setGatewayRunFilter}
               onLaunchInputChange={setGatewayLaunchInput}
               onLaunchSubmit={handleGatewayLaunchSubmit}
               onApprovalDeny={() => void respondGatewayApproval("deny")}
@@ -408,6 +419,8 @@ export default function RunInspectorPage() {
               onRunIdChange={handleGatewayRunIdChange}
               onStop={stopGatewayRun}
               recentRuns={gatewayRuns}
+              runFilter={gatewayRunFilter}
+              runList={gatewayRunList}
               recentRunsBusy={gatewayRunsBusy}
               recentRunsError={gatewayRunsError}
               onSubmit={handleGatewayFollowSubmit}
@@ -684,6 +697,7 @@ function GatewayRunFollowCard({
   onApprovalOnce,
   onRefresh,
   onRefreshRuns,
+  onRunFilterChange,
   onLaunchInputChange,
   onLaunchSubmit,
   onRunIdChange,
@@ -693,6 +707,8 @@ function GatewayRunFollowCard({
   recentRunsError,
   onSubmit,
   runId,
+  runFilter,
+  runList,
 }: {
   busy: boolean;
   controlBusy: "stop" | "allow" | "deny" | null;
@@ -708,6 +724,7 @@ function GatewayRunFollowCard({
   onApprovalOnce: () => void;
   onRefresh: () => void;
   onRefreshRuns: () => void;
+  onRunFilterChange: (value: GatewayRunListFilter) => void;
   onLaunchInputChange: (value: string) => void;
   onLaunchSubmit: (event: FormEvent<HTMLFormElement>) => void;
   onRunIdChange: (value: string) => void;
@@ -717,6 +734,8 @@ function GatewayRunFollowCard({
   recentRunsError: string | null;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
   runId: string;
+  runFilter: GatewayRunListFilter;
+  runList: GatewayRunListSummary;
 }) {
   const display = describeGatewayForwarder(forwarder);
   const canSubmit = runId.trim().length > 0 && !busy;
@@ -877,29 +896,55 @@ function GatewayRunFollowCard({
         ) : null}
 
         {recentRuns.length > 0 ? (
+          <GatewayRunFilterControl
+            filter={runFilter}
+            onChange={onRunFilterChange}
+            summary={runList}
+          />
+        ) : null}
+
+        {recentRuns.length > 0 && runList.items.length === 0 ? (
+          <p className="border border-border bg-secondary/20 px-3 py-4 text-sm text-muted-foreground">
+            {runList.emptyLabel}
+          </p>
+        ) : null}
+
+        {runList.items.length > 0 ? (
           <div className="flex min-w-0 flex-col divide-y divide-border/70 border border-border">
-            {recentRuns.map((run) => (
-              <button
-                key={run.run_id}
-                className="grid min-w-0 gap-1 px-3 py-2 text-left transition-colors hover:bg-secondary/40 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-midground sm:grid-cols-[minmax(0,1fr)_auto]"
-                onClick={() => onRunIdChange(run.run_id)}
-                type="button"
-              >
-                <span className="min-w-0 truncate font-mono-ui text-xs">
-                  {formatDisplayValue(run.run_id)}
-                </span>
-                <span className="flex min-w-0 flex-wrap items-center gap-2">
-                  <Badge tone={gatewayRunTone(run)} className="w-fit text-[10px]">
-                    {formatDisplayValue(run.status)}
-                  </Badge>
-                  {run.last_event ? (
-                    <span className="truncate text-[10px] text-muted-foreground">
-                      {formatDisplayValue(run.last_event)}
-                    </span>
-                  ) : null}
-                </span>
-              </button>
-            ))}
+            {runList.items.map((item) => {
+              const run = item.run;
+              const selected = run.run_id === runId.trim();
+              return (
+                <button
+                  key={run.run_id}
+                  className={cn(
+                    "grid min-w-0 gap-1 px-3 py-2 text-left transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-midground sm:grid-cols-[minmax(0,1fr)_auto]",
+                    selected ? "bg-secondary/60" : "hover:bg-secondary/40",
+                  )}
+                  onClick={() => onRunIdChange(run.run_id)}
+                  type="button"
+                >
+                  <span className="min-w-0 truncate font-mono-ui text-xs">
+                    {formatDisplayValue(run.run_id)}
+                  </span>
+                  <span className="flex min-w-0 flex-wrap items-center gap-2">
+                    <Badge tone={BADGE_TONE[item.tone]} className="w-fit text-[10px]">
+                      {formatDisplayValue(run.status)}
+                    </Badge>
+                    {item.latestEvent ? (
+                      <span className="truncate text-[10px] text-muted-foreground">
+                        {formatDisplayValue(item.latestEvent)}
+                      </span>
+                    ) : null}
+                    {item.attention ? (
+                      <Badge tone="warning" className="w-fit text-[10px]">
+                        Needs action
+                      </Badge>
+                    ) : null}
+                  </span>
+                </button>
+              );
+            })}
           </div>
         ) : null}
 
@@ -954,6 +999,52 @@ function GatewayRunFollowCard({
         ) : null}
       </CardContent>
     </Card>
+  );
+}
+
+const GATEWAY_RUN_FILTERS: Array<{
+  countKey: keyof GatewayRunListSummary["counts"];
+  label: string;
+  value: GatewayRunListFilter;
+}> = [
+  { countKey: "all", label: "All", value: "all" },
+  { countKey: "attention", label: "Needs action", value: "attention" },
+  { countKey: "active", label: "Active", value: "active" },
+  { countKey: "terminal", label: "Done", value: "terminal" },
+];
+
+function GatewayRunFilterControl({
+  filter,
+  onChange,
+  summary,
+}: {
+  filter: GatewayRunListFilter;
+  onChange: (value: GatewayRunListFilter) => void;
+  summary: GatewayRunListSummary;
+}) {
+  return (
+    <div className="grid min-w-0 gap-2 sm:grid-cols-4">
+      {GATEWAY_RUN_FILTERS.map((item) => {
+        const selected = filter === item.value;
+        return (
+          <Button
+            key={item.value}
+            aria-pressed={selected}
+            type="button"
+            size="sm"
+            outlined={!selected}
+            onClick={() => onChange(item.value)}
+          >
+            <span className="flex min-w-0 items-center justify-center gap-2">
+              <span className="truncate">{item.label}</span>
+              <Badge tone={selected ? "secondary" : "outline"} className="text-[10px]">
+                {summary.counts[item.countKey]}
+              </Badge>
+            </span>
+          </Button>
+        );
+      })}
+    </div>
   );
 }
 
@@ -1208,19 +1299,6 @@ function mcpDetail(item: RunInspectorMcpHealth): string {
     ? `${item.affected_tools.length} tools`
     : "No affected tools";
   return item.last_error_class ? `${item.last_error_class} - ${affected}` : affected;
-}
-
-function gatewayRunTone(run: RunInspectorGatewayRun): BadgeTone {
-  if (run.has_error || run.status === "failed") {
-    return "destructive";
-  }
-  if (run.status === "completed") {
-    return "success";
-  }
-  if (run.status === "running" || run.status === "queued") {
-    return "secondary";
-  }
-  return "outline";
 }
 
 function describeGatewayForwarder(

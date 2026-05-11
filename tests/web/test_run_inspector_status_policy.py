@@ -418,8 +418,10 @@ def test_run_inspector_page_exposes_gateway_follow_without_gateway_secret() -> N
     assert "api.followGatewayRunEvents" in page_source
     assert "api.getGatewayRunEventForwarder" in page_source
     assert "describeGatewayRunDetail" in page_source
+    assert "describeGatewayRunList" in page_source
     assert "describeGatewayRunControlState" in page_source
     assert "findLatestPendingApprovalRunId" in page_source
+    assert "gatewayRunFilter" in page_source
     assert "gatewayRunSelectionMode" in page_source
     assert "pendingApprovalRunId" in page_source
     assert "handleGatewayRunIdChange" in page_source
@@ -433,6 +435,8 @@ def test_run_inspector_page_exposes_gateway_follow_without_gateway_secret() -> N
     assert "Deny" in page_source
     assert "Stop" in page_source
     assert "Selected Run" in page_source
+    assert "Needs action" in page_source
+    assert "Done" in page_source
     assert "Last Detail" in page_source
     assert "Pending request" in page_source
     assert "HERMES_RUN_INSPECTOR_GATEWAY_KEY" not in page_source
@@ -713,6 +717,73 @@ def test_run_inspector_gateway_controls_describes_selected_run_detail():
     assert payload["manual"]["tone"] == "muted"
     assert payload["failed"]["tone"] == "destructive"
     assert payload["failed"]["hasError"] is True
+
+
+def test_run_inspector_gateway_controls_filters_recent_run_list():
+    payload = run_gateway_controls_script(
+        textwrap.dedent(
+            """
+            const run = (run_id, status, updated_at, extra = {}) => ({
+              run_id,
+              status,
+              created_at: updated_at - 10,
+              updated_at,
+              session_id: null,
+              model: null,
+              last_event: status === "waiting_for_approval" ? "approval.request" : `run.${status}`,
+              has_error: status === "failed",
+              ...extra,
+            });
+            const recentRuns = [
+              run("run_wait", "waiting_for_approval", 300),
+              run("run_active", "running", 200),
+              run("run_done", "completed", 100),
+              run("run_failed", "failed", 400),
+            ];
+            const events = [
+              { id: 1, type: "approval.request", source: "gateway_run", timestamp: "2026-05-11T00:00:00Z", run_id: "run_wait", session_id: null, tool: "shell", status: "waiting", message: null },
+            ];
+            const all = controls.describeGatewayRunList({ events, recentRuns, filter: "all" });
+            const attention = controls.describeGatewayRunList({ events, recentRuns, filter: "attention" });
+            const active = controls.describeGatewayRunList({ events, recentRuns, filter: "active" });
+            const terminal = controls.describeGatewayRunList({ events, recentRuns, filter: "terminal" });
+            const emptyAttention = controls.describeGatewayRunList({
+              events: [],
+              recentRuns: [run("run_active_only", "running", 10)],
+              filter: "attention",
+            });
+            console.log(JSON.stringify({
+              allIds: all.items.map((item) => item.run.run_id),
+              attentionIds: attention.items.map((item) => item.run.run_id),
+              activeIds: active.items.map((item) => item.run.run_id),
+              terminalIds: terminal.items.map((item) => item.run.run_id),
+              counts: all.counts,
+              firstTone: all.items[0].tone,
+              emptyLabel: emptyAttention.emptyLabel,
+              emptyLength: emptyAttention.items.length,
+            }));
+            """
+        )
+    )
+
+    assert payload["counts"] == {
+        "active": 2,
+        "all": 4,
+        "attention": 2,
+        "terminal": 2,
+    }
+    assert payload["allIds"] == [
+        "run_failed",
+        "run_wait",
+        "run_active",
+        "run_done",
+    ]
+    assert payload["attentionIds"] == ["run_failed", "run_wait"]
+    assert payload["activeIds"] == ["run_wait", "run_active"]
+    assert payload["terminalIds"] == ["run_failed", "run_done"]
+    assert payload["firstTone"] == "destructive"
+    assert payload["emptyLabel"] == "No runs need attention"
+    assert payload["emptyLength"] == 0
 
 
 def test_run_inspector_events_hook_uses_tokened_websocket_and_auth_stop() -> None:

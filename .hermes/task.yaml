@@ -583,6 +583,26 @@ tasks:
     status: completed
     risk: medium
 
+  - id: HRIGF-13
+    title: Add recent gateway run focus filters
+    description: Add display-only filters for recent gateway runs so approvals, active runs, and terminal runs are easier to scan.
+    depends_on:
+      - HRIGF-12
+    acceptance:
+      - Recent run list exposes All, Needs action, Active, and Done filters with counts.
+      - Needs action includes pending approvals and failed/error runs.
+      - Active includes queued, running, waiting, and waiting_for_approval runs.
+      - Done includes terminal completed, failed, cancelled, or stopped runs.
+      - Changing filters does not follow, launch, stop, approve, deny, refetch, or mutate gateway state.
+      - Filter counts, ordering, and empty states are covered by frontend tests.
+    verify:
+      - venv/Scripts/python.exe -m pytest tests/web/test_run_inspector_status_policy.py -q -o addopts=
+      - cd web; npm.cmd run build
+      - Playwright smoke for /run-inspector
+      - git diff --check for HRIGF run-list-filter files
+    status: completed
+    risk: medium
+
 risk_flags:
   destructive_file_change:
     pause: true
@@ -1024,6 +1044,17 @@ progress_report:
       verification_result: "passed: venv/Scripts/python.exe -m pytest tests/web/test_run_inspector_status_policy.py -q -o addopts= (18 passed); passed: cd web; npm.cmd run build; Playwright smoke passed for /run-inspector selected-run detail on desktop and narrow viewports without horizontal overflow"
       blockers: []
       next_step: "Run Inspector P12 selected gateway run detail complete; stage/commit/push, or move to gateway run filtering and desktop shell packaging decision."
+    - task_id: HRIGF-13
+      status: completed
+      changed_files:
+        - web/src/pages/RunInspectorPage.tsx
+        - web/src/pages/runInspectorGatewayControls.ts
+        - tests/web/test_run_inspector_status_policy.py
+        - docs/plans/hermes-run-inspector-event-integration-prd.md
+        - .hermes/task.yaml
+      verification_result: "passed: venv/Scripts/python.exe -m pytest tests/web/test_run_inspector_status_policy.py -q -o addopts= (19 passed); passed: cd web; npm.cmd run build; Playwright smoke passed for /run-inspector recent-run filters on desktop and narrow viewports without horizontal overflow"
+      blockers: []
+      next_step: "Run Inspector P13 recent gateway run focus filters complete; stage/commit/push, or move to desktop shell packaging decision and run-notification behavior."
 
 failure_review:
   enabled: true
@@ -1112,4 +1143,12 @@ failure_review:
       what_changed: "Re-ran the build from web and restarted the local dashboard before using a text locator wait for Gateway Run Follow."
       how_it_was_verified: "Re-ran venv/Scripts/python.exe -m pytest tests/web/test_run_inspector_status_policy.py -q -o addopts=, cd web; npm.cmd run build, and Playwright desktop/narrow smoke; all passed."
       added_eval_or_badcase: "P11 smoke now waits for Gateway Run Follow before asserting controls and overflow."
+      blocker: false
+    - trigger: failed_verification
+      task_id: HRIGF-13
+      what_happened: "Initial Playwright filter smoke waited on exact text run_wait, but that text appeared in both the Selected Run detail and recent-runs row."
+      why_it_failed: "The smoke used a broad text locator after P12 introduced a second safe display of the selected run id."
+      what_changed: "Changed the smoke to target recent-run row buttons by accessible names that include run id and status."
+      how_it_was_verified: "Re-ran the Playwright desktop/narrow smoke with mocked recent gateway runs; all filters passed and no horizontal overflow was detected."
+      added_eval_or_badcase: "P13 smoke scopes run-list assertions to row buttons instead of body text."
       blocker: false

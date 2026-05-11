@@ -253,6 +253,21 @@ The Gateway Run Follow card should show a compact selected-run detail block deri
 
 This must remain a display-only slice. It must not fetch raw gateway output, raw prompts, tool arguments, command output, environment values, credentials, diffs, stack traces, or file bodies. Unknown manually entered run ids should render as manual selections rather than errors.
 
+## P13 Recent Gateway Run Focus Filters
+
+The next dashboard slice should make recent gateway runs scannable when the list contains a mix of approvals, active work, and terminal runs.
+
+The Gateway Run Follow card should add a compact filter control for:
+
+- `All`
+- `Needs action`
+- `Active`
+- `Done`
+
+The list should sort higher-priority runs first while preserving safe summaries only. `Needs action` should include pending approvals and failed/error runs. `Active` should include queued, running, waiting, and waiting-for-approval runs. `Done` should include terminal completed, failed, cancelled, or stopped runs.
+
+This slice must remain display-only. Changing the filter must not follow, launch, stop, approve, deny, refetch, or mutate gateway state. Selecting a row remains the only list action.
+
 ## Acceptance
 
 - Recent events API returns an envelope with `ok`, `events`, and `refreshed_at`.
@@ -271,6 +286,7 @@ This must remain a display-only slice. It must not fetch raw gateway output, raw
 - Pending approval detail shows only safe, normalized summary fields.
 - The page auto-selects the newest pending approval only while selection is automatic, and never responds to the approval without an explicit click.
 - The selected gateway run detail shows only safe summary/event fields and handles manual unknown run ids without crashing.
+- Recent gateway runs can be filtered by all, needs-action, active, and done states without triggering gateway write actions.
 
 ## Risks
 
@@ -294,6 +310,7 @@ This must remain a display-only slice. It must not fetch raw gateway output, raw
 - Frontend tests for pending approval detail extraction and clearing.
 - Frontend tests for pending approval auto-selection, stale approval clearing, and manual selection preservation.
 - Frontend tests for selected-run detail derivation from recent summaries and events.
+- Frontend tests for recent gateway run filter counts, ordering, and empty states.
 - Frontend tests for hook error classification, event formatting, and overflow/privacy guards.
 - Frontend tests that the Run Inspector page exposes gateway follow controls without gateway secret names or values.
 - Gateway route tests that recent run summaries omit output/error payloads.

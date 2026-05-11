@@ -38,9 +38,41 @@ export interface GatewayRunDetailState {
   updatedAt: string | null;
 }
 
+export type GatewayRunListFilter = "active" | "all" | "attention" | "terminal";
+
+export interface GatewayRunListCounts {
+  active: number;
+  all: number;
+  attention: number;
+  terminal: number;
+}
+
+export interface GatewayRunListItem {
+  active: boolean;
+  attention: boolean;
+  eventCount: number;
+  latestEvent: string | null;
+  message: string;
+  run: RunInspectorGatewayRun;
+  terminal: boolean;
+  tone: Tone;
+}
+
+export interface GatewayRunListSummary {
+  counts: GatewayRunListCounts;
+  emptyLabel: string;
+  filter: GatewayRunListFilter;
+  items: GatewayRunListItem[];
+}
+
 interface GatewayRunSelectionCandidate {
   runId: string;
   score: number;
+}
+
+interface GatewayRunListWorkingItem extends GatewayRunListItem {
+  priority: number;
+  sortScore: number;
 }
 
 const ACTIVE_STATUSES = new Set([
@@ -175,6 +207,76 @@ export function describeGatewayRunDetail({
     status,
     tone: detailTone(status, run?.has_error ?? false),
     updatedAt: secondsToIso(run?.updated_at ?? null),
+  };
+}
+
+export function describeGatewayRunList({
+  events,
+  filter,
+  recentRuns,
+}: {
+  events: RunInspectorEvent[];
+  filter: GatewayRunListFilter;
+  recentRuns: RunInspectorGatewayRun[];
+}): GatewayRunListSummary {
+  const workingItems = recentRuns.map((run, index): GatewayRunListWorkingItem => {
+    const controlState = describeGatewayRunControlState({
+      events,
+      recentRuns,
+      runId: run.run_id,
+    });
+    const detail = describeGatewayRunDetail({
+      events,
+      recentRuns,
+      runId: run.run_id,
+    });
+    const status = normalize(run.status);
+    const terminal = status ? TERMINAL_STATUSES.has(status) : false;
+    const active =
+      controlState.approvalPending ||
+      controlState.stopHighlighted ||
+      (status ? ACTIVE_STATUSES.has(status) : false);
+    const attention =
+      controlState.approvalPending ||
+      run.has_error ||
+      status === "failed" ||
+      normalize(run.last_event) === "approval.request";
+    const priority = attention ? 0 : active ? 1 : terminal ? 2 : 3;
+    return {
+      active,
+      attention,
+      eventCount: detail?.eventCount ?? 0,
+      latestEvent: detail?.lastEvent ?? run.last_event,
+      message: controlState.message,
+      priority,
+      run,
+      sortScore: scoreRunSummary(run, index),
+      terminal,
+      tone: attention && !run.has_error && status !== "failed"
+        ? "warning"
+        : detailTone(run.status, run.has_error),
+    };
+  });
+
+  const counts = {
+    active: workingItems.filter((item) => item.active).length,
+    all: workingItems.length,
+    attention: workingItems.filter((item) => item.attention).length,
+    terminal: workingItems.filter((item) => item.terminal).length,
+  };
+  const items = workingItems
+    .filter((item) => matchesRunListFilter(item, filter))
+    .sort(
+      (left, right) =>
+        left.priority - right.priority || right.sortScore - left.sortScore,
+    )
+    .map(({ priority: _priority, sortScore: _sortScore, ...item }) => item);
+
+  return {
+    counts,
+    emptyLabel: emptyRunListLabel(filter),
+    filter,
+    items,
   };
 }
 
@@ -353,6 +455,35 @@ function detailTone(status: string, hasError: boolean): Tone {
     return "primary";
   }
   return "muted";
+}
+
+function matchesRunListFilter(
+  item: GatewayRunListItem,
+  filter: GatewayRunListFilter,
+): boolean {
+  if (filter === "all") {
+    return true;
+  }
+  if (filter === "attention") {
+    return item.attention;
+  }
+  if (filter === "active") {
+    return item.active;
+  }
+  return item.terminal;
+}
+
+function emptyRunListLabel(filter: GatewayRunListFilter): string {
+  if (filter === "attention") {
+    return "No runs need attention";
+  }
+  if (filter === "active") {
+    return "No active runs";
+  }
+  if (filter === "terminal") {
+    return "No completed or failed runs";
+  }
+  return "No recent gateway runs";
 }
 
 function formatStatus(value: string): string {
