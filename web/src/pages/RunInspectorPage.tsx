@@ -1330,6 +1330,7 @@ function DesktopShellStatusCard({
           <DetailRow label="Attention" value={describeDesktopShellAttentionLevel(status)} />
           <DetailRow label="PID" value={formatDisplayValue(status?.pid ? String(status.pid) : null, "None")} />
           <DetailRow label="PID Status" value={formatDisplayValue(status?.pid_status)} />
+          <DetailRow label="PID reason" value={formatDisplayValue(status?.pid_reason, "Unknown")} />
           <DetailRow label="Started" value={formatDisplayValue(status?.started_at ? formatDateTime(status.started_at) : null, "Unknown")} />
           <DetailRow label="Host" value={formatDisplayValue(status?.host)} />
           <DetailRow label="Route" value={formatDisplayValue(status?.route)} />

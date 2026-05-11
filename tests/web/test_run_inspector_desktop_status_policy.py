@@ -163,6 +163,8 @@ def test_run_inspector_desktop_card_renders_next_action_row() -> None:
     assert 'label="Health reason"' in page_source
     assert 'formatDisplayValue(status?.health_reason, "Unknown")' in page_source
     assert 'label="Attention"' in page_source
+    assert 'label="PID reason"' in page_source
+    assert 'formatDisplayValue(status?.pid_reason, "Unknown")' in page_source
     assert 'aria-label="Copy desktop URL"' in page_source
     assert "writeText(desktopUrl)" in page_source
     assert 'label="Next"' in page_source
