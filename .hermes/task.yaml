@@ -8,6 +8,7 @@ related_prds:
   - docs/plans/hermes-run-inspector-desktop-panel-prd.md
   - docs/plans/hermes-run-inspector-event-integration-prd.md
   - docs/plans/hermes-run-inspector-desktop-shell-prd.md
+  - docs/plans/hermes-desktop-runtime-decision.md
 owner: product-manager
 mode: implementation
 
@@ -657,6 +658,23 @@ tasks:
     status: completed
     risk: medium
 
+  - id: HRIDS-04
+    title: Decide desktop runtime packaging path
+    description: Decide whether the next desktop phase should continue browser launcher lifecycle work or add Python webview, Tauri, or Electron packaging.
+    depends_on:
+      - HRIDS-03
+    acceptance:
+      - Decision compares browser launcher, Python webview, Tauri, and Electron.
+      - Decision covers install footprint, Windows compatibility, CI complexity, tray support, update model, security, and maintenance cost.
+      - Decision references HERMES current dashboard lifecycle and adjacent Hermes desktop/web UI lessons.
+      - Decision explicitly blocks packaging implementation until a separate runtime PRD is accepted.
+      - Decision identifies the next browser-launcher reliability slice.
+    verify:
+      - git diff --check -- docs/plans/hermes-desktop-runtime-decision.md .hermes/task.yaml
+      - venv/Scripts/python.exe -c "import yaml; yaml.safe_load(open('.hermes/task.yaml', encoding='utf-8'))"
+    status: completed
+    risk: low
+
 risk_flags:
   destructive_file_change:
     pause: true
@@ -1136,6 +1154,14 @@ progress_report:
       verification_result: "passed: venv/Scripts/python.exe -m pytest tests/hermes_cli/test_desktop_shell.py tests/hermes_cli/test_dashboard_lifecycle_flags.py tests/hermes_cli/test_update_stale_dashboard.py -q -o addopts= (39 passed, 5 skipped); passed: venv/Scripts/python.exe -c yaml.safe_load task.yaml; passed: git diff --check for HRIDS-03 files; smoke passed: venv/Scripts/python.exe -m hermes_cli.main desktop --status; GitNexus detect_changes risk low; cmd_dashboard upstream impact MEDIUM and covered by dashboard lifecycle tests"
       blockers: []
       next_step: "HRIDS-03 shell-owned status/stop complete; run YAML/diff/GitNexus checks, stage/commit/push, then evaluate whether HRIDS-04 runtime packaging decision memo should stay browser-launcher-first."
+    - task_id: HRIDS-04
+      status: completed
+      changed_files:
+        - docs/plans/hermes-desktop-runtime-decision.md
+        - .hermes/task.yaml
+      verification_result: "passed: git diff --check for HRIDS-04 docs/task files; passed: venv/Scripts/python.exe -c yaml.safe_load task.yaml; GitNexus detect_changes reported risk low and no affected processes"
+      blockers: []
+      next_step: "HRIDS-04 runtime decision memo drafted; verify, commit, and continue with browser-launcher reliability slice."
 
 failure_review:
   enabled: true
