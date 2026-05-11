@@ -62,18 +62,38 @@ export function describeDesktopShellStatus(
     return { label: "Desktop unknown", message: "No status loaded", tone: "muted" };
   }
   if (status.record_present && status.pid_status === "running" && status.health === "ok") {
-    return { label: "Desktop shell running", message: "Shell-owned dashboard", tone: "success" };
+    return {
+      label: "Desktop shell running",
+      message: status.next_action || "Shell-owned dashboard",
+      tone: "success",
+    };
   }
   if (status.compatible_dashboard && status.health === "ok") {
-    return { label: "Dashboard reusable", message: "No desktop runtime record", tone: "primary" };
+    return {
+      label: "Dashboard reusable",
+      message: status.next_action || "No desktop runtime record",
+      tone: "primary",
+    };
   }
   if (status.record_present && status.pid_status === "stale") {
-    return { label: "Desktop record stale", message: status.pid_reason, tone: "warning" };
+    return {
+      label: "Desktop record stale",
+      message: status.next_action || status.pid_reason,
+      tone: "warning",
+    };
   }
   if (status.health !== "ok") {
-    return { label: "Dashboard unavailable", message: status.health_reason, tone: "warning" };
+    return {
+      label: "Dashboard unavailable",
+      message: status.next_action || status.health_reason,
+      tone: "warning",
+    };
   }
-  return { label: "Desktop shell ready", message: "Dashboard reachable", tone: "success" };
+  return {
+    label: "Desktop shell ready",
+    message: status.next_action || "Dashboard reachable",
+    tone: "success",
+  };
 }
 
 export function describeDesktopShellHeaderSignal(

@@ -1,0 +1,98 @@
+from __future__ import annotations
+
+import json
+import subprocess
+import textwrap
+from pathlib import Path
+
+
+ROOT = Path(__file__).resolve().parents[2]
+WEB_DIR = ROOT / "web"
+
+
+def run_desktop_status_script(script: str) -> dict:
+    node_script = f"""
+const fs = require("node:fs");
+const vm = require("node:vm");
+const ts = require("typescript");
+const source = fs.readFileSync("src/pages/runInspectorDesktopStatus.ts", "utf8");
+const output = ts.transpileModule(source, {{
+  compilerOptions: {{
+    module: ts.ModuleKind.CommonJS,
+    target: ts.ScriptTarget.ES2022,
+  }},
+}}).outputText;
+const moduleRef = {{ exports: {{}} }};
+const sandbox = {{ module: moduleRef, exports: moduleRef.exports, require, console }};
+vm.runInNewContext(output, sandbox, {{ filename: "runInspectorDesktopStatus.js" }});
+const desktopStatus = moduleRef.exports;
+{script}
+"""
+    completed = subprocess.run(
+        ["node", "-e", node_script],
+        cwd=WEB_DIR,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    return json.loads(completed.stdout)
+
+
+def test_run_inspector_desktop_status_prefers_next_action_message() -> None:
+    payload = run_desktop_status_script(
+        textwrap.dedent(
+            """
+            const base = {
+              ok: true,
+              record_present: false,
+              runtime_record_cleared: false,
+              pid: null,
+              pid_status: "none",
+              pid_reason: "no_record",
+              host: "127.0.0.1",
+              port: 9222,
+              route: "/run-inspector",
+              url: "http://127.0.0.1:9222/run-inspector",
+              started_at: null,
+              health: "ok",
+              health_reason: "ok",
+              compatible_dashboard: true,
+              attention_level: "info",
+              next_action: "Reuse compatible dashboard",
+              next_command: "hermes desktop --port 9222",
+              reuse_command: "hermes desktop --port 9222",
+              manual_url: "http://127.0.0.1:9222/run-inspector",
+              stop_command: "hermes dashboard --stop",
+            };
+            const reusable = desktopStatus.describeDesktopShellStatus("ready", base);
+            const stale = desktopStatus.describeDesktopShellHeaderSignal("ready", {
+              ...base,
+              record_present: true,
+              compatible_dashboard: false,
+              pid: 99999,
+              pid_status: "stale",
+              pid_reason: "not_found",
+              health: "unavailable",
+              health_reason: "URLError",
+              attention_level: "warning",
+              next_action: "Restart desktop shell",
+              next_command: "hermes desktop --port 9119",
+              reuse_command: null,
+              manual_url: null,
+              stop_command: "hermes desktop --port 9119 --stop",
+            });
+            console.log(JSON.stringify({ reusable, stale }));
+            """
+        )
+    )
+
+    assert payload["reusable"] == {
+        "label": "Dashboard reusable",
+        "message": "Reuse compatible dashboard",
+        "tone": "primary",
+    }
+    assert payload["stale"] == {
+        "label": "Desktop attention",
+        "message": "Restart desktop shell",
+        "tone": "warning",
+    }

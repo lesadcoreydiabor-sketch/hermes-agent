@@ -148,6 +148,13 @@ def build_desktop_status_payload(
 
     reachable, reason = probe_dashboard_status(host, resolved_port)
     compatible_dashboard = not record and reachable
+    next_action, next_command, attention_level = desktop_operator_next_action(
+        record_present=bool(record),
+        pid_status=pid_status,
+        health_ok=reachable,
+        compatible_dashboard=compatible_dashboard,
+        port=resolved_port,
+    )
     return {
         "ok": True,
         "record_present": bool(record),
@@ -163,6 +170,9 @@ def build_desktop_status_payload(
         "health": "ok" if reachable else "unavailable",
         "health_reason": reason,
         "compatible_dashboard": compatible_dashboard,
+        "attention_level": attention_level,
+        "next_action": next_action,
+        "next_command": next_command,
         "reuse_command": (
             f"hermes desktop --port {resolved_port}"
             if compatible_dashboard
@@ -177,3 +187,26 @@ def build_desktop_status_payload(
             else None
         ),
     }
+
+
+def desktop_operator_next_action(
+    *,
+    record_present: bool,
+    pid_status: str,
+    health_ok: bool,
+    compatible_dashboard: bool,
+    port: int,
+) -> tuple[str, str | None, str]:
+    """Return the safe operator action implied by desktop shell status."""
+    desktop_command = f"hermes desktop --port {port}"
+    if record_present and pid_status == "running" and health_ok:
+        return "Open Run Inspector", None, "ok"
+    if compatible_dashboard:
+        return "Reuse compatible dashboard", desktop_command, "info"
+    if record_present and pid_status == "stale":
+        return "Restart desktop shell", desktop_command, "warning"
+    if record_present and not health_ok:
+        return "Check dashboard health", f"{desktop_command} --status", "warning"
+    if not record_present and not health_ok:
+        return "Start desktop shell", desktop_command, "info"
+    return "Check desktop shell", f"{desktop_command} --status", "warning"

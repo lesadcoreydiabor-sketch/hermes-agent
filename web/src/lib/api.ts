@@ -583,6 +583,7 @@ export interface RunInspectorAttentionResponse {
 }
 
 export interface RunInspectorDesktopStatus {
+  attention_level?: "ok" | "info" | "warning" | string;
   ok: boolean;
   record_present: boolean;
   runtime_record_cleared: boolean;
@@ -597,6 +598,8 @@ export interface RunInspectorDesktopStatus {
   health: "ok" | "unavailable" | string;
   health_reason: string;
   compatible_dashboard: boolean;
+  next_action?: string | null;
+  next_command?: string | null;
   reuse_command: string | null;
   manual_url: string | null;
   stop_command: string | null;
