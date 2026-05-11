@@ -3,6 +3,7 @@ import json
 import pytest
 
 from hermes_cli.agent_task_assignment import (
+    build_agent_task_assignments_from_task_contract,
     build_agent_task_assignment,
     find_agent_task_assignment_conflicts,
     normalize_agent_task_assignment,
@@ -258,3 +259,79 @@ def test_summarize_agent_task_assignments_redacts_conflict_values() -> None:
     assert "token=secret" not in rendered
     assert "C:\\Users" not in rendered
     assert summary["conflicts"][0]["overlap"] == ["Redacted"]
+
+
+def test_build_agent_task_assignments_from_task_contract_maps_task_yaml_fields() -> None:
+    contract = {
+        "tasks": [
+            {
+                "id": "HMAMO-01",
+                "title": "Schema helper",
+                "status": "completed",
+                "agent_role": "planner",
+                "verify": ["pytest schema"],
+            },
+            {
+                "id": "HMAMO-02",
+                "title": "Summary helper",
+                "description": "Summarize assignments",
+                "status": "pending",
+                "depends_on": ["HMAMO-01"],
+                "write_scope": {"files": ["hermes_cli/agent_task_assignment.py"]},
+                "allowed_tools": {"toolsets": ["shell"], "commands": ["pytest summary"]},
+                "delegate_limits": {
+                    "max_depth": 1,
+                    "max_parallel_workers": 2,
+                    "interrupt_policy": "cooperative",
+                },
+                "verify": ["pytest summary"],
+                "blockers": [],
+                "next_step": "Expose summary later",
+            },
+        ]
+    }
+
+    assignments = build_agent_task_assignments_from_task_contract(contract)
+    summary = summarize_agent_task_assignments(assignments)
+
+    assert [assignment["task_id"] for assignment in assignments] == [
+        "HMAMO-01",
+        "HMAMO-02",
+    ]
+    assert assignments[0]["role"] == "planner"
+    assert assignments[0]["status"] == "completed"
+    assert assignments[1]["status"] == "planned"
+    assert assignments[1]["dependencies"]["task_ids"] == ["HMAMO-01"]
+    assert assignments[1]["verification"]["command"] == "pytest summary"
+    assert assignments[1]["handoff_payload"]["summary"] == "Summarize assignments"
+    assert summary["ready_task_ids"] == ["HMAMO-02"]
+
+
+def test_build_agent_task_assignments_from_task_contract_skips_invalid_and_redacts() -> None:
+    contract = {
+        "tasks": [
+            {"title": "missing id"},
+            {
+                "id": "task-token=secret",
+                "title": "C:\\Users\\XQQ\\secret\\file.txt",
+                "status": "in_progress",
+                "depends_on": ["dep-ghp_1234567890"],
+                "write_scope": {"files": ["C:\\Users\\XQQ\\secret\\file.txt"]},
+                "verify": ["diff --git a/secret b/secret\n+token=secret"],
+                "next_step": "api_key=hidden",
+            },
+        ]
+    }
+
+    assignments = build_agent_task_assignments_from_task_contract(contract)
+    rendered = json.dumps(assignments, sort_keys=True)
+
+    assert len(assignments) == 1
+    assert assignments[0]["task_id"] == "Redacted"
+    assert assignments[0]["title"] == "Redacted"
+    assert assignments[0]["status"] == "running"
+    assert "token=secret" not in rendered
+    assert "ghp_1234567890" not in rendered
+    assert "C:\\Users" not in rendered
+    assert "diff --git" not in rendered
+    assert "api_key=hidden" not in rendered

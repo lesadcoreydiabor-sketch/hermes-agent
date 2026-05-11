@@ -25,6 +25,20 @@ STATUSES = frozenset(
     {"planned", "queued", "running", "blocked", "review", "completed", "failed"}
 )
 ACTIVE_STATUSES = frozenset({"planned", "queued", "running", "blocked", "review"})
+TASK_STATUS_MAP = {
+    "pending": "planned",
+    "todo": "planned",
+    "planned": "planned",
+    "queued": "queued",
+    "in_progress": "running",
+    "in-progress": "running",
+    "running": "running",
+    "blocked": "blocked",
+    "review": "review",
+    "completed": "completed",
+    "done": "completed",
+    "failed": "failed",
+}
 INTERRUPT_POLICIES = frozenset({"cooperative", "parent_owned", "manual_review"})
 CONFLICT_RESOLUTIONS = frozenset(
     {"pause_and_handoff", "reviewer_decides", "human_decides"}
@@ -137,6 +151,72 @@ def normalize_agent_task_assignment(payload: Dict[str, Any]) -> Dict[str, Any]:
         ),
         privacy_class=payload.get("privacy_class"),
     )
+
+
+def build_agent_task_assignments_from_task_contract(
+    contract: Dict[str, Any],
+) -> list[Dict[str, Any]]:
+    """Build safe assignments from a .hermes/task.yaml-like contract dict."""
+
+    if not isinstance(contract, dict):
+        return []
+    tasks = contract.get("tasks")
+    if not isinstance(tasks, list):
+        return []
+
+    assignments = []
+    for task in tasks:
+        if not isinstance(task, dict):
+            continue
+        task_id = task.get("id") or task.get("task_id")
+        title = task.get("title") or task.get("description")
+        if not task_id or not title:
+            continue
+        try:
+            assignments.append(
+                build_agent_task_assignment(
+                    task_id,
+                    title,
+                    role=task.get("agent_role") or task.get("role") or "worker",
+                    status=_task_status_to_assignment_status(task.get("status")),
+                    dependencies={
+                        "task_ids": task.get("depends_on") or task.get("dependencies") or [],
+                        "required_artifacts": task.get("required_artifacts") or [],
+                    },
+                    write_scope=(
+                        task.get("write_scope")
+                        if isinstance(task.get("write_scope"), dict)
+                        else {}
+                    ),
+                    allowed_tools=(
+                        task.get("allowed_tools")
+                        if isinstance(task.get("allowed_tools"), dict)
+                        else {}
+                    ),
+                    delegate_limits=(
+                        task.get("delegate_limits")
+                        if isinstance(task.get("delegate_limits"), dict)
+                        else {}
+                    ),
+                    verification=_verification_from_task(task),
+                    handoff_payload={
+                        "summary": task.get("description"),
+                        "changed_files": task.get("changed_files") or [],
+                        "verification_result": task.get("verification_result"),
+                        "blockers": task.get("blockers") or [],
+                        "next_step": task.get("next_step"),
+                    },
+                    conflict_policy=(
+                        task.get("conflict_policy")
+                        if isinstance(task.get("conflict_policy"), dict)
+                        else {}
+                    ),
+                    privacy_class=task.get("privacy_class"),
+                )
+            )
+        except (TypeError, ValueError):
+            continue
+    return assignments
 
 
 def find_agent_task_assignment_conflicts(
@@ -259,6 +339,28 @@ def _safe_owner(value: Dict[str, Any]) -> Dict[str, Optional[str]]:
         "parent_agent_id": _safe_identifier(value.get("parent_agent_id")),
         "human_owner": _safe_identifier(value.get("human_owner")),
     }
+
+
+def _verification_from_task(task: Dict[str, Any]) -> Dict[str, Any]:
+    verify = task.get("verify")
+    if isinstance(verify, list) and verify:
+        command = verify[0]
+    elif isinstance(verify, str):
+        command = verify
+    else:
+        command = ""
+    return {
+        "command": command,
+        "expected_signal": "verification pass" if command else "",
+        "required_before_handoff": True,
+    }
+
+
+def _task_status_to_assignment_status(value: Any) -> str:
+    status = _safe_status(value)
+    if not status:
+        return "planned"
+    return TASK_STATUS_MAP.get(status, _safe_choice(status, STATUSES, "planned"))
 
 
 def _counter_payload(counter: Counter[str], allowed: frozenset[str]) -> Dict[str, int]:

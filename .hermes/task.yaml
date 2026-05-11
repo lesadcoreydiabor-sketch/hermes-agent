@@ -1310,6 +1310,25 @@ tasks:
     status: completed
     risk: low
 
+  - id: HMAMO-03
+    title: Build assignments from task contract
+    description: Convert existing .hermes/task.yaml task entries into agent-ready assignment payloads without reading or writing files.
+    depends_on:
+      - HMAMO-01
+      - HMAMO-02
+    acceptance:
+      - Converter maps task id, title, role, status, dependencies, write scope, allowed tools, delegate limits, verification, blockers, and next step into normalized assignments.
+      - Converter maps pending or in-progress task statuses into assignment lifecycle states.
+      - Invalid task entries are skipped without exposing raw invalid content.
+      - Sensitive ids, absolute paths, diffs, verify commands, and next-step values are redacted.
+      - Converter is pure and does not read task.yaml, spawn agents, dispatch tools, write files, mutate memory, edit skills, or call remote APIs.
+    verify:
+      - venv/Scripts/python.exe -m pytest tests/runtime/test_agent_task_assignment.py -q -o addopts=
+      - venv/Scripts/python.exe -c "import yaml; yaml.safe_load(open('.hermes/task.yaml', encoding='utf-8'))"
+      - git diff --check -- hermes_cli/agent_task_assignment.py tests/runtime/test_agent_task_assignment.py .hermes/task.yaml
+    status: completed
+    risk: low
+
 risk_flags:
   destructive_file_change:
     pause: true
@@ -2166,6 +2185,15 @@ progress_report:
       verification_result: "passed: venv/Scripts/python.exe -m pytest tests/runtime/test_agent_task_assignment.py -q -o addopts= (7 passed); passed: venv/Scripts/python.exe -c yaml.safe_load task.yaml; passed: git diff --check for HMAMO-02 files"
       blockers: []
       next_step: "Add a read-only assignment source before exposing assignment summaries through Run Inspector."
+    - task_id: HMAMO-03
+      status: completed
+      changed_files:
+        - hermes_cli/agent_task_assignment.py
+        - tests/runtime/test_agent_task_assignment.py
+        - .hermes/task.yaml
+      verification_result: "passed: venv/Scripts/python.exe -m pytest tests/runtime/test_agent_task_assignment.py -q -o addopts= (9 passed); passed: venv/Scripts/python.exe -c yaml.safe_load task.yaml; passed: git diff --check for HMAMO-03 files"
+      blockers: []
+      next_step: "Expose task-contract assignment summaries through the read-only Multi-Agent Memory workbench."
 
 failure_review:
   enabled: true
