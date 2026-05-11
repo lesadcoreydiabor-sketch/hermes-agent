@@ -333,6 +333,120 @@ def summarize_agent_task_assignments(
     }
 
 
+def plan_agent_assignment_batches(
+    assignments: Iterable[Dict[str, Any]],
+    *,
+    max_parallel_workers: Any = None,
+) -> Dict[str, Any]:
+    """Build dependency-aware, write-scope-safe parallel assignment batches."""
+
+    normalized = []
+    invalid_count = 0
+    for assignment in assignments:
+        if not isinstance(assignment, dict):
+            invalid_count += 1
+            continue
+        try:
+            normalized.append(normalize_agent_task_assignment(assignment))
+        except (TypeError, ValueError):
+            invalid_count += 1
+
+    known_task_ids = {item["task_id"] for item in normalized}
+    satisfied_task_ids = {
+        item["task_id"] for item in normalized if item["status"] == "completed"
+    }
+    candidates = {
+        item["task_id"]: item
+        for item in normalized
+        if item["status"] in {"planned", "queued"}
+        and item["role"] not in {"observer", "reviewer"}
+    }
+    blocked_task_ids = [
+        item["task_id"]
+        for item in normalized
+        if item["status"] in {"blocked", "failed", "review"}
+    ]
+    active_task_ids = [
+        item["task_id"] for item in normalized if item["status"] == "running"
+    ]
+    missing_dependency_task_ids = [
+        item["task_id"]
+        for item in candidates.values()
+        if any(dep not in known_task_ids for dep in item["dependencies"]["task_ids"])
+    ]
+    pending = {
+        task_id: item
+        for task_id, item in candidates.items()
+        if task_id not in missing_dependency_task_ids
+    }
+    limit = _parallel_limit(max_parallel_workers, pending.values())
+
+    batches = []
+    while pending:
+        ready = [
+            item
+            for item in pending.values()
+            if set(item["dependencies"]["task_ids"]).issubset(satisfied_task_ids)
+        ]
+        if not ready:
+            break
+        batch = _next_parallel_batch(ready, limit)
+        if not batch:
+            break
+        batch_task_ids = [item["task_id"] for item in batch]
+        batches.append(
+            {
+                "index": len(batches) + 1,
+                "task_ids": batch_task_ids,
+                "roles": _counter_payload(Counter(item["role"] for item in batch), ROLES),
+                "privacy_class": AGENT_TASK_ASSIGNMENT_PRIVACY_CLASS,
+            }
+        )
+        for task_id in batch_task_ids:
+            pending.pop(task_id, None)
+            satisfied_task_ids.add(task_id)
+
+    waiting_task_ids = sorted(set(pending) | set(missing_dependency_task_ids))[:LIST_LIMIT]
+    conflict_pairs = find_agent_task_assignment_conflicts(normalized)
+    conflict_task_ids = _dedupe(
+        task_id for conflict in conflict_pairs for task_id in conflict.get("task_ids", [])
+    )[:LIST_LIMIT]
+
+    status = "empty"
+    if normalized:
+        status = "ready"
+    if active_task_ids:
+        status = "active"
+    if blocked_task_ids or waiting_task_ids:
+        status = "blocked"
+    if conflict_task_ids:
+        status = "sequenced_conflicts"
+    if not pending and not candidates and normalized and not active_task_ids and not blocked_task_ids:
+        status = "complete"
+    if invalid_count:
+        status = "degraded" if status in {"empty", "complete"} else status
+
+    degraded_reasons = []
+    if invalid_count:
+        degraded_reasons.append(f"invalid_assignments:{invalid_count}")
+    if waiting_task_ids:
+        degraded_reasons.append("dependency_waiting")
+
+    return {
+        "schema_version": AGENT_TASK_ASSIGNMENT_SCHEMA_VERSION,
+        "status": status,
+        "max_parallel_workers": limit,
+        "batches": batches,
+        "blocked_task_ids": blocked_task_ids[:LIST_LIMIT],
+        "active_task_ids": active_task_ids[:LIST_LIMIT],
+        "waiting_task_ids": waiting_task_ids,
+        "conflict_task_ids": conflict_task_ids,
+        "conflicts": conflict_pairs[:LIST_LIMIT],
+        "degraded_reason": _join_reasons(degraded_reasons),
+        "privacy_class": AGENT_TASK_ASSIGNMENT_PRIVACY_CLASS,
+    }
+
+
 def _safe_owner(value: Dict[str, Any]) -> Dict[str, Optional[str]]:
     return {
         "agent_id": _safe_identifier(value.get("agent_id")),
@@ -457,6 +571,31 @@ def _write_scope_overlap(left: Dict[str, list[str]], right: Dict[str, list[str]]
     return _dedupe(overlap)[:LIST_LIMIT]
 
 
+def _next_parallel_batch(assignments: list[Dict[str, Any]], limit: int) -> list[Dict[str, Any]]:
+    batch: list[Dict[str, Any]] = []
+    for item in sorted(assignments, key=lambda value: value["task_id"]):
+        if len(batch) >= limit:
+            break
+        if any(_write_scope_overlap(item["write_scope"], other["write_scope"]) for other in batch):
+            continue
+        batch.append(item)
+    return batch
+
+
+def _parallel_limit(value: Any, assignments: Iterable[Dict[str, Any]]) -> int:
+    explicit = _safe_optional_int(value, minimum=1, maximum=LIST_LIMIT)
+    if explicit:
+        return explicit
+    limits = [
+        item["delegate_limits"]["max_parallel_workers"]
+        for item in assignments
+        if item["delegate_limits"].get("max_parallel_workers")
+    ]
+    if limits:
+        return max(1, min(LIST_LIMIT, min(limits)))
+    return LIST_LIMIT
+
+
 def _path_is_under(path: str, directory: str) -> bool:
     clean_path = path.replace("\\", "/").rstrip("/")
     clean_dir = directory.replace("\\", "/").rstrip("/")
@@ -577,6 +716,17 @@ def _dedupe(values: Iterable[str]) -> list[str]:
         if value not in deduped:
             deduped.append(value)
     return deduped
+
+
+def _join_reasons(reasons: Iterable[Any]) -> Optional[str]:
+    safe_reasons = []
+    for reason in reasons:
+        safe = _safe_identifier(reason)
+        if safe and safe not in safe_reasons:
+            safe_reasons.append(safe)
+    if not safe_reasons:
+        return None
+    return ";".join(safe_reasons[:LIST_LIMIT])
 
 
 def _string_or_none(value: Any) -> Optional[str]:

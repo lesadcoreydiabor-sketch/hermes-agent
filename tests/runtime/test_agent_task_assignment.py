@@ -7,6 +7,7 @@ from hermes_cli.agent_task_assignment import (
     build_agent_task_assignment,
     find_agent_task_assignment_conflicts,
     normalize_agent_task_assignment,
+    plan_agent_assignment_batches,
     summarize_agent_task_assignments,
 )
 
@@ -335,3 +336,131 @@ def test_build_agent_task_assignments_from_task_contract_skips_invalid_and_redac
     assert "C:\\Users" not in rendered
     assert "diff --git" not in rendered
     assert "api_key=hidden" not in rendered
+
+
+def test_plan_agent_assignment_batches_respects_dependencies_and_write_scope() -> None:
+    completed = build_agent_task_assignment(
+        "HMAMO-00",
+        "Completed prerequisite",
+        status="completed",
+    )
+    first = build_agent_task_assignment(
+        "HMAMO-01",
+        "Worker A",
+        status="queued",
+        dependencies={"task_ids": ["HMAMO-00"]},
+        write_scope={"files": ["hermes_cli/agent_task_assignment.py"]},
+    )
+    second = build_agent_task_assignment(
+        "HMAMO-02",
+        "Worker B",
+        status="planned",
+        write_scope={"files": ["tests/runtime/test_agent_task_assignment.py"]},
+    )
+    dependent = build_agent_task_assignment(
+        "HMAMO-03",
+        "Depends on A",
+        status="planned",
+        dependencies={"task_ids": ["HMAMO-01"]},
+        write_scope={"files": ["docs/plans/hermes-multi-agent-memory-prd.md"]},
+    )
+    same_scope = build_agent_task_assignment(
+        "HMAMO-04",
+        "Conflicts with A in parallel",
+        status="queued",
+        write_scope={"directories": ["hermes_cli"]},
+    )
+
+    plan = plan_agent_assignment_batches(
+        [completed, first, second, dependent, same_scope],
+        max_parallel_workers=2,
+    )
+
+    assert plan["max_parallel_workers"] == 2
+    assert plan["batches"] == [
+        {
+            "index": 1,
+            "task_ids": ["HMAMO-01", "HMAMO-02"],
+            "roles": {
+                "observer": 0,
+                "orchestrator": 0,
+                "planner": 0,
+                "reviewer": 0,
+                "worker": 2,
+            },
+            "privacy_class": "redacted_summary",
+        },
+        {
+            "index": 2,
+            "task_ids": ["HMAMO-03", "HMAMO-04"],
+            "roles": {
+                "observer": 0,
+                "orchestrator": 0,
+                "planner": 0,
+                "reviewer": 0,
+                "worker": 2,
+            },
+            "privacy_class": "redacted_summary",
+        },
+    ]
+    assert plan["waiting_task_ids"] == []
+    assert plan["conflict_task_ids"] == ["HMAMO-01", "HMAMO-04"]
+    assert plan["status"] == "sequenced_conflicts"
+
+
+def test_plan_agent_assignment_batches_reports_blocked_and_waiting_work() -> None:
+    ready = build_agent_task_assignment("HMAMO-01", "Ready", status="planned")
+    missing_dep = build_agent_task_assignment(
+        "HMAMO-02",
+        "Missing dependency",
+        status="queued",
+        dependencies={"task_ids": ["HMAMO-99"]},
+    )
+    cycle_a = build_agent_task_assignment(
+        "HMAMO-03",
+        "Cycle A",
+        status="planned",
+        dependencies={"task_ids": ["HMAMO-04"]},
+    )
+    cycle_b = build_agent_task_assignment(
+        "HMAMO-04",
+        "Cycle B",
+        status="planned",
+        dependencies={"task_ids": ["HMAMO-03"]},
+    )
+    blocked = build_agent_task_assignment("HMAMO-05", "Blocked", status="blocked")
+    running = build_agent_task_assignment("HMAMO-06", "Running", status="running")
+
+    plan = plan_agent_assignment_batches(
+        [ready, missing_dep, cycle_a, cycle_b, blocked, running, {"title": "invalid"}],
+        max_parallel_workers=3,
+    )
+
+    assert plan["batches"][0]["task_ids"] == ["HMAMO-01"]
+    assert plan["blocked_task_ids"] == ["HMAMO-05"]
+    assert plan["active_task_ids"] == ["HMAMO-06"]
+    assert plan["waiting_task_ids"] == ["HMAMO-02", "HMAMO-03", "HMAMO-04"]
+    assert plan["degraded_reason"] == "invalid_assignments:1;dependency_waiting"
+    assert plan["status"] == "blocked"
+
+
+def test_plan_agent_assignment_batches_redacts_sensitive_conflict_values() -> None:
+    first = build_agent_task_assignment(
+        "task-token=secret",
+        "Worker A",
+        status="planned",
+        write_scope={"files": ["C:\\Users\\XQQ\\secret\\file.txt"]},
+    )
+    second = build_agent_task_assignment(
+        "HMAMO-02",
+        "Worker B",
+        status="planned",
+        write_scope={"files": ["C:\\Users\\XQQ\\secret\\file.txt"]},
+    )
+
+    plan = plan_agent_assignment_batches([first, second])
+    rendered = json.dumps(plan, sort_keys=True)
+
+    assert "token=secret" not in rendered
+    assert "C:\\Users" not in rendered
+    assert plan["conflicts"][0]["overlap"] == ["Redacted"]

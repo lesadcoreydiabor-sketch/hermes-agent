@@ -1367,6 +1367,25 @@ tasks:
     status: completed
     risk: low
 
+  - id: HMAMO-06
+    title: Add dependency-aware parallel assignment planner
+    description: Add a pure helper that groups ready agent assignments into dependency-aware, write-scope-safe parallel batches.
+    depends_on:
+      - HMAMO-01
+      - HMAMO-03
+    acceptance:
+      - Planner respects completed prerequisites before placing dependent assignments into later batches.
+      - Planner keeps assignments with overlapping file or directory write scopes out of the same parallel batch.
+      - Planner reports blocked, running, missing-dependency, cycle or unmet-dependency, and invalid assignment states as safe metadata.
+      - Planner reports conflict pairs and sequenced conflict task ids without exposing raw paths or secrets.
+      - Helper is pure and does not spawn agents, dispatch tools, write files, mutate memory, edit skills, write task.yaml, or call remote APIs.
+    verify:
+      - venv/Scripts/python.exe -m pytest tests/runtime/test_agent_task_assignment.py -q -o addopts=
+      - venv/Scripts/python.exe -c "import yaml; yaml.safe_load(open('.hermes/task.yaml', encoding='utf-8'))"
+      - git diff --check -- hermes_cli/agent_task_assignment.py tests/runtime/test_agent_task_assignment.py .hermes/task.yaml
+    status: completed
+    risk: medium
+
 risk_flags:
   destructive_file_change:
     pause: true
@@ -2253,6 +2272,16 @@ progress_report:
       blockers:
         - "RunInspectorPage.tsx and runInspectorEventTimeline.ts currently contain unrelated dirty approval/failed event summary changes, so this slice stops at model helpers."
       next_step: "Render assignment summary in Run Inspector after coordinating existing dirty page files."
+    - task_id: HMAMO-06
+      status: completed
+      changed_files:
+        - hermes_cli/agent_task_assignment.py
+        - tests/runtime/test_agent_task_assignment.py
+        - .hermes/task.yaml
+      verification_result: "passed: venv/Scripts/python.exe -m pytest tests/runtime/test_agent_task_assignment.py -q -o addopts= (12 passed); passed: venv/Scripts/python.exe -c yaml.safe_load task.yaml; passed: git diff --check for HMAMO-06 files"
+      blockers:
+        - "RunInspectorPage.tsx and runInspectorEventTimeline.ts still have unrelated dirty active-event filter changes, so this slice stays in pure orchestration helpers."
+      next_step: "Expose parallel assignment plan summaries through the read-only workbench payload."
 
 failure_review:
   enabled: true
