@@ -13,6 +13,8 @@ import type {
   RunInspectorEventSummary,
   RunInspectorEventsResponse,
   RunInspectorHealthSummary,
+  RunInspectorMemoryWorkbench,
+  RunInspectorMemoryWorkbenchResponse,
   RunInspectorSnapshotSummary,
   RunInspectorStatusResponse,
   SlashExecResponse,
@@ -313,7 +315,11 @@ const renderAttentionSignals = (
   return rows
 }
 
-const renderRunInspectorEvents = (events?: RunInspectorEventSummary[], error?: null | string) => {
+const renderRunInspectorEvents = (
+  events?: RunInspectorEventSummary[],
+  error?: null | string,
+  emptyText = 'none'
+) => {
   const rows: [string, string][] = []
 
   for (const event of events ?? []) {
@@ -334,7 +340,7 @@ const renderRunInspectorEvents = (events?: RunInspectorEventSummary[], error?: n
     rows.push(['Event source', clipInspectorText(error)])
   }
   if (!rows.length) {
-    rows.push(['Events', 'none'])
+    rows.push(['Events', emptyText])
   }
 
   return rows
@@ -802,17 +808,20 @@ export const opsCommands: SlashCommand[] = [
         .then(
           ctx.guarded<RunInspectorEventsResponse>(r => {
             const filtered = filterRunInspectorEvents(r?.events, parsed.filter)
+            const sourceCount = r?.events?.length ?? 0
+            const emptyText =
+              parsed.filter === 'all' || sourceCount === 0 ? 'none' : `no ${parsed.filter} events`
             ctx.transcript.panel('Run Inspector Events', [
               {
                 rows: renderRunInspectorEventSummary(r?.events, filtered, parsed.filter),
                 title: 'Summary'
               },
               {
-                rows: renderRunInspectorEvents(filtered, r?.error),
+                rows: renderRunInspectorEvents(filtered, r?.error, emptyText),
                 title:
                   parsed.filter === 'all'
-                    ? `Recent ${r?.events?.length ?? 0}`
-                    : `Recent ${filtered.length}/${r?.events?.length ?? 0} ${parsed.filter}`
+                    ? `Recent ${sourceCount}`
+                    : `Recent ${filtered.length}/${sourceCount} ${parsed.filter}`
               },
               {
                 text: 'read-only event timeline; raw logs, prompts, tool args, and secrets are not shown'

@@ -974,6 +974,51 @@ describe('createSlashHandler', () => {
     )
   })
 
+  it('/inspector-events explains an empty filtered timeline', async () => {
+    const rpc = vi.fn(() =>
+      Promise.resolve({
+        events: [
+          {
+            id: 55,
+            message: 'run done',
+            run_id: 'run_done',
+            source: 'gateway_run',
+            status: 'completed',
+            type: 'run.completed'
+          }
+        ],
+        ok: true
+      })
+    )
+    const ctx = buildCtx({ gateway: { ...buildGateway(), rpc } })
+
+    expect(createSlashHandler(ctx)('/inspector-events active')).toBe(true)
+
+    expect(rpc).toHaveBeenCalledWith('run_inspector.events', { limit: 12 })
+    await vi.waitFor(() => {
+      expect(ctx.transcript.panel).toHaveBeenCalledWith(
+        'Run Inspector Events',
+        expect.arrayContaining([
+          expect.objectContaining({
+            rows: expect.arrayContaining([
+              ['Fetched', '1'],
+              ['Showing', '0 active'],
+              ['Active', '0'],
+              ['Completed', '1'],
+              ['Terminal', '1'],
+              ['Latest', '#55 run.completed']
+            ]),
+            title: 'Summary'
+          }),
+          expect.objectContaining({
+            rows: expect.arrayContaining([['Events', 'no active events']]),
+            title: 'Recent 0/1 active'
+          })
+        ])
+      )
+    })
+  })
+
   it('/inspector-events filters attention events locally after fetching the bounded timeline', async () => {
     const rpc = vi.fn(() =>
       Promise.resolve({
