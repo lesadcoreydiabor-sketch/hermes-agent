@@ -9097,6 +9097,9 @@ def _print_desktop_status(args) -> int:
     print(f"  Health: {health}")
     if not record and reachable:
         print(f"  Compatible dashboard reachable: {url}")
+        print(f"  Reuse: hermes desktop --port {port}")
+        print(f"  Open manually: {url}")
+        print("  Stop: use hermes dashboard --stop; no desktop-owned runtime record exists.")
     return 0
 
 

@@ -795,6 +795,22 @@ tasks:
     status: completed
     risk: medium
 
+  - id: HRIDR-02
+    title: Clarify compatible dashboard status without desktop record
+    description: Make hermes desktop --status explain how to reuse a compatible dashboard when no shell-owned runtime record exists.
+    depends_on:
+      - HRIDR-01
+    acceptance:
+      - Status prints the compatible /run-inspector URL when a dashboard is reachable on the requested port.
+      - Status prints an explicit hermes desktop --port reuse command.
+      - Status explains that hermes dashboard --stop, not hermes desktop --stop, owns stopping non-recorded dashboards.
+      - Printed URLs remain loopback /run-inspector URLs and do not expose session tokens.
+    verify:
+      - venv/Scripts/python.exe -m pytest tests/hermes_cli/test_desktop_shell.py tests/hermes_cli/test_dashboard_lifecycle_flags.py tests/hermes_cli/test_update_stale_dashboard.py -q -o addopts=
+      - git diff --check -- hermes_cli/main.py tests/hermes_cli/test_desktop_shell.py website/docs/user-guide/features/web-dashboard.md .hermes/task.yaml
+    status: completed
+    risk: low
+
 risk_flags:
   destructive_file_change:
     pause: true
@@ -1352,6 +1368,16 @@ progress_report:
       verification_result: "passed: venv/Scripts/python.exe -m pytest tests/hermes_cli/test_desktop_shell.py tests/hermes_cli/test_dashboard_lifecycle_flags.py tests/hermes_cli/test_update_stale_dashboard.py -q -o addopts= (45 passed, 5 skipped); passed: git diff --check for HRIDR-01 files; GitNexus detect_changes staged risk low with no affected processes"
       blockers: []
       next_step: "HRIDR-01 browser-open failure recovery implemented locally; run YAML/GitNexus checks, stage, commit, push, then continue lifecycle reliability hardening."
+    - task_id: HRIDR-02
+      status: completed
+      changed_files:
+        - hermes_cli/main.py
+        - tests/hermes_cli/test_desktop_shell.py
+        - website/docs/user-guide/features/web-dashboard.md
+        - .hermes/task.yaml
+      verification_result: "passed: venv/Scripts/python.exe -m pytest tests/hermes_cli/test_desktop_shell.py tests/hermes_cli/test_dashboard_lifecycle_flags.py tests/hermes_cli/test_update_stale_dashboard.py -q -o addopts= (46 passed, 5 skipped); passed: git diff --check for HRIDR-02 files; GitNexus detect_changes staged risk low with no affected processes"
+      blockers: []
+      next_step: "HRIDR-02 compatible dashboard status guidance implemented locally; run YAML/GitNexus checks, stage, commit, push, then continue lifecycle reliability hardening."
 
 failure_review:
   enabled: true

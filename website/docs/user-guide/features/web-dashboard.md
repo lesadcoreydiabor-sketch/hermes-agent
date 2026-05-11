@@ -37,6 +37,8 @@ hermes desktop --status
 hermes desktop --stop
 ```
 
+If `hermes desktop --status` finds a compatible dashboard on the requested port but no desktop runtime record, it prints reuse and manual-open commands. Stop that kind of process with `hermes dashboard --stop`; `hermes desktop --stop` only stops a shell-owned runtime record.
+
 If startup fails, the command prints a classified reason and recovery command. Common cases are:
 
 | Reason | Meaning | Recovery |

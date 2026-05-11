@@ -105,6 +105,26 @@ def test_desktop_status_clears_stale_runtime_record(capsys):
     assert "Runtime record was stale and has been cleared" in out
 
 
+def test_desktop_status_without_record_points_to_compatible_dashboard(capsys):
+    with patch(
+        "hermes_cli.main._read_desktop_runtime_record",
+        return_value=None,
+    ), patch(
+        "hermes_cli.main._probe_dashboard_status",
+        return_value=(True, "ok"),
+    ), pytest.raises(SystemExit) as exc:
+        cmd_desktop(_ns(port=9222, status=True))
+
+    assert exc.value.code == 0
+    out = capsys.readouterr().out
+    assert "No Hermes desktop shell runtime recorded" in out
+    assert "Compatible dashboard reachable: http://127.0.0.1:9222/run-inspector" in out
+    assert "Reuse: hermes desktop --port 9222" in out
+    assert "Open manually: http://127.0.0.1:9222/run-inspector" in out
+    assert "Stop: use hermes dashboard --stop" in out
+    assert "token=" not in out
+
+
 def test_desktop_reuses_existing_dashboard_and_opens_run_inspector(capsys):
     with patch(
         "hermes_cli.main._probe_dashboard_status",
