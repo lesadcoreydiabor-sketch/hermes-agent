@@ -13,6 +13,7 @@ import {
   CheckCircle2,
   ClipboardCheck,
   Clock,
+  Copy,
   Database,
   FileWarning,
   Handshake,
@@ -89,6 +90,7 @@ import {
   describeDesktopShellNextAction,
   describeDesktopShellSource,
   describeDesktopShellStatus,
+  getDesktopShellNextCommand,
   type RunInspectorDesktopStatusState,
 } from "@/pages/runInspectorDesktopStatus";
 import {
@@ -1231,6 +1233,34 @@ function DesktopShellStatusCard({
 }) {
   const display = describeDesktopShellStatus(state, status, error);
   const nextAction = describeDesktopShellNextAction(status);
+  const nextCommand = getDesktopShellNextCommand(status);
+  const [copyState, setCopyState] = useState<"idle" | "copied" | "failed">("idle");
+  const handleCopyNextCommand = useCallback(() => {
+    if (!nextCommand) {
+      return;
+    }
+    if (!navigator.clipboard) {
+      setCopyState("failed");
+      return;
+    }
+    navigator.clipboard
+      .writeText(nextCommand)
+      .then(() => setCopyState("copied"))
+      .catch(() => setCopyState("failed"));
+  }, [nextCommand]);
+
+  useEffect(() => {
+    setCopyState("idle");
+  }, [nextCommand]);
+
+  useEffect(() => {
+    if (copyState === "idle") {
+      return undefined;
+    }
+    const timeout = window.setTimeout(() => setCopyState("idle"), 1500);
+    return () => window.clearTimeout(timeout);
+  }, [copyState]);
+
   return (
     <Card>
       <CardHeader>
@@ -1272,7 +1302,28 @@ function DesktopShellStatusCard({
           <DetailRow label="Host" value={formatDisplayValue(status?.host)} />
           <DetailRow label="Route" value={formatDisplayValue(status?.route)} />
           <DetailRow label="URL" value={formatDisplayValue(status?.url)} />
-          <DetailRow label="Next" value={formatDisplayValue(nextAction, "None")} />
+          <DetailRow
+            label="Next"
+            value={formatDisplayValue(nextAction, "None")}
+            action={
+              nextCommand ? (
+                <Button
+                  type="button"
+                  size="sm"
+                  outlined
+                  aria-label="Copy desktop next command"
+                  onClick={handleCopyNextCommand}
+                  prefix={<Copy className="h-3 w-3" />}
+                >
+                  {copyState === "copied"
+                    ? "Copied"
+                    : copyState === "failed"
+                      ? "Copy failed"
+                      : "Copy command"}
+                </Button>
+              ) : null
+            }
+          />
           <DetailRow label="Manual URL" value={formatDisplayValue(status?.manual_url, "None")} />
           <DetailRow label="Reuse" value={formatDisplayValue(status?.reuse_command, "None")} />
           <DetailRow label="Stop" value={formatDisplayValue(status?.stop_command, "None")} />
@@ -2025,14 +2076,25 @@ function Metric({
   );
 }
 
-function DetailRow({ label, value }: { label: string; value: string }) {
+function DetailRow({
+  action,
+  label,
+  value,
+}: {
+  action?: ReactNode;
+  label: string;
+  value: string;
+}) {
   return (
     <div className="grid min-w-0 gap-2 px-4 py-3 text-sm sm:grid-cols-[120px_minmax(0,1fr)]">
       <span className="text-xs uppercase tracking-[0.12em] text-muted-foreground">
         {label}
       </span>
-      <span className="min-w-0 break-all font-mono-ui text-muted-foreground/90">
-        {value}
+      <span className="flex min-w-0 flex-wrap items-center gap-2">
+        <span className="min-w-0 break-all font-mono-ui text-muted-foreground/90">
+          {value}
+        </span>
+        {action ? <span className="shrink-0">{action}</span> : null}
       </span>
     </div>
   );

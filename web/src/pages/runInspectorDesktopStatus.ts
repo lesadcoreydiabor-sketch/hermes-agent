@@ -48,6 +48,13 @@ export function describeDesktopShellNextAction(
   return action || command || null;
 }
 
+export function getDesktopShellNextCommand(
+  status: RunInspectorDesktopStatus | null,
+): string | null {
+  const command = status?.next_command?.trim();
+  return command || null;
+}
+
 export function describeDesktopShellStatus(
   state: RunInspectorDesktopStatusState,
   status: RunInspectorDesktopStatus | null,

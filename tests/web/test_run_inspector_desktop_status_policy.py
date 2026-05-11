@@ -106,20 +106,26 @@ def test_run_inspector_desktop_status_formats_next_action_row() -> None:
               next_action: "Reuse compatible dashboard",
               next_command: "hermes desktop --port 9222",
             });
+            const command = desktopStatus.getDesktopShellNextCommand({
+              next_command: " hermes desktop --port 9222 ",
+            });
             const commandOnly = desktopStatus.describeDesktopShellNextAction({
               next_action: null,
               next_command: "hermes desktop --status",
             });
             const empty = desktopStatus.describeDesktopShellNextAction({});
-            console.log(JSON.stringify({ action, commandOnly, empty }));
+            const noCommand = desktopStatus.getDesktopShellNextCommand({});
+            console.log(JSON.stringify({ action, command, commandOnly, empty, noCommand }));
             """
         )
     )
 
     assert payload == {
         "action": "Reuse compatible dashboard: hermes desktop --port 9222",
+        "command": "hermes desktop --port 9222",
         "commandOnly": "hermes desktop --status",
         "empty": None,
+        "noCommand": None,
     }
 
 
@@ -129,5 +135,13 @@ def test_run_inspector_desktop_card_renders_next_action_row() -> None:
     ).read_text(encoding="utf-8")
 
     assert "describeDesktopShellNextAction" in page_source
+    assert "getDesktopShellNextCommand" in page_source
     assert 'label="Next"' in page_source
     assert 'formatDisplayValue(nextAction, "None")' in page_source
+    assert 'aria-label="Copy desktop next command"' in page_source
+    assert "navigator.clipboard" in page_source
+    assert "writeText(nextCommand)" in page_source
+    assert "api." not in page_source[
+        page_source.index("function DesktopShellStatusCard") :
+        page_source.index("function ActiveToolCard")
+    ]
