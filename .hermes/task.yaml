@@ -953,7 +953,7 @@ tasks:
       - Broken or missing ledger data returns a degraded checkpoint instead of raising.
     verify:
       - venv/Scripts/python.exe -m pytest tests/runtime/test_working_checkpoint.py -q -o addopts=
-    status: pending
+    status: completed
     risk: medium
 
   - id: HMAM-07
@@ -1721,6 +1721,15 @@ progress_report:
       verification_result: "passed: venv/Scripts/python.exe -m pytest tests/runtime/test_action_ledger.py -q -o addopts= (8 passed); append helper writes .hermes/action_ledger.jsonl only when explicitly called and redacts secret-like values before write"
       blockers: []
       next_step: "Implement HMAM-06 working checkpoint generation from safe task and ledger summaries."
+    - task_id: HMAM-06
+      status: completed
+      changed_files:
+        - hermes_cli/working_checkpoint.py
+        - tests/runtime/test_working_checkpoint.py
+        - .hermes/task.yaml
+      verification_result: "passed: venv/Scripts/python.exe -m pytest tests/runtime/test_working_checkpoint.py -q -o addopts= (7 passed); working checkpoint generation is pure, bounded, redacted, and degrades on missing or broken ledger data"
+      blockers: []
+      next_step: "Implement HMAM-07 long-term queue and skills journal schema helpers before wiring Run Inspector workbench UI."
 
 failure_review:
   enabled: true
