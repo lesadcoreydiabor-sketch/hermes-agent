@@ -1267,6 +1267,28 @@ def test_run_inspector_memory_workbench_describes_all_states() -> None:
                 degraded_reason: null,
                 privacy_class: "redacted_summary",
               },
+              agent_assignments: {
+                summary: {
+                  schema_version: 1,
+                  status: "empty",
+                  total_count: 0,
+                  active_count: 0,
+                  completed_count: 0,
+                  failed_count: 0,
+                  blocked_count: 0,
+                  ready_task_ids: [],
+                  dependency_waiting_task_ids: [],
+                  blocked_task_ids: [],
+                  role_counts: {},
+                  status_counts: {},
+                  conflicts: [],
+                  degraded_reason: null,
+                  privacy_class: "redacted_summary",
+                },
+                assignments: [],
+                degraded_reason: null,
+                privacy_class: "redacted_summary",
+              },
               checkpoint: {
                 current_task_id: null,
                 completed_tasks: [],
@@ -1311,6 +1333,39 @@ def test_run_inspector_memory_workbench_describes_all_states() -> None:
                   enabled_count: 2,
                 },
               }).message,
+              assignmentsQuiet: workbench.describeAgentAssignmentState(base).label,
+              assignmentsActive: workbench.describeAgentAssignmentState({
+                ...base,
+                agent_assignments: {
+                  ...base.agent_assignments,
+                  summary: {
+                    ...base.agent_assignments.summary,
+                    status: "active",
+                    total_count: 2,
+                    active_count: 1,
+                    ready_task_ids: ["HMAMO-02"],
+                  },
+                },
+              }).message,
+              assignmentsConflict: workbench.describeAgentAssignmentState({
+                ...base,
+                agent_assignments: {
+                  ...base.agent_assignments,
+                  summary: {
+                    ...base.agent_assignments.summary,
+                    status: "conflict",
+                    total_count: 2,
+                    active_count: 2,
+                    conflicts: [{
+                      task_ids: ["HMAMO-01", "HMAMO-02"],
+                      overlap: ["hermes_cli/agent_task_assignment.py"],
+                      resolution: "reviewer_decides",
+                      privacy_class: "redacted_summary",
+                    }],
+                  },
+                },
+              }).tone,
+              assignmentsMissing: workbench.describeAgentAssignmentState(null).tone,
               persistenceMissing: workbench.describeRuntimePersistenceState(null).tone,
               offlineTone: workbench.describeMemoryWorkbenchState("offline", null).tone,
               providerTone: workbench.memoryProviderTone("available"),
@@ -1327,6 +1382,10 @@ def test_run_inspector_memory_workbench_describes_all_states() -> None:
     assert payload["unavailable"] == "Memory unavailable"
     assert payload["persistenceOff"] == "Persistence off"
     assert payload["persistenceOn"] == "2 local writes enabled"
+    assert payload["assignmentsQuiet"] == "Assignments quiet"
+    assert payload["assignmentsActive"] == "1 ready / 1 active"
+    assert payload["assignmentsConflict"] == "destructive"
+    assert payload["assignmentsMissing"] == "muted"
     assert payload["persistenceMissing"] == "muted"
     assert payload["offlineTone"] == "destructive"
     assert payload["providerTone"] == "success"
@@ -1350,7 +1409,11 @@ def test_run_inspector_memory_workbench_uses_readonly_api() -> None:
     assert 'label="Persistence"' in page_source
     assert "api.getRunInspectorMemoryWorkbench" in hook_source
     assert "runtime_persistence" in api_source
+    assert "agent_assignments" in api_source
     assert "describeRuntimePersistenceState" in (
+        ROOT / "web" / "src" / "pages" / "runInspectorMemoryWorkbench.ts"
+    ).read_text(encoding="utf-8")
+    assert "describeAgentAssignmentState" in (
         ROOT / "web" / "src" / "pages" / "runInspectorMemoryWorkbench.ts"
     ).read_text(encoding="utf-8")
     assert "/api/run-inspector/memory-workbench?limit=" in api_source

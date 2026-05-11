@@ -689,6 +689,88 @@ export interface RunInspectorMemoryWorkbenchRuntimePersistence {
   privacy_class: string;
 }
 
+export interface RunInspectorMemoryWorkbenchAgentAssignmentSummary {
+  schema_version: number;
+  status: string;
+  total_count: number;
+  active_count: number;
+  completed_count: number;
+  failed_count: number;
+  blocked_count: number;
+  ready_task_ids: string[];
+  dependency_waiting_task_ids: string[];
+  blocked_task_ids: string[];
+  role_counts: Record<string, number>;
+  status_counts: Record<string, number>;
+  conflicts: Array<{
+    task_ids: string[];
+    overlap: string[];
+    resolution: string;
+    privacy_class: string;
+  }>;
+  degraded_reason: string | null;
+  privacy_class: string;
+}
+
+export interface RunInspectorMemoryWorkbenchAgentAssignment {
+  schema_version: number;
+  task_id: string;
+  title: string;
+  role: string;
+  status: string;
+  owner: {
+    agent_id: string | null;
+    parent_agent_id: string | null;
+    human_owner: string | null;
+  };
+  dependencies: {
+    task_ids: string[];
+    required_artifacts: string[];
+  };
+  write_scope: {
+    files: string[];
+    directories: string[];
+    forbidden_paths: string[];
+    shared_contracts: string[];
+  };
+  allowed_tools: {
+    toolsets: string[];
+    commands: string[];
+    disallowed: string[];
+  };
+  delegate_limits: {
+    max_depth: number | null;
+    max_parallel_workers: number | null;
+    interrupt_policy: string;
+  };
+  verification: {
+    command: string;
+    expected_signal: string;
+    required_before_handoff: boolean;
+  };
+  handoff_payload: {
+    summary: string;
+    changed_files: string[];
+    verification_result: string | null;
+    blockers: string[];
+    next_step: string;
+    privacy_class: string;
+  };
+  conflict_policy: {
+    write_scope_must_be_disjoint: boolean;
+    shared_contract_requires_reviewer: boolean;
+    conflict_resolution: string;
+  };
+  privacy_class: string;
+}
+
+export interface RunInspectorMemoryWorkbenchAgentAssignments {
+  summary: RunInspectorMemoryWorkbenchAgentAssignmentSummary;
+  assignments: RunInspectorMemoryWorkbenchAgentAssignment[];
+  degraded_reason: string | null;
+  privacy_class: string;
+}
+
 export interface RunInspectorMemoryWorkbenchEntry {
   [key: string]: unknown;
   entry_id?: string | null;
@@ -709,6 +791,7 @@ export interface RunInspectorMemoryWorkbench {
   active_work: RunInspectorMemoryWorkbenchActiveWork[];
   memory: RunInspectorMemoryWorkbenchMemory;
   runtime_persistence?: RunInspectorMemoryWorkbenchRuntimePersistence;
+  agent_assignments?: RunInspectorMemoryWorkbenchAgentAssignments;
   checkpoint: RunInspectorMemoryWorkbenchCheckpoint;
   action_ledger: {
     entries: RunInspectorMemoryWorkbenchEntry[];

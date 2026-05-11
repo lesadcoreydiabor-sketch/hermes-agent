@@ -104,3 +104,58 @@ export function describeRuntimePersistenceState(
     tone: "muted",
   };
 }
+
+export function describeAgentAssignmentState(
+  workbench: RunInspectorMemoryWorkbench | null,
+): MemoryWorkbenchDisplay {
+  const assignments = workbench?.agent_assignments ?? null;
+  const summary = assignments?.summary ?? null;
+  if (!summary) {
+    return {
+      label: "Assignments unknown",
+      message: "No assignment summary",
+      tone: "muted",
+    };
+  }
+  const degraded = assignments?.degraded_reason || summary.degraded_reason;
+  if (degraded) {
+    return {
+      label: "Assignments degraded",
+      message: degraded,
+      tone: "warning",
+    };
+  }
+  if (summary.conflicts.length > 0) {
+    return {
+      label: "Assignment conflicts",
+      message: `${summary.conflicts.length} write conflicts`,
+      tone: "destructive",
+    };
+  }
+  if (summary.blocked_count > 0 || summary.dependency_waiting_task_ids.length > 0) {
+    return {
+      label: "Assignments blocked",
+      message: `${summary.blocked_count} blocked / ${summary.dependency_waiting_task_ids.length} waiting`,
+      tone: "warning",
+    };
+  }
+  if (summary.active_count > 0) {
+    return {
+      label: "Assignments active",
+      message: `${summary.ready_task_ids.length} ready / ${summary.active_count} active`,
+      tone: "primary",
+    };
+  }
+  if (summary.total_count > 0 && summary.completed_count === summary.total_count) {
+    return {
+      label: "Assignments complete",
+      message: `${summary.completed_count} completed`,
+      tone: "success",
+    };
+  }
+  return {
+    label: "Assignments quiet",
+    message: "No active assignments",
+    tone: "muted",
+  };
+}
