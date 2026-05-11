@@ -16,6 +16,38 @@ hermes dashboard
 
 This starts a local web server and opens `http://127.0.0.1:9119` in your browser. The dashboard runs entirely on your machine — no data leaves localhost.
 
+### Desktop launcher
+
+`hermes desktop` is the lightweight local desktop shell for the Run Inspector. It reuses the same loopback dashboard, opens `/run-inspector`, and records only the shell-owned runtime PID so status and stop commands do not target unrelated dashboard processes.
+
+```bash
+# Start or reuse the local dashboard and open Run Inspector
+hermes desktop
+
+# Start without opening a browser
+hermes desktop --no-open
+
+# Use a different local port
+hermes desktop --port 9121
+
+# Show the shell-owned dashboard process, URL, route, and health
+hermes desktop --status
+
+# Stop only the shell-owned dashboard process from the runtime record
+hermes desktop --stop
+```
+
+If startup fails, the command prints a classified reason and recovery command. Common cases are:
+
+| Reason | Meaning | Recovery |
+|--------|---------|----------|
+| `port_busy` | The requested port is occupied by something that is not a Hermes dashboard | Run the suggested `hermes desktop --port <free-port>` command or inspect with `hermes dashboard --status` |
+| `dependency_missing` | FastAPI or Uvicorn is missing from the current interpreter | Reinstall the package with the printed `pip install -e .` command |
+| `frontend_build_failed` | The dashboard frontend could not be built | Run the printed `npm install && npm run build` command from `web/` |
+| `server_start_failed` | The dashboard server exited while starting | Try the suggested free port and inspect current dashboard processes |
+
+The desktop launcher remains local-only. It does not write `.env`, `config.yaml`, provider profiles, gateway config, raw prompts, raw logs, tool arguments, or credentials.
+
 ### Options
 
 | Flag | Default | Description |

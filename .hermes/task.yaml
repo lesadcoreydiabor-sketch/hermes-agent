@@ -675,6 +675,25 @@ tasks:
     status: completed
     risk: low
 
+  - id: HRIDS-05
+    title: Improve desktop launcher recovery and docs
+    description: Add classified startup failure output, next-free-port suggestions, server-start failure handling, and user documentation for hermes desktop.
+    depends_on:
+      - HRIDS-04
+    acceptance:
+      - Busy non-Hermes ports produce a port_busy failure with an explicit free-port suggestion when available.
+      - Missing dashboard dependencies produce a dependency_missing failure with install commands.
+      - Frontend build failure produces a frontend_build_failed failure with manual build commands.
+      - Server startup exceptions produce a server_start_failed failure and clear the shell-owned runtime record.
+      - User documentation covers hermes desktop start, --status, --stop, custom port, and startup recovery reasons.
+      - The command still does not write .env, config.yaml, provider profiles, gateway config, raw prompts, raw logs, tool arguments, or credentials.
+    verify:
+      - venv/Scripts/python.exe -m pytest tests/hermes_cli/test_desktop_shell.py tests/hermes_cli/test_dashboard_lifecycle_flags.py tests/hermes_cli/test_update_stale_dashboard.py -q -o addopts=
+      - git diff --check -- hermes_cli/main.py tests/hermes_cli/test_desktop_shell.py website/docs/user-guide/features/web-dashboard.md .hermes/task.yaml
+      - venv/Scripts/python.exe -c "import yaml; yaml.safe_load(open('.hermes/task.yaml', encoding='utf-8'))"
+    status: completed
+    risk: medium
+
 risk_flags:
   destructive_file_change:
     pause: true
@@ -1162,6 +1181,16 @@ progress_report:
       verification_result: "passed: git diff --check for HRIDS-04 docs/task files; passed: venv/Scripts/python.exe -c yaml.safe_load task.yaml; GitNexus detect_changes reported risk low and no affected processes"
       blockers: []
       next_step: "HRIDS-04 runtime decision memo drafted; verify, commit, and continue with browser-launcher reliability slice."
+    - task_id: HRIDS-05
+      status: completed
+      changed_files:
+        - hermes_cli/main.py
+        - tests/hermes_cli/test_desktop_shell.py
+        - website/docs/user-guide/features/web-dashboard.md
+        - .hermes/task.yaml
+      verification_result: "passed: venv/Scripts/python.exe -m pytest tests/hermes_cli/test_desktop_shell.py tests/hermes_cli/test_dashboard_lifecycle_flags.py tests/hermes_cli/test_update_stale_dashboard.py -q -o addopts= (43 passed, 5 skipped); passed: venv/Scripts/python.exe -c yaml.safe_load task.yaml; passed: git diff --check for HRIDS-05 files; smoke passed: venv/Scripts/python.exe -m hermes_cli.main desktop --status; GitNexus detect_changes risk low with no affected processes; single-symbol impact for cmd_desktop not available because symbol is not indexed yet"
+      blockers: []
+      next_step: "HRIDS-05 desktop launcher recovery complete; stage, commit, push, then continue with desktop notification or packaging PRD work."
 
 failure_review:
   enabled: true

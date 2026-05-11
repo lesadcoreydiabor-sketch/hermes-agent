@@ -9116,6 +9116,53 @@ def _port_accepts_connections(
         return False
 
 
+def _find_free_desktop_port(
+    host: str,
+    start_port: int,
+    *,
+    attempts: int = 20,
+) -> int | None:
+    """Return the next likely-free local port after ``start_port``."""
+    first_port = max(1, start_port + 1)
+    last_port = min(65535, start_port + max(1, attempts))
+    for port in range(first_port, last_port + 1):
+        if not _port_accepts_connections(host, port):
+            return port
+    return None
+
+
+def _desktop_startup_actions(
+    *,
+    port: int,
+    free_port: int | None = None,
+    include_status: bool = True,
+) -> list[str]:
+    actions = []
+    if free_port:
+        actions.append(f"Try: hermes desktop --port {free_port}")
+    else:
+        actions.append("Try: hermes desktop --port <free-port>")
+    if include_status:
+        actions.append("Inspect: hermes dashboard --status")
+    actions.append(f"Stop shell-owned desktop: hermes desktop --port {port} --stop")
+    return actions
+
+
+def _print_desktop_startup_failure(
+    reason: str,
+    message: str,
+    *,
+    actions: list[str] | None = None,
+    detail: str | None = None,
+) -> None:
+    print(f"Hermes desktop startup failed: {reason}")
+    print(f"  {message}")
+    if detail:
+        print(f"  Detail: {detail}")
+    for action in actions or []:
+        print(f"  {action}")
+
+
 def _open_browser_url(url: str, *, delay: float = 1.0) -> None:
     """Open a browser URL in a short-lived daemon thread."""
     import webbrowser
@@ -9277,30 +9324,44 @@ def cmd_desktop(args):
         sys.exit(0)
 
     if _port_accepts_connections(host, args.port):
-        print(
-            f"Port {args.port} is already in use, but it does not look like "
-            "a Hermes dashboard."
+        free_port = _find_free_desktop_port(host, args.port)
+        _print_desktop_startup_failure(
+            "port_busy",
+            (
+                f"Port {args.port} is already in use, but it does not look "
+                "like a Hermes dashboard."
+            ),
+            actions=_desktop_startup_actions(port=args.port, free_port=free_port),
         )
-        print(f"Try: hermes desktop --port <free-port>")
-        print(f"Or inspect running dashboards: hermes dashboard --status")
         sys.exit(1)
 
     try:
         import fastapi  # noqa: F401
         import uvicorn  # noqa: F401
     except ImportError as e:
-        print("Web UI dependencies not installed (need fastapi + uvicorn).")
-        print(
-            f"Re-install the package into this interpreter so metadata updates apply:\n"
-            f"  cd {PROJECT_ROOT}\n"
-            f"  {sys.executable} -m pip install -e .\n"
-            "If `pip` is missing in this venv, use:  uv pip install -e ."
+        _print_desktop_startup_failure(
+            "dependency_missing",
+            "Web UI dependencies not installed (need fastapi + uvicorn).",
+            detail=str(e),
+            actions=[
+                f"Install: cd {PROJECT_ROOT}",
+                f"Install: {sys.executable} -m pip install -e .",
+                "Fallback: uv pip install -e .",
+            ],
         )
-        print(f"Import error: {e}")
         sys.exit(1)
 
     if "HERMES_WEB_DIST" not in os.environ:
         if not _build_web_ui(PROJECT_ROOT / "web", fatal=True):
+            _print_desktop_startup_failure(
+                "frontend_build_failed",
+                "Dashboard frontend build failed before the desktop shell could start.",
+                actions=[
+                    f"Build manually: cd {PROJECT_ROOT / 'web'}",
+                    "Build manually: npm install && npm run build",
+                    f"Retry: hermes desktop --port {args.port}",
+                ],
+            )
             sys.exit(1)
 
     from hermes_cli.web_server import start_server
@@ -9319,6 +9380,15 @@ def cmd_desktop(args):
             allow_public=False,
             embedded_chat=False,
         )
+    except Exception as e:
+        free_port = _find_free_desktop_port(host, args.port)
+        _print_desktop_startup_failure(
+            "server_start_failed",
+            "Dashboard server exited before the desktop shell became usable.",
+            detail=f"{e.__class__.__name__}: {e}",
+            actions=_desktop_startup_actions(port=args.port, free_port=free_port),
+        )
+        sys.exit(1)
     finally:
         _clear_desktop_runtime_if_owned(os.getpid())
 

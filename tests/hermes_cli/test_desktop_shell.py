@@ -12,6 +12,7 @@ import pytest
 from hermes_cli.main import (
     _desktop_dashboard_url,
     _desktop_runtime_record,
+    _find_free_desktop_port,
     _find_stale_dashboard_pids,
     cmd_desktop,
 )
@@ -230,12 +231,15 @@ def test_desktop_runtime_record_is_safe_and_local():
 
 
 def test_desktop_busy_non_dashboard_port_is_degraded(capsys):
+    def fake_port_probe(_host, port, **_kwargs):
+        return port == 9555
+
     with patch(
         "hermes_cli.main._probe_dashboard_status",
         return_value=(False, "http_404"),
     ), patch(
         "hermes_cli.main._port_accepts_connections",
-        return_value=True,
+        side_effect=fake_port_probe,
     ), patch(
         "hermes_cli.main._build_web_ui"
     ) as mock_build, patch(
@@ -249,8 +253,133 @@ def test_desktop_busy_non_dashboard_port_is_degraded(capsys):
     mock_build.assert_not_called()
     mock_open.assert_not_called()
     out = capsys.readouterr().out
+    assert "Hermes desktop startup failed: port_busy" in out
     assert "Port 9555 is already in use" in out
-    assert "hermes desktop --port <free-port>" in out
+    assert "hermes desktop --port 9556" in out
+    assert "Inspect: hermes dashboard --status" in out
+
+
+def test_desktop_free_port_suggestion_skips_occupied_ports():
+    def fake_port_probe(_host, port, **_kwargs):
+        return port in {9556, 9557}
+
+    with patch(
+        "hermes_cli.main._port_accepts_connections",
+        side_effect=fake_port_probe,
+    ):
+        assert _find_free_desktop_port("127.0.0.1", 9555, attempts=5) == 9558
+
+
+def test_desktop_dependency_missing_is_classified(capsys):
+    orig_import = __import__
+
+    def fake_import(name, *args, **kwargs):
+        if name == "fastapi":
+            raise ImportError("fastapi missing")
+        return orig_import(name, *args, **kwargs)
+
+    with patch(
+        "hermes_cli.main._probe_dashboard_status",
+        return_value=(False, "URLError"),
+    ), patch(
+        "hermes_cli.main._port_accepts_connections",
+        return_value=False,
+    ), patch(
+        "hermes_cli.main._build_web_ui"
+    ) as mock_build, patch(
+        "hermes_cli.main._open_browser_url"
+    ) as mock_open, patch(
+        "builtins.__import__",
+        side_effect=fake_import,
+    ), pytest.raises(
+        SystemExit
+    ) as exc:
+        cmd_desktop(_ns(port=9666))
+
+    assert exc.value.code == 1
+    mock_build.assert_not_called()
+    mock_open.assert_not_called()
+    out = capsys.readouterr().out
+    assert "Hermes desktop startup failed: dependency_missing" in out
+    assert "Web UI dependencies not installed" in out
+    assert "fastapi missing" in out
+
+
+def test_desktop_frontend_build_failure_is_classified(monkeypatch, capsys):
+    monkeypatch.delenv("HERMES_WEB_DIST", raising=False)
+
+    with patch(
+        "hermes_cli.main._probe_dashboard_status",
+        return_value=(False, "URLError"),
+    ), patch(
+        "hermes_cli.main._port_accepts_connections",
+        return_value=False,
+    ), patch(
+        "hermes_cli.main._build_web_ui",
+        return_value=False,
+    ), patch(
+        "hermes_cli.main._open_browser_url"
+    ) as mock_open, patch(
+        "hermes_cli.main._write_desktop_runtime_record"
+    ) as mock_write, patch.dict(
+        sys.modules,
+        {
+            "fastapi": MagicMock(),
+            "uvicorn": MagicMock(),
+        },
+    ), pytest.raises(
+        SystemExit
+    ) as exc:
+        cmd_desktop(_ns(port=9667))
+
+    assert exc.value.code == 1
+    mock_open.assert_not_called()
+    mock_write.assert_not_called()
+    out = capsys.readouterr().out
+    assert "Hermes desktop startup failed: frontend_build_failed" in out
+    assert "npm install && npm run build" in out
+
+
+def test_desktop_server_start_failure_is_classified(monkeypatch, capsys):
+    monkeypatch.setenv("HERMES_WEB_DIST", "prebuilt")
+
+    def fake_start_server(**_kwargs):
+        raise RuntimeError("bind failed")
+
+    fake_ws = MagicMock()
+    fake_ws.start_server = fake_start_server
+
+    with patch(
+        "hermes_cli.main._probe_dashboard_status",
+        return_value=(False, "URLError"),
+    ), patch(
+        "hermes_cli.main._port_accepts_connections",
+        return_value=False,
+    ), patch(
+        "hermes_cli.main._open_browser_url"
+    ), patch(
+        "hermes_cli.main._write_desktop_runtime_record"
+    ) as mock_write, patch(
+        "hermes_cli.main._clear_desktop_runtime_if_owned"
+    ) as mock_clear, patch.dict(
+        sys.modules,
+        {
+            "fastapi": MagicMock(),
+            "uvicorn": MagicMock(),
+            "hermes_cli.web_server": fake_ws,
+        },
+    ), pytest.raises(
+        SystemExit
+    ) as exc:
+        cmd_desktop(_ns(port=9668))
+
+    assert exc.value.code == 1
+    mock_write.assert_called_once()
+    mock_clear.assert_called_once_with(os.getpid())
+    out = capsys.readouterr().out
+    assert "Hermes desktop startup failed: server_start_failed" in out
+    assert "RuntimeError: bind failed" in out
+    assert "hermes desktop --port 9669" in out
 
 
 def test_desktop_stop_without_runtime_record_is_noop(capsys):
