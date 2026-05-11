@@ -75,6 +75,11 @@ export const api = {
       `/api/run-inspector/attention?limit=${limit}`,
       init,
     ),
+  getRunInspectorDesktopStatus: (port = 9119, init?: RequestInit) =>
+    fetchJSON<RunInspectorDesktopStatusResponse>(
+      `/api/run-inspector/desktop-status?port=${port}`,
+      init,
+    ),
   getGatewayRuns: (limit = 20, init?: RequestInit) =>
     fetchJSON<RunInspectorGatewayRunsResponse>(
       `/api/run-inspector/gateway-runs?limit=${limit}`,
@@ -569,6 +574,32 @@ export interface RunInspectorAttentionSignal {
 export interface RunInspectorAttentionResponse {
   ok: boolean;
   signals: RunInspectorAttentionSignal[];
+  refreshed_at: string;
+}
+
+export interface RunInspectorDesktopStatus {
+  ok: boolean;
+  record_present: boolean;
+  runtime_record_cleared: boolean;
+  pid: number | null;
+  pid_status: "none" | "running" | "stale" | string;
+  pid_reason: string;
+  host: string;
+  port: number;
+  route: string;
+  url: string;
+  started_at: string | null;
+  health: "ok" | "unavailable" | string;
+  health_reason: string;
+  compatible_dashboard: boolean;
+  reuse_command: string | null;
+  manual_url: string | null;
+  stop_command: string | null;
+}
+
+export interface RunInspectorDesktopStatusResponse {
+  ok: boolean;
+  status: RunInspectorDesktopStatus;
   refreshed_at: string;
 }
 

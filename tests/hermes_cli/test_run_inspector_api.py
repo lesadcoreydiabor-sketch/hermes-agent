@@ -217,3 +217,53 @@ def test_run_inspector_attention_api_degrades_when_snapshot_builder_fails(
     payload = response.json()
     assert payload["ok"] is False
     assert payload["signals"][0]["kind"] == "run_degraded"
+
+
+def test_run_inspector_desktop_status_api_returns_safe_status(
+    monkeypatch,
+    run_inspector_client,
+):
+    from hermes_cli import web_server
+
+    monkeypatch.setattr(
+        web_server,
+        "build_desktop_status_payload",
+        lambda **kwargs: {
+            "ok": True,
+            "record_present": False,
+            "runtime_record_cleared": False,
+            "pid": None,
+            "pid_status": "none",
+            "pid_reason": "no_record",
+            "host": "127.0.0.1",
+            "port": kwargs["port"],
+            "route": "/run-inspector",
+            "url": "http://127.0.0.1:9222/run-inspector",
+            "started_at": None,
+            "health": "ok",
+            "health_reason": "ok",
+            "compatible_dashboard": True,
+            "reuse_command": "hermes desktop --port 9222",
+            "manual_url": "http://127.0.0.1:9222/run-inspector",
+            "stop_command": "hermes dashboard --stop",
+        },
+    )
+
+    response = run_inspector_client.get("/api/run-inspector/desktop-status?port=9222")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["ok"] is True
+    assert payload["refreshed_at"]
+    assert payload["status"]["compatible_dashboard"] is True
+    assert payload["status"]["port"] == 9222
+    assert payload["status"]["manual_url"] == "http://127.0.0.1:9222/run-inspector"
+    assert "token=" not in json.dumps(payload)
+
+
+def test_run_inspector_desktop_status_api_rejects_invalid_port(
+    run_inspector_client,
+):
+    response = run_inspector_client.get("/api/run-inspector/desktop-status?port=70000")
+
+    assert response.status_code == 400

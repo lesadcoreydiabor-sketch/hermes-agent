@@ -9073,47 +9073,13 @@ def _probe_dashboard_status(
 
 
 def _desktop_status_payload(args) -> dict:
-    record = _read_desktop_runtime_record()
-    host, port, route, url = _desktop_record_url(record, fallback_port=args.port)
-    pid = 0
-    pid_reason = "no_record"
-    pid_status = "none"
-    runtime_record_cleared = False
+    from hermes_cli.desktop_shell_status import build_desktop_status_payload
 
-    if record:
-        pid, running, pid_reason = _desktop_runtime_pid_status(record)
-        pid_status = "running" if running else "stale"
-        if not running:
-            _remove_desktop_runtime_record()
-            runtime_record_cleared = True
-
-    reachable, reason = _probe_dashboard_status(host, port)
-    compatible_dashboard = not record and reachable
-    return {
-        "ok": True,
-        "record_present": bool(record),
-        "runtime_record_cleared": runtime_record_cleared,
-        "pid": pid or None,
-        "pid_status": pid_status,
-        "pid_reason": pid_reason,
-        "host": host,
-        "port": port,
-        "route": route,
-        "url": url,
-        "started_at": record.get("started_at") if record else None,
-        "health": "ok" if reachable else "unavailable",
-        "health_reason": reason,
-        "compatible_dashboard": compatible_dashboard,
-        "reuse_command": f"hermes desktop --port {port}" if compatible_dashboard else None,
-        "manual_url": url if compatible_dashboard else None,
-        "stop_command": (
-            "hermes dashboard --stop"
-            if compatible_dashboard
-            else f"hermes desktop --port {port} --stop"
-            if record
-            else None
-        ),
-    }
+    return build_desktop_status_payload(
+        clear_stale_record=True,
+        pid_status_fn=_desktop_runtime_pid_status,
+        port=args.port,
+    )
 
 
 def _print_desktop_status(args) -> int:

@@ -50,7 +50,7 @@ def test_desktop_status_reports_route_without_dashboard_deps(capsys):
         return orig_import(name, *a, **kw)
 
     with patch(
-        "hermes_cli.main._read_desktop_runtime_record",
+        "hermes_cli.desktop_shell_status.read_desktop_runtime_record",
         return_value={
             "pid": 12345,
             "host": "127.0.0.1",
@@ -63,7 +63,7 @@ def test_desktop_status_reports_route_without_dashboard_deps(capsys):
         "hermes_cli.main._desktop_runtime_pid_status",
         return_value=(12345, True, "running"),
     ), patch(
-        "hermes_cli.main._probe_dashboard_status",
+        "hermes_cli.desktop_shell_status.probe_dashboard_status",
         return_value=(True, "ok"),
     ), patch(
         "builtins.__import__",
@@ -81,7 +81,7 @@ def test_desktop_status_reports_route_without_dashboard_deps(capsys):
 
 def test_desktop_status_clears_stale_runtime_record(capsys):
     with patch(
-        "hermes_cli.main._read_desktop_runtime_record",
+        "hermes_cli.desktop_shell_status.read_desktop_runtime_record",
         return_value={
             "pid": 99999,
             "host": "127.0.0.1",
@@ -92,9 +92,9 @@ def test_desktop_status_clears_stale_runtime_record(capsys):
         "hermes_cli.main._desktop_runtime_pid_status",
         return_value=(99999, False, "not_found"),
     ), patch(
-        "hermes_cli.main._remove_desktop_runtime_record"
+        "hermes_cli.desktop_shell_status.remove_desktop_runtime_record"
     ) as mock_remove, patch(
-        "hermes_cli.main._probe_dashboard_status",
+        "hermes_cli.desktop_shell_status.probe_dashboard_status",
         return_value=(False, "URLError"),
     ), pytest.raises(SystemExit) as exc:
         cmd_desktop(_ns(status=True))
@@ -108,10 +108,10 @@ def test_desktop_status_clears_stale_runtime_record(capsys):
 
 def test_desktop_status_without_record_points_to_compatible_dashboard(capsys):
     with patch(
-        "hermes_cli.main._read_desktop_runtime_record",
+        "hermes_cli.desktop_shell_status.read_desktop_runtime_record",
         return_value=None,
     ), patch(
-        "hermes_cli.main._probe_dashboard_status",
+        "hermes_cli.desktop_shell_status.probe_dashboard_status",
         return_value=(True, "ok"),
     ), pytest.raises(SystemExit) as exc:
         cmd_desktop(_ns(port=9222, status=True))
@@ -128,10 +128,10 @@ def test_desktop_status_without_record_points_to_compatible_dashboard(capsys):
 
 def test_desktop_status_json_reports_compatible_dashboard_without_record(capsys):
     with patch(
-        "hermes_cli.main._read_desktop_runtime_record",
+        "hermes_cli.desktop_shell_status.read_desktop_runtime_record",
         return_value=None,
     ), patch(
-        "hermes_cli.main._probe_dashboard_status",
+        "hermes_cli.desktop_shell_status.probe_dashboard_status",
         return_value=(True, "ok"),
     ), pytest.raises(SystemExit) as exc:
         cmd_desktop(_ns(port=9222, status=True, json=True))
@@ -150,7 +150,7 @@ def test_desktop_status_json_reports_compatible_dashboard_without_record(capsys)
 
 def test_desktop_status_json_sanitizes_record_url_query(capsys):
     with patch(
-        "hermes_cli.main._read_desktop_runtime_record",
+        "hermes_cli.desktop_shell_status.read_desktop_runtime_record",
         return_value={
             "pid": 12345,
             "host": "127.0.0.1",
@@ -163,7 +163,7 @@ def test_desktop_status_json_sanitizes_record_url_query(capsys):
         "hermes_cli.main._desktop_runtime_pid_status",
         return_value=(12345, True, "running"),
     ), patch(
-        "hermes_cli.main._probe_dashboard_status",
+        "hermes_cli.desktop_shell_status.probe_dashboard_status",
         return_value=(True, "ok"),
     ), pytest.raises(SystemExit) as exc:
         cmd_desktop(_ns(status=True, json=True))

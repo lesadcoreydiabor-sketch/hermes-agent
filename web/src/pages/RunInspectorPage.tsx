@@ -15,6 +15,7 @@ import {
   Database,
   FileWarning,
   Link,
+  Monitor,
   Play,
   RefreshCw,
   Shield,
@@ -29,10 +30,12 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { usePageHeader } from "@/contexts/usePageHeader";
 import { useRunInspectorAttention } from "@/hooks/useRunInspectorAttention";
 import { useRunInspectorBrowserNotifications } from "@/hooks/useRunInspectorBrowserNotifications";
+import { useRunInspectorDesktopStatus } from "@/hooks/useRunInspectorDesktopStatus";
 import { useRunInspectorEvents } from "@/hooks/useRunInspectorEvents";
 import { useRunInspectorStatus } from "@/hooks/useRunInspectorStatus";
 import type {
   RunInspectorAttentionSignal,
+  RunInspectorDesktopStatus,
   RunInspectorEvent,
   RunInspectorGatewayForwarder,
   RunInspectorGatewayRun,
@@ -71,6 +74,10 @@ import {
   type RunInspectorAttentionState,
 } from "@/pages/runInspectorAttention";
 import {
+  describeDesktopShellStatus,
+  type RunInspectorDesktopStatusState,
+} from "@/pages/runInspectorDesktopStatus";
+import {
   describeGatewayRunDetail,
   describeGatewayRunList,
   describeGatewayRunControlState,
@@ -103,6 +110,7 @@ export default function RunInspectorPage() {
   const inspector = useRunInspectorStatus();
   const eventStream = useRunInspectorEvents();
   const attention = useRunInspectorAttention();
+  const desktopStatus = useRunInspectorDesktopStatus();
   const browserNotifications = useRunInspectorBrowserNotifications({
     signals: attention.signals,
   });
@@ -335,7 +343,13 @@ export default function RunInspectorPage() {
 
   useEffect(() => {
     attention.refresh();
-  }, [attention.refresh, eventStream.lastUpdatedAt, inspector.lastUpdatedAt]);
+    desktopStatus.refresh();
+  }, [
+    attention.refresh,
+    desktopStatus.refresh,
+    eventStream.lastUpdatedAt,
+    inspector.lastUpdatedAt,
+  ]);
 
   useLayoutEffect(() => {
     setTitle("Run Inspector");
@@ -428,6 +442,14 @@ export default function RunInspectorPage() {
 
           <div className="flex min-w-0 flex-col gap-4">
             <RuntimeCard snapshot={snapshot} />
+            <DesktopShellStatusCard
+              error={desktopStatus.error}
+              isLoading={desktopStatus.isLoading}
+              lastUpdatedAt={desktopStatus.lastUpdatedAt}
+              onRefresh={desktopStatus.refresh}
+              state={desktopStatus.state}
+              status={desktopStatus.status}
+            />
             <HealthCard snapshot={snapshot} />
             <GatewayRunFollowCard
               busy={gatewayForwarderBusy}
@@ -748,6 +770,67 @@ function RuntimeCard({ snapshot }: { snapshot: RunInspectorSnapshot | null }) {
         <DetailRow label="Session ID" value={formatDisplayValue(snapshot?.session_id)} />
         <DetailRow label="Workspace" value={formatDisplayValue(snapshot?.workspace)} />
         <DetailRow label="Reason" value={formatDisplayValue(snapshot?.reason, "None")} />
+      </CardContent>
+    </Card>
+  );
+}
+
+function DesktopShellStatusCard({
+  error,
+  isLoading,
+  lastUpdatedAt,
+  onRefresh,
+  state,
+  status,
+}: {
+  error: string | null;
+  isLoading: boolean;
+  lastUpdatedAt: string | null;
+  onRefresh: () => void;
+  state: RunInspectorDesktopStatusState;
+  status: RunInspectorDesktopStatus | null;
+}) {
+  const display = describeDesktopShellStatus(state, status, error);
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex min-w-0 items-center justify-between gap-2">
+          <span className="flex min-w-0 items-center gap-2">
+            <Monitor className="h-4 w-4 shrink-0" />
+            <span className="truncate">Desktop Shell</span>
+          </span>
+          <Badge tone={BADGE_TONE[display.tone]} className="shrink-0 text-[10px]">
+            {display.label}
+          </Badge>
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="flex min-w-0 flex-col gap-3">
+        <div className="flex min-w-0 flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
+          <span className="min-w-0 break-words">
+            {formatDisplayValue(error, display.message)}
+          </span>
+          <span className="flex shrink-0 items-center gap-2">
+            <span>{lastUpdatedAt ? formatDateTime(lastUpdatedAt) : "Not refreshed"}</span>
+            <Button
+              type="button"
+              size="sm"
+              outlined
+              disabled={isLoading}
+              onClick={onRefresh}
+              prefix={isLoading ? <Spinner /> : <RefreshCw />}
+            >
+              Refresh
+            </Button>
+          </span>
+        </div>
+        <div className="flex min-w-0 flex-col divide-y divide-border/70 border border-border">
+          <DetailRow label="Health" value={formatDisplayValue(status?.health)} />
+          <DetailRow label="PID" value={formatDisplayValue(status?.pid ? String(status.pid) : null, "None")} />
+          <DetailRow label="PID Status" value={formatDisplayValue(status?.pid_status)} />
+          <DetailRow label="URL" value={formatDisplayValue(status?.url)} />
+          <DetailRow label="Reuse" value={formatDisplayValue(status?.reuse_command, "None")} />
+          <DetailRow label="Stop" value={formatDisplayValue(status?.stop_command, "None")} />
+        </div>
       </CardContent>
     </Card>
   );

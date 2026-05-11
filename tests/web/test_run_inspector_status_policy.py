@@ -120,6 +120,34 @@ const attention = moduleRef.exports;
     return json.loads(completed.stdout)
 
 
+def run_desktop_status_script(script: str) -> dict:
+    node_script = f"""
+const fs = require("node:fs");
+const vm = require("node:vm");
+const ts = require("typescript");
+const source = fs.readFileSync("src/pages/runInspectorDesktopStatus.ts", "utf8");
+const output = ts.transpileModule(source, {{
+  compilerOptions: {{
+    module: ts.ModuleKind.CommonJS,
+    target: ts.ScriptTarget.ES2022,
+  }},
+}}).outputText;
+const moduleRef = {{ exports: {{}} }};
+const sandbox = {{ module: moduleRef, exports: moduleRef.exports, require, console }};
+vm.runInNewContext(output, sandbox, {{ filename: "runInspectorDesktopStatus.js" }});
+const desktopStatus = moduleRef.exports;
+{script}
+"""
+    completed = subprocess.run(
+        ["node", "-e", node_script],
+        cwd=WEB_DIR,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    return json.loads(completed.stdout)
+
+
 def run_gateway_controls_script(script: str) -> dict:
     node_script = f"""
 const fs = require("node:fs");
@@ -698,6 +726,72 @@ def test_run_inspector_browser_notification_policy_requires_opt_in_and_dedupes()
     }
 
 
+def test_run_inspector_desktop_shell_status_describes_states():
+    payload = run_desktop_status_script(
+        textwrap.dedent(
+            """
+            const baseStatus = {
+              ok: true,
+              record_present: true,
+              runtime_record_cleared: false,
+              pid: 12345,
+              pid_status: "running",
+              pid_reason: "running",
+              host: "127.0.0.1",
+              port: 9119,
+              route: "/run-inspector",
+              url: "http://127.0.0.1:9119/run-inspector",
+              started_at: "2026-05-11T00:00:00Z",
+              health: "ok",
+              health_reason: "ok",
+              compatible_dashboard: false,
+              reuse_command: null,
+              manual_url: null,
+              stop_command: "hermes desktop --port 9119 --stop",
+            };
+            const states = {
+              running: desktopStatus.describeDesktopShellStatus("ready", baseStatus),
+              compatible: desktopStatus.describeDesktopShellStatus("ready", {
+                ...baseStatus,
+                record_present: false,
+                pid: null,
+                pid_status: "none",
+                pid_reason: "no_record",
+                compatible_dashboard: true,
+                reuse_command: "hermes desktop --port 9119",
+                manual_url: "http://127.0.0.1:9119/run-inspector",
+                stop_command: "hermes dashboard --stop",
+              }),
+              stale: desktopStatus.describeDesktopShellStatus("ready", {
+                ...baseStatus,
+                pid_status: "stale",
+                pid_reason: "not_found",
+              }),
+              offline: desktopStatus.describeDesktopShellStatus("offline", null),
+            };
+            console.log(JSON.stringify(states));
+            """
+        )
+    )
+
+    assert payload["running"] == {
+        "label": "Desktop shell running",
+        "message": "Shell-owned dashboard",
+        "tone": "success",
+    }
+    assert payload["compatible"] == {
+        "label": "Dashboard reusable",
+        "message": "No desktop runtime record",
+        "tone": "primary",
+    }
+    assert payload["stale"] == {
+        "label": "Desktop record stale",
+        "message": "not_found",
+        "tone": "warning",
+    }
+    assert payload["offline"]["tone"] == "destructive"
+
+
 def test_run_inspector_gateway_controls_follow_run_state_and_events():
     payload = run_gateway_controls_script(
         textwrap.dedent(
@@ -1015,3 +1109,23 @@ def test_run_inspector_browser_notifications_are_explicit_opt_in() -> None:
     assert "new window.Notification(payload.title" in browser_hook_source
     assert "window.location.assign(payload.route)" in browser_hook_source
     assert "token=" not in browser_hook_source
+
+
+def test_run_inspector_desktop_status_uses_safe_readonly_api() -> None:
+    page_source = (
+        ROOT / "web" / "src" / "pages" / "RunInspectorPage.tsx"
+    ).read_text(encoding="utf-8")
+    hook_source = (
+        ROOT / "web" / "src" / "hooks" / "useRunInspectorDesktopStatus.ts"
+    ).read_text(encoding="utf-8")
+    api_source = (ROOT / "web" / "src" / "lib" / "api.ts").read_text(
+        encoding="utf-8"
+    )
+
+    assert "useRunInspectorDesktopStatus" in page_source
+    assert "Desktop Shell" in page_source
+    assert "api.getRunInspectorDesktopStatus" in hook_source
+    assert "/api/run-inspector/desktop-status?port=" in api_source
+    assert "fetcher = api.getRunInspectorDesktopStatus" in hook_source
+    assert "stopDesktop" not in page_source
+    assert "startDesktop" not in page_source

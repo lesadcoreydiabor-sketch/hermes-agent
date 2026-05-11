@@ -48,6 +48,7 @@ from hermes_cli.config import (
     check_config_version,
     redact_key,
 )
+from hermes_cli.desktop_shell_status import build_desktop_status_payload
 from hermes_cli.run_inspector_events import (
     get_recent_run_inspector_events,
     record_run_inspector_event_frame,
@@ -606,6 +607,21 @@ async def get_run_inspector_attention(limit: int = 50):
     return {
         "ok": ok,
         "signals": build_attention_signals(snapshot=snapshot, events=events),
+        "refreshed_at": _utc_now_iso(),
+    }
+
+
+@app.get("/api/run-inspector/desktop-status")
+async def get_run_inspector_desktop_status(port: int = 9119):
+    """Return read-only desktop shell status for Run Inspector UI."""
+    if port < 1 or port > 65535:
+        raise HTTPException(status_code=400, detail="port must be between 1 and 65535")
+    return {
+        "ok": True,
+        "status": build_desktop_status_payload(
+            clear_stale_record=False,
+            port=port,
+        ),
         "refreshed_at": _utc_now_iso(),
     }
 
