@@ -88,6 +88,7 @@ import {
 } from "@/pages/runInspectorDesktopStatus";
 import {
   describeMemoryWorkbenchState,
+  describeRuntimePersistenceState,
   memoryProviderTone,
   type RunInspectorMemoryWorkbenchState,
 } from "@/pages/runInspectorMemoryWorkbench";
@@ -683,6 +684,9 @@ function MultiAgentMemoryWorkbenchCard({
   const memory = workbench?.memory ?? null;
   const queue = workbench?.long_term_queue ?? null;
   const journal = workbench?.skills_journal ?? null;
+  const runtimePersistence = workbench?.runtime_persistence ?? null;
+  const runtimePersistenceDisplay = describeRuntimePersistenceState(workbench);
+  const runtimePersistenceFlags = runtimePersistence?.flags ?? [];
   const providers = memory?.providers ?? [];
 
   return (
@@ -725,7 +729,7 @@ function MultiAgentMemoryWorkbenchCard({
           </div>
         ) : null}
 
-        <div className="grid min-w-0 gap-2 sm:grid-cols-2">
+        <div className="grid min-w-0 gap-2 sm:grid-cols-2 xl:grid-cols-5">
           <Metric
             icon={<Activity className="h-4 w-4" />}
             label="Work"
@@ -749,7 +753,50 @@ function MultiAgentMemoryWorkbenchCard({
             label="Journal"
             value={`${journal?.entries.length ?? 0} accepted`}
           />
+          <Metric
+            icon={<Shield className="h-4 w-4" />}
+            label="Persistence"
+            tone={runtimePersistenceDisplay.tone}
+            value={runtimePersistenceDisplay.label}
+          />
         </div>
+
+        {runtimePersistenceFlags.length > 0 ? (
+          <div className="flex min-w-0 flex-col divide-y divide-border/70 border border-border">
+            {runtimePersistenceFlags.map((flag) => (
+              <div
+                key={flag.name}
+                className="grid min-w-0 gap-2 px-3 py-2 sm:grid-cols-[minmax(0,1fr)_auto]"
+              >
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-medium">
+                    {formatDisplayValue(flag.name)}
+                  </p>
+                  <p className="truncate font-mono-ui text-xs text-muted-foreground">
+                    {formatDisplayValue(flag.env_var)}
+                  </p>
+                  <p className="break-all font-mono-ui text-xs text-muted-foreground/80">
+                    {formatDisplayValue(flag.path)}
+                  </p>
+                </div>
+                <div className="flex shrink-0 flex-wrap items-center gap-2">
+                  <Badge
+                    tone={flag.enabled ? "success" : "outline"}
+                    className="w-fit text-[10px]"
+                  >
+                    {flag.enabled ? "on" : "off"}
+                  </Badge>
+                  <Badge
+                    tone={flag.exists ? "secondary" : "outline"}
+                    className="w-fit text-[10px]"
+                  >
+                    {flag.exists ? "file" : "no file"}
+                  </Badge>
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : null}
 
         {checkpoint ? (
           <div className="flex min-w-0 flex-col divide-y divide-border/70 border border-border">

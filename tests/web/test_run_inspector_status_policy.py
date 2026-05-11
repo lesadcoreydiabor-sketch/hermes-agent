@@ -1346,6 +1346,8 @@ def test_run_inspector_memory_workbench_uses_readonly_api() -> None:
     assert "useRunInspectorMemoryWorkbench" in page_source
     assert "<MultiAgentMemoryWorkbenchCard" in page_source
     assert "Multi-Agent Memory" in page_source
+    assert "describeRuntimePersistenceState" in page_source
+    assert 'label="Persistence"' in page_source
     assert "api.getRunInspectorMemoryWorkbench" in hook_source
     assert "runtime_persistence" in api_source
     assert "describeRuntimePersistenceState" in (

@@ -1217,6 +1217,25 @@ tasks:
     status: completed
     risk: low
 
+  - id: HMAMR-10
+    title: Render runtime persistence status in Run Inspector
+    description: Display the read-only runtime persistence opt-in status inside the Multi-Agent Memory workbench card without adding mutation controls.
+    depends_on:
+      - HMAMR-08
+      - HMAMR-09
+    acceptance:
+      - Run Inspector shows persistence status and each delegate persistence flag with on/off and file/no-file state.
+      - UI exposes only env var names and local relative paths, never env values.
+      - UI does not add enable, disable, start, stop, spawn, write memory, edit skills, or config mutation controls.
+      - Layout remains bounded on narrow viewports.
+    verify:
+      - venv/Scripts/python.exe -m pytest tests/web/test_run_inspector_status_policy.py -q -o addopts=
+      - cd web; npm.cmd run build
+      - venv/Scripts/python.exe -c "import yaml; yaml.safe_load(open('.hermes/task.yaml', encoding='utf-8'))"
+      - git diff --check -- web/src/pages/RunInspectorPage.tsx tests/web/test_run_inspector_status_policy.py .hermes/task.yaml
+    status: completed
+    risk: medium
+
 risk_flags:
   destructive_file_change:
     pause: true
@@ -2030,6 +2049,15 @@ progress_report:
       verification_result: "passed: venv/Scripts/python.exe -m pytest tests/web/test_run_inspector_status_policy.py -q -o addopts= (27 passed); passed: cd web; npm.cmd run build; passed: venv/Scripts/python.exe -c yaml.safe_load task.yaml"
       blockers: []
       next_step: "Render runtime persistence status in Run Inspector UI after existing dirty RunInspectorPage changes are coordinated."
+    - task_id: HMAMR-10
+      status: completed
+      changed_files:
+        - web/src/pages/RunInspectorPage.tsx
+        - tests/web/test_run_inspector_status_policy.py
+        - .hermes/task.yaml
+      verification_result: "passed: venv/Scripts/python.exe -m pytest tests/web/test_run_inspector_status_policy.py -q -o addopts= (27 passed); passed: cd web; npm.cmd run build; passed: venv/Scripts/python.exe -c yaml.safe_load task.yaml"
+      blockers: []
+      next_step: "Add browser smoke coverage for the runtime persistence UI when a clean dashboard process is available."
 
 failure_review:
   enabled: true
