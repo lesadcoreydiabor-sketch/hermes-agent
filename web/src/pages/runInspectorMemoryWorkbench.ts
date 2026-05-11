@@ -72,3 +72,35 @@ export function memoryProviderTone(status: string): Tone {
   if (status === "unavailable") return "muted";
   return "muted";
 }
+
+export function describeRuntimePersistenceState(
+  workbench: RunInspectorMemoryWorkbench | null,
+): MemoryWorkbenchDisplay {
+  const runtime = workbench?.runtime_persistence ?? null;
+  if (!runtime) {
+    return {
+      label: "Persistence unknown",
+      message: "No runtime persistence status",
+      tone: "muted",
+    };
+  }
+  if (runtime.degraded_reason) {
+    return {
+      label: "Persistence degraded",
+      message: runtime.degraded_reason,
+      tone: "warning",
+    };
+  }
+  if (runtime.enabled_count > 0) {
+    return {
+      label: "Persistence opt-in",
+      message: `${runtime.enabled_count} local writes enabled`,
+      tone: "success",
+    };
+  }
+  return {
+    label: "Persistence off",
+    message: "No delegate persistence writes",
+    tone: "muted",
+  };
+}

@@ -1260,6 +1260,13 @@ def test_run_inspector_memory_workbench_describes_all_states() -> None:
                 degraded_reason: null,
                 privacy_class: "redacted_summary",
               },
+              runtime_persistence: {
+                status: "disabled",
+                enabled_count: 0,
+                flags: [],
+                degraded_reason: null,
+                privacy_class: "redacted_summary",
+              },
               checkpoint: {
                 current_task_id: null,
                 completed_tasks: [],
@@ -1295,6 +1302,16 @@ def test_run_inspector_memory_workbench_describes_all_states() -> None:
                 status: "unavailable",
                 degraded_reason: "workbench_unavailable",
               }).label,
+              persistenceOff: workbench.describeRuntimePersistenceState(base).label,
+              persistenceOn: workbench.describeRuntimePersistenceState({
+                ...base,
+                runtime_persistence: {
+                  ...base.runtime_persistence,
+                  status: "enabled",
+                  enabled_count: 2,
+                },
+              }).message,
+              persistenceMissing: workbench.describeRuntimePersistenceState(null).tone,
               offlineTone: workbench.describeMemoryWorkbenchState("offline", null).tone,
               providerTone: workbench.memoryProviderTone("available"),
             };
@@ -1308,6 +1325,9 @@ def test_run_inspector_memory_workbench_describes_all_states() -> None:
     assert payload["failedTone"] == "destructive"
     assert payload["degradedTone"] == "warning"
     assert payload["unavailable"] == "Memory unavailable"
+    assert payload["persistenceOff"] == "Persistence off"
+    assert payload["persistenceOn"] == "2 local writes enabled"
+    assert payload["persistenceMissing"] == "muted"
     assert payload["offlineTone"] == "destructive"
     assert payload["providerTone"] == "success"
 
@@ -1327,6 +1347,10 @@ def test_run_inspector_memory_workbench_uses_readonly_api() -> None:
     assert "<MultiAgentMemoryWorkbenchCard" in page_source
     assert "Multi-Agent Memory" in page_source
     assert "api.getRunInspectorMemoryWorkbench" in hook_source
+    assert "runtime_persistence" in api_source
+    assert "describeRuntimePersistenceState" in (
+        ROOT / "web" / "src" / "pages" / "runInspectorMemoryWorkbench.ts"
+    ).read_text(encoding="utf-8")
     assert "/api/run-inspector/memory-workbench?limit=" in api_source
     assert "fetcher = api.getRunInspectorMemoryWorkbench" in hook_source
     assert "method:" not in hook_source

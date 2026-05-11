@@ -672,6 +672,23 @@ export interface RunInspectorMemoryWorkbenchMemory {
   privacy_class: string;
 }
 
+export interface RunInspectorMemoryWorkbenchRuntimePersistenceFlag {
+  name: string;
+  env_var: string;
+  enabled: boolean;
+  path: string;
+  exists: boolean;
+  privacy_class: string;
+}
+
+export interface RunInspectorMemoryWorkbenchRuntimePersistence {
+  status: string;
+  enabled_count: number;
+  flags: RunInspectorMemoryWorkbenchRuntimePersistenceFlag[];
+  degraded_reason: string | null;
+  privacy_class: string;
+}
+
 export interface RunInspectorMemoryWorkbenchEntry {
   [key: string]: unknown;
   entry_id?: string | null;
@@ -691,6 +708,7 @@ export interface RunInspectorMemoryWorkbench {
   status_reason: string;
   active_work: RunInspectorMemoryWorkbenchActiveWork[];
   memory: RunInspectorMemoryWorkbenchMemory;
+  runtime_persistence?: RunInspectorMemoryWorkbenchRuntimePersistence;
   checkpoint: RunInspectorMemoryWorkbenchCheckpoint;
   action_ledger: {
     entries: RunInspectorMemoryWorkbenchEntry[];
