@@ -2,10 +2,16 @@ import json
 
 import yaml
 
+from hermes_cli.action_ledger import append_action_ledger_entry
+from hermes_cli.failure_review_candidates import (
+    append_failure_review_candidates_to_long_term_queue,
+    build_failure_review_candidate,
+)
 from hermes_cli.multi_agent_memory_workbench import (
     build_multi_agent_memory_workbench,
     empty_multi_agent_memory_workbench,
 )
+from hermes_cli.working_checkpoint import write_working_checkpoint_from_files
 
 
 def test_multi_agent_memory_workbench_summarizes_safe_sources(tmp_path) -> None:
@@ -112,6 +118,69 @@ def test_multi_agent_memory_workbench_summarizes_safe_sources(tmp_path) -> None:
     assert workbench["long_term_queue"]["unresolved_count"] == 1
     assert workbench["skills_journal"]["entries"][0]["skill_name"] == "product-manager"
     assert workbench["privacy_class"] == "redacted_summary"
+
+
+def test_multi_agent_memory_workbench_reads_runtime_persisted_files(tmp_path) -> None:
+    hermes_dir = tmp_path / ".hermes"
+    hermes_dir.mkdir()
+    task_path = hermes_dir / "task.yaml"
+    ledger_path = hermes_dir / "action_ledger.jsonl"
+    queue_path = hermes_dir / "long_term_queue.jsonl"
+    checkpoint_path = hermes_dir / "working_checkpoint.json"
+    task_path.write_text(
+        yaml.safe_dump(
+            {
+                "capability": "hermes-multi-agent-memory",
+                "tasks": [
+                    {"id": "HMAMR-06", "title": "Workbench runtime files", "status": "running"}
+                ],
+            },
+            sort_keys=False,
+        ),
+        encoding="utf-8",
+    )
+    append_action_ledger_entry(
+        {
+            "event_type": "agent.child.running",
+            "task_id": "HMAMR-06",
+            "work_id": "work-1",
+            "agent_id": "child-1",
+            "status": "running",
+            "summary": "token=super-secret C:\\Users\\XQQ\\secret.txt",
+        },
+        ledger_path=ledger_path,
+    )
+    candidate = build_failure_review_candidate(
+        "repeated_runtime_error",
+        task_id="HMAMR-06",
+        tool_name="delegate_task",
+        error_type="SubagentFailed",
+        what_happened="delegate child failed safely",
+        dedupe_key="delegate_task:SubagentFailed:HMAMR-06",
+    )
+    append_failure_review_candidates_to_long_term_queue([candidate], queue_path=queue_path)
+    write_working_checkpoint_from_files(
+        task_yaml_path=task_path,
+        ledger_path=ledger_path,
+        checkpoint_path=checkpoint_path,
+        generated_at="2026-05-11T00:00:00Z",
+    )
+
+    workbench = build_multi_agent_memory_workbench(
+        tmp_path,
+        events=[],
+        memory_diagnostics={"providers": [], "degraded_reason": None},
+        generated_at="2026-05-11T00:01:00Z",
+    )
+
+    assert checkpoint_path.exists()
+    assert workbench["checkpoint"]["current_task_id"] == "HMAMR-06"
+    assert workbench["action_ledger"]["entries"][0]["work_id"] == "work-1"
+    assert workbench["long_term_queue"]["unresolved_count"] == 1
+    assert workbench["long_term_queue"]["entries"][0]["category"] == "recurring_failure"
+    rendered = json.dumps(workbench, sort_keys=True)
+    assert "super-secret" not in rendered
+    assert "C:\\Users" not in rendered
 
 
 def test_multi_agent_memory_workbench_degrades_when_sources_are_missing(tmp_path) -> None:

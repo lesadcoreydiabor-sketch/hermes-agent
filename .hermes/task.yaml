@@ -1145,6 +1145,25 @@ tasks:
     status: completed
     risk: high
 
+  - id: HMAMR-06
+    title: Cover workbench runtime file integration
+    description: Add regression coverage proving Run Inspector workbench reads runtime-persisted action ledger, checkpoint, and long-term queue files safely.
+    depends_on:
+      - HMAMR-01
+      - HMAMR-03
+      - HMAMR-05
+    acceptance:
+      - Workbench test uses the real action ledger append helper, checkpoint persistence helper, and failure candidate queue append helper.
+      - Workbench exposes the persisted action ledger entry, generated checkpoint state, and queued recurring-failure candidate.
+      - Sensitive summaries, absolute paths, diffs, and secret-looking values remain redacted in the workbench payload.
+      - No UI mutation, memory provider write, skill edit, or config mutation is introduced.
+    verify:
+      - venv/Scripts/python.exe -m pytest tests/runtime/test_multi_agent_memory_workbench.py tests/runtime/test_working_checkpoint.py tests/runtime/test_action_ledger.py tests/runtime/test_failure_review_candidates.py -q -o addopts=
+      - venv/Scripts/python.exe -c "import yaml; yaml.safe_load(open('.hermes/task.yaml', encoding='utf-8'))"
+      - git diff --check -- tests/runtime/test_multi_agent_memory_workbench.py .hermes/task.yaml
+    status: completed
+    risk: low
+
 risk_flags:
   destructive_file_change:
     pause: true
@@ -1923,6 +1942,14 @@ progress_report:
       verification_result: "passed: venv/Scripts/python.exe -m pytest tests/tools/test_delegate.py tests/runtime/test_failure_review_candidates.py tests/runtime/test_learning_journal.py tests/agent/test_subagent_stop_hook.py -q -o addopts= (165 passed); passed: venv/Scripts/python.exe -c yaml.safe_load task.yaml"
       blockers: []
       next_step: "Review Run Inspector workbench visibility for newly persisted ledger, checkpoint, and queue files."
+    - task_id: HMAMR-06
+      status: completed
+      changed_files:
+        - tests/runtime/test_multi_agent_memory_workbench.py
+        - .hermes/task.yaml
+      verification_result: "passed: venv/Scripts/python.exe -m pytest tests/runtime/test_multi_agent_memory_workbench.py tests/runtime/test_working_checkpoint.py tests/runtime/test_action_ledger.py tests/runtime/test_failure_review_candidates.py -q -o addopts= (32 passed); passed: venv/Scripts/python.exe -c yaml.safe_load task.yaml"
+      blockers: []
+      next_step: "Review whether UI needs a small opt-in status hint for runtime persistence controls without adding mutation controls."
 
 failure_review:
   enabled: true
