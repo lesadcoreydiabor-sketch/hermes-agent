@@ -9,6 +9,7 @@ related_prds:
   - docs/plans/hermes-run-inspector-event-integration-prd.md
   - docs/plans/hermes-run-inspector-desktop-shell-prd.md
   - docs/plans/hermes-desktop-runtime-decision.md
+  - docs/plans/hermes-desktop-attention-notifications-prd.md
 owner: product-manager
 mode: implementation
 
@@ -694,6 +695,90 @@ tasks:
     status: completed
     risk: medium
 
+  - id: HRIDS-06
+    title: Define desktop attention notification PRD and execution gate
+    description: Define the redacted attention-signal contract, browser notification gate, and native runtime packaging boundary before any notification delivery implementation.
+    depends_on:
+      - HRIDS-05
+    acceptance:
+      - PRD separates evidence, assumptions, decisions, open questions, requirements, non-goals, evaluation, and delivery slices.
+      - PRD maps GitNexus/code evidence, prior issue evidence, and desktop runtime decisions into HERMES-specific notification requirements.
+      - PRD blocks native tray, OS notification, installer, updater, signing, and packaged runtime work until a separate runtime PRD is accepted.
+      - PRD defines safe attention signal fields, allowed kinds, privacy exclusions, dedupe, rate limiting, TTL, and opt-in browser notification gates.
+      - task.yaml records HRIDS-07 through HRIDS-10 as dependency-aware follow-up slices.
+    verify:
+      - git diff --check -- docs/plans/hermes-desktop-attention-notifications-prd.md .hermes/task.yaml
+      - venv/Scripts/python.exe -c "import yaml; yaml.safe_load(open('.hermes/task.yaml', encoding='utf-8'))"
+    status: completed
+    risk: low
+
+  - id: HRIDS-07
+    title: Add redacted attention signal policy
+    description: Add a pure normalizer/policy layer that converts Run Inspector snapshots and events into safe attention signals without notification delivery.
+    depends_on:
+      - HRIDS-06
+    acceptance:
+      - Policy maps approval_waiting, run_failed, run_degraded, mcp_degraded, desktop_shell_degraded, and recovery_available signals.
+      - Signal title/body never include raw prompts, raw logs, command output, file paths, full tool args, credentials, stack traces, diffs, or raw approval payload fields.
+      - Each signal includes kind, severity, safe title/body, path-only route, timestamp, dedupe_key, ttl_ms, and privacy_class.
+      - Missing or malformed state returns no signal or a degraded signal, not an uncaught exception.
+      - Dedupe and TTL behavior are unit tested.
+    verify:
+      - venv/Scripts/python.exe -m pytest tests/runtime/test_run_inspector_attention.py -q -o addopts=
+      - git diff --check -- hermes_cli/run_inspector_attention.py tests/runtime/test_run_inspector_attention.py .hermes/task.yaml
+    status: pending
+    risk: medium
+
+  - id: HRIDS-08
+    title: Add Run Inspector attention preview
+    description: Render safe attention signals inside the Run Inspector dashboard before browser notification delivery exists.
+    depends_on:
+      - HRIDS-07
+    acceptance:
+      - Preview shows empty, ready, degraded, and long-text states.
+      - Preview text is bounded and does not overflow on desktop or narrow viewports.
+      - Preview remains read-only and does not start, stop, approve, deny, reconnect, retry, refresh MCP, or mutate config.
+      - Existing event timeline and gateway controls keep working.
+    verify:
+      - venv/Scripts/python.exe -m pytest tests/web/test_run_inspector_status_policy.py -q -o addopts=
+      - cd web; npm.cmd run build
+      - Playwright smoke for /run-inspector desktop and narrow viewports
+    status: pending
+    risk: medium
+
+  - id: HRIDS-09
+    title: Add optional browser notification opt-in
+    description: Add explicit user-controlled browser notification delivery from safe attention signals.
+    depends_on:
+      - HRIDS-08
+    acceptance:
+      - No browser notification permission prompt appears on initial page load.
+      - User must explicitly enable notifications from the Run Inspector surface.
+      - Denied, unsupported, or blocked notification permission degrades without breaking the dashboard.
+      - Delivery uses dedupe and TTL and only displays safe attention signal title/body.
+      - Clicking a notification routes to /run-inspector without exposing session tokens in the notification URL.
+    verify:
+      - venv/Scripts/python.exe -m pytest tests/web/test_run_inspector_status_policy.py -q -o addopts=
+      - cd web; npm.cmd run build
+      - Browser smoke confirms no permission prompt on initial load and safe degraded behavior when unsupported
+    status: pending
+    risk: high
+
+  - id: HRIDS-10
+    title: Re-evaluate native tray and desktop runtime
+    description: Decide whether native tray or OS notifications justify Tauri, Electron, Python webview, or continued browser launcher after browser notification validation.
+    depends_on:
+      - HRIDS-09
+    acceptance:
+      - Decision covers OS matrix, packaging, signing, update model, token handling, local dashboard discovery, port conflicts, remote mode, rollback, support ownership, and CI build cost.
+      - Decision compares Tauri, Electron, Python webview, and continued browser launcher against measured needs.
+      - No native runtime implementation starts before the decision is accepted.
+    verify:
+      - git diff --check -- docs/plans/hermes-desktop-runtime-decision.md .hermes/task.yaml
+      - venv/Scripts/python.exe -c "import yaml; yaml.safe_load(open('.hermes/task.yaml', encoding='utf-8'))"
+    status: pending
+    risk: medium
+
 risk_flags:
   destructive_file_change:
     pause: true
@@ -1191,6 +1276,14 @@ progress_report:
       verification_result: "passed: venv/Scripts/python.exe -m pytest tests/hermes_cli/test_desktop_shell.py tests/hermes_cli/test_dashboard_lifecycle_flags.py tests/hermes_cli/test_update_stale_dashboard.py -q -o addopts= (43 passed, 5 skipped); passed: venv/Scripts/python.exe -c yaml.safe_load task.yaml; passed: git diff --check for HRIDS-05 files; smoke passed: venv/Scripts/python.exe -m hermes_cli.main desktop --status; GitNexus detect_changes risk low with no affected processes; single-symbol impact for cmd_desktop not available because symbol is not indexed yet"
       blockers: []
       next_step: "HRIDS-05 desktop launcher recovery complete; stage, commit, push, then continue with desktop notification or packaging PRD work."
+    - task_id: HRIDS-06
+      status: completed
+      changed_files:
+        - docs/plans/hermes-desktop-attention-notifications-prd.md
+        - .hermes/task.yaml
+      verification_result: "passed: venv/Scripts/python.exe -c yaml.safe_load task.yaml; passed: git diff --check for HRIDS-06 docs/task files; GitNexus detect_changes risk low with no affected processes"
+      blockers: []
+      next_step: "HRIDS-06 desktop attention notification PRD drafted; verify, commit, push, then implement HRIDS-07 redacted attention signal policy."
 
 failure_review:
   enabled: true
