@@ -312,6 +312,30 @@ def test_run_inspector_memory_workbench_api_returns_safe_readonly_summary(
                 "degraded_reason": "memory_diagnostics_unavailable",
                 "privacy_class": "redacted_summary",
             },
+            "runtime_persistence": {
+                "status": "enabled",
+                "enabled_count": 1,
+                "flags": [
+                    {
+                        "name": "action_ledger",
+                        "env_var": "HERMES_DELEGATE_ACTION_LEDGER",
+                        "enabled": True,
+                        "path": ".hermes/action_ledger.jsonl",
+                        "exists": True,
+                        "privacy_class": "redacted_summary",
+                    },
+                    {
+                        "name": "working_checkpoint",
+                        "env_var": "HERMES_DELEGATE_WORKING_CHECKPOINT",
+                        "enabled": False,
+                        "path": ".hermes/working_checkpoint.json",
+                        "exists": False,
+                        "privacy_class": "redacted_summary",
+                    },
+                ],
+                "degraded_reason": None,
+                "privacy_class": "redacted_summary",
+            },
             "checkpoint": {
                 "current_task_id": "HMAM-08",
                 "next_step": "Continue HMAM-08",
@@ -340,6 +364,11 @@ def test_run_inspector_memory_workbench_api_returns_safe_readonly_summary(
     assert payload["workbench"]["status"] == "active"
     assert payload["workbench"]["active_work"][0]["work_id"] == "work-1"
     assert payload["workbench"]["checkpoint"]["current_task_id"] == "HMAM-08"
+    runtime = payload["workbench"]["runtime_persistence"]
+    assert runtime["status"] == "enabled"
+    assert runtime["enabled_count"] == 1
+    assert runtime["flags"][0]["env_var"] == "HERMES_DELEGATE_ACTION_LEDGER"
+    assert runtime["flags"][0]["path"] == ".hermes/action_ledger.jsonl"
     assert "token=" not in json.dumps(payload)
 
 
@@ -352,6 +381,7 @@ def test_run_inspector_memory_workbench_api_degrades_when_builder_fails(
     def fail(*args, **kwargs):
         raise RuntimeError("token=secret")
 
+    monkeypatch.setenv("HERMES_DELEGATE_ACTION_LEDGER", "token=secret")
     monkeypatch.setattr(web_server, "build_multi_agent_memory_workbench", fail)
 
     response = run_inspector_client.get("/api/run-inspector/memory-workbench")
@@ -361,4 +391,5 @@ def test_run_inspector_memory_workbench_api_degrades_when_builder_fails(
     assert payload["ok"] is False
     assert payload["workbench"]["status"] == "unavailable"
     assert payload["workbench"]["degraded_reason"] == "memory_workbench_api_failed:RuntimeError"
+    assert "runtime_persistence" in payload["workbench"]
     assert "token=secret" not in json.dumps(payload)
