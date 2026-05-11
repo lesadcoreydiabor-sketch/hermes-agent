@@ -576,6 +576,26 @@ def test_multi_agent_memory_workbench_summarizes_learning_review_requests(
     rendered_preview = json.dumps(export_preview, sort_keys=True)
     assert "token=secret" not in rendered_preview
 
+    export_handoff = workbench["failure_review_export_handoff"]
+    assert export_handoff["status"] == "ready"
+    assert export_handoff["action"] == "review_failure_review_export"
+    assert export_handoff["state"] == "pending_review"
+    assert export_handoff["preview_id"] == "failure-review-export-preview"
+    assert export_handoff["entry_count"] == 2
+    assert export_handoff["category_counts"] == export_preview["category_counts"]
+    assert export_handoff["state_counts"] == export_preview["state_counts"]
+    assert export_handoff["summary_lines"] == export_preview["summary_lines"]
+    assert export_handoff["required_decision_fields"] == [
+        "reviewer",
+        "decision",
+        "verification",
+        "rollback_note",
+    ]
+    assert "approve_export_summary" in export_handoff["allowed_decisions"]
+    assert "write_export_file_without_review" in export_handoff["blocked_effects"]
+    rendered_handoff = json.dumps(export_handoff, sort_keys=True)
+    assert "token=secret" not in rendered_handoff
+
 
 def test_multi_agent_memory_workbench_summarizes_agent_assignments(tmp_path) -> None:
     hermes_dir = tmp_path / ".hermes"
@@ -878,6 +898,8 @@ def test_empty_multi_agent_memory_workbench_is_safe_unavailable_payload() -> Non
     assert workbench["failure_review_export"]["status"] == "unavailable"
     assert workbench["failure_review_export"]["entries"] == []
     assert workbench["failure_review_export"]["entry_count"] == 0
+    assert workbench["failure_review_export_handoff"]["status"] == "unavailable"
+    assert workbench["failure_review_export_handoff"]["entry_count"] == 0
     assert (
         workbench["agent_assignments"]["handoff_protocol"]["degraded_reason"]
         == "Redacted"

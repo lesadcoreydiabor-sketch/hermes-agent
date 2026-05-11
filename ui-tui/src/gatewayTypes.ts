@@ -637,6 +637,31 @@ export interface RunInspectorFailureReviewExportSummary {
   title?: string
 }
 
+export interface RunInspectorFailureReviewExportHandoffSummary {
+  action?: string
+  allowed_decisions?: string[]
+  blocked_effects?: string[]
+  category_counts?: Record<string, number>
+  degraded_reason?: null | string
+  entry_count?: number
+  handoff_id?: string
+  instructions?: null | string
+  output_kind?: string
+  preview_id?: string
+  privacy_class?: string
+  requested_effect?: string
+  required_decision_fields?: string[]
+  requires_review?: boolean
+  reviewer?: null | string
+  schema_version?: number
+  state?: string
+  state_counts?: Record<string, number>
+  status?: string
+  summary_lines?: string[]
+  target_ref?: null | string
+  timestamp?: string
+}
+
 export interface RunInspectorMemoryWorkbench {
   active_work?: unknown[]
   action_ledger?: {
@@ -653,6 +678,7 @@ export interface RunInspectorMemoryWorkbench {
   }
   degraded_reason?: null | string
   failure_review_export?: RunInspectorFailureReviewExportSummary
+  failure_review_export_handoff?: RunInspectorFailureReviewExportHandoffSummary
   generated_at?: string
   learning_review?: RunInspectorLearningReviewSummary
   memory?: RunInspectorMemorySummary

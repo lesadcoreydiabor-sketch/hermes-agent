@@ -26,6 +26,7 @@ from hermes_cli.learning_journal import (
     SKILLS_JOURNAL_PATH,
     REVIEW_ACTION_EFFECTS,
     REVIEW_ACTION_TARGET_TYPES,
+    build_failure_review_export_handoff,
     build_failure_review_export_preview,
     build_learning_review_request,
     normalize_long_term_queue_entry,
@@ -138,6 +139,11 @@ def build_multi_agent_memory_workbench(
         generated_at=generated_at,
         limit=safe_limit,
     )
+    failure_review_export_handoff = _failure_review_export_handoff_summary(
+        failure_review_export,
+        degraded_reason=queue_degraded,
+        generated_at=generated_at,
+    )
 
     degraded_reasons = [
         checkpoint.get("degraded_reason"),
@@ -182,6 +188,7 @@ def build_multi_agent_memory_workbench(
         },
         "learning_review": learning_review,
         "failure_review_export": failure_review_export,
+        "failure_review_export_handoff": failure_review_export_handoff,
         "skills_journal": {
             "entries": journal_entries,
             "degraded_reason": journal_degraded,
@@ -250,6 +257,16 @@ def empty_multi_agent_memory_workbench(
             degraded_reason=reason,
             generated_at=generated_at,
             limit=ENTRY_LIMIT,
+        ),
+        "failure_review_export_handoff": _failure_review_export_handoff_summary(
+            _failure_review_export_preview_summary(
+                [],
+                degraded_reason=reason,
+                generated_at=generated_at,
+                limit=ENTRY_LIMIT,
+            ),
+            degraded_reason=reason,
+            generated_at=generated_at,
         ),
         "skills_journal": {"entries": [], "degraded_reason": reason},
         "degraded_reason": reason,
@@ -451,6 +468,33 @@ def _failure_review_export_preview_summary(
         status = "empty"
     return {
         **preview,
+        "status": status,
+        "degraded_reason": degraded_reason,
+        "privacy_class": WORKBENCH_PRIVACY_CLASS,
+    }
+
+
+def _failure_review_export_handoff_summary(
+    preview: Dict[str, Any],
+    *,
+    degraded_reason: Optional[str],
+    generated_at: Optional[str],
+) -> Dict[str, Any]:
+    handoff = build_failure_review_export_handoff(
+        preview,
+        handoff_id="failure-review-export-handoff",
+        timestamp=generated_at,
+        privacy_class=WORKBENCH_PRIVACY_CLASS,
+    )
+    entry_count = handoff.get("entry_count")
+    if degraded_reason and entry_count == 0:
+        status = "unavailable"
+    elif entry_count:
+        status = "ready"
+    else:
+        status = "empty"
+    return {
+        **handoff,
         "status": status,
         "degraded_reason": degraded_reason,
         "privacy_class": WORKBENCH_PRIVACY_CLASS,

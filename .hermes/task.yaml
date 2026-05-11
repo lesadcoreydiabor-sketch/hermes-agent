@@ -1917,6 +1917,27 @@ tasks:
     status: completed
     risk: low
 
+  - id: HMAMO-33
+    title: Surface export handoff readiness in workbench
+    description: Add read-only Multi-Agent Memory workbench diagnostics for failure-review export handoff readiness without approval or export controls.
+    depends_on:
+      - HMAMO-32
+    acceptance:
+      - Workbench payload includes failure_review_export_handoff with status, handoff metadata, entry_count, category_counts, state_counts, summary_lines, required_decision_fields, allowed_decisions, requested_effect, blocked_effects, degraded_reason, and privacy_class.
+      - Empty and unavailable workbench payloads include safe failure_review_export_handoff empty/unavailable summaries.
+      - API/TUI/web types include the read-only failure_review_export_handoff payload fields without adding mutation controls.
+      - Handoff readiness diagnostics do not approve exports, create export files, append JSONL, mark queue entries applied, edit skills, write memory provider data, mutate config, mutate task.yaml, dispatch tools, or spawn agents.
+      - PRD documents workbench export handoff readiness semantics and non-mutation boundaries.
+    verify:
+      - venv/Scripts/python.exe -m pytest tests/runtime/test_multi_agent_memory_workbench.py tests/runtime/test_learning_journal.py tests/runtime/test_failure_review_candidates.py -q -o addopts=
+      - venv/Scripts/python.exe -m pytest tests/web/test_run_inspector_status_policy.py -q -o addopts=
+      - cd ui-tui; npm.cmd run type-check
+      - cd web; npm.cmd run build
+      - venv/Scripts/python.exe -c "import yaml; yaml.safe_load(open('.hermes/task.yaml', encoding='utf-8'))"
+      - git diff --check -- hermes_cli/multi_agent_memory_workbench.py tests/runtime/test_multi_agent_memory_workbench.py web/src/lib/api.ts ui-tui/src/gatewayTypes.ts tests/web/test_run_inspector_status_policy.py docs/plans/hermes-multi-agent-memory-prd.md .hermes/task.yaml
+    status: completed
+    risk: medium
+
 risk_flags:
   destructive_file_change:
     pause: true
@@ -3098,6 +3119,19 @@ progress_report:
       verification_result: "passed: venv/Scripts/python.exe -m pytest tests/runtime/test_learning_journal.py tests/runtime/test_failure_review_candidates.py tests/runtime/test_multi_agent_memory_workbench.py -q -o addopts= (43 passed); passed: venv/Scripts/python.exe -c yaml.safe_load task.yaml; passed: git diff --check for HMAMO-32 files"
       blockers: []
       next_step: "Continue HERMES Multi-Agent Memory orchestration integration by surfacing export handoff readiness in read-only workbench diagnostics."
+    - task_id: HMAMO-33
+      status: completed
+      changed_files:
+        - hermes_cli/multi_agent_memory_workbench.py
+        - tests/runtime/test_multi_agent_memory_workbench.py
+        - web/src/lib/api.ts
+        - ui-tui/src/gatewayTypes.ts
+        - tests/web/test_run_inspector_status_policy.py
+        - docs/plans/hermes-multi-agent-memory-prd.md
+        - .hermes/task.yaml
+      verification_result: "passed: venv/Scripts/python.exe -m pytest tests/runtime/test_multi_agent_memory_workbench.py tests/runtime/test_learning_journal.py tests/runtime/test_failure_review_candidates.py -q -o addopts= (43 passed); passed: venv/Scripts/python.exe -m pytest tests/web/test_run_inspector_status_policy.py -q -o addopts= (27 passed); passed: cd ui-tui; npm.cmd run type-check; passed: cd web; npm.cmd run build; passed: venv/Scripts/python.exe -c yaml.safe_load task.yaml; passed: git diff --check for HMAMO-33 files"
+      blockers: []
+      next_step: "Continue HERMES Multi-Agent Memory orchestration integration by rendering export handoff readiness in operator views or adding a reviewed export application gate."
 
 failure_review:
   enabled: true

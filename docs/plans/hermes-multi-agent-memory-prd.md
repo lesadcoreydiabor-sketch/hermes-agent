@@ -599,6 +599,7 @@ Run Inspector display policy:
 - `event_stream` recovery gates can remain visible while the action ledger is missing, but the missing ledger stays degraded metadata.
 - Memory provider diagnostics show provider name, availability, initialized state, tool names, and lifecycle status only. They do not show memory contents, provider raw responses, prompts, or tool arguments.
 - Failure-review export previews can surface as read-only workbench payloads with summary lines, counts, blocked effects, and degraded state only; the UI must not render export, approve, write-file, or mark-applied controls from that preview.
+- Failure-review export handoff readiness can surface as read-only workbench payloads with required decision fields and allowed decisions only; the UI must still avoid approval or export controls until an explicit reviewed action slice exists.
 - Operator views can render export preview status, counts, one summary line, and blocked-effect labels as diagnostics; these views remain informational and do not perform the export.
 - The Multi-Agent Memory workbench is read-only. It does not approve, deny, stop, spawn, write memory, edit skills, mutate config, or write remote systems.
 

@@ -1756,9 +1756,12 @@ def test_run_inspector_memory_workbench_uses_readonly_api() -> None:
     assert "missing_requirements" in api_source
     assert "requested_effect" in api_source
     assert "failure_review_export" in api_source
+    assert "failure_review_export_handoff" in api_source
     assert "summary_lines" in api_source
     assert "blocked_effects" in api_source
     assert "entry_count" in api_source
+    assert "allowed_decisions" in api_source
+    assert "required_decision_fields" in api_source
     assert "describeRuntimePersistenceState" in (
         ROOT / "web" / "src" / "pages" / "runInspectorMemoryWorkbench.ts"
     ).read_text(encoding="utf-8")
