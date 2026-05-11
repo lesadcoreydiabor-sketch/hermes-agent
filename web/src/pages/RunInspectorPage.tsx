@@ -28,6 +28,7 @@ import { Spinner } from "@nous-research/ui/ui/components/spinner";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { usePageHeader } from "@/contexts/usePageHeader";
 import { useRunInspectorAttention } from "@/hooks/useRunInspectorAttention";
+import { useRunInspectorBrowserNotifications } from "@/hooks/useRunInspectorBrowserNotifications";
 import { useRunInspectorEvents } from "@/hooks/useRunInspectorEvents";
 import { useRunInspectorStatus } from "@/hooks/useRunInspectorStatus";
 import type {
@@ -66,6 +67,7 @@ import {
 import {
   attentionSignalTone,
   describeAttentionPreview,
+  type BrowserNotificationOptInDisplay,
   type RunInspectorAttentionState,
 } from "@/pages/runInspectorAttention";
 import {
@@ -101,6 +103,9 @@ export default function RunInspectorPage() {
   const inspector = useRunInspectorStatus();
   const eventStream = useRunInspectorEvents();
   const attention = useRunInspectorAttention();
+  const browserNotifications = useRunInspectorBrowserNotifications({
+    signals: attention.signals,
+  });
   const [gatewayRunId, setGatewayRunId] = useState("");
   const [gatewayRunSelectionMode, setGatewayRunSelectionMode] =
     useState<GatewayRunSelectionMode>("auto");
@@ -403,6 +408,11 @@ export default function RunInspectorPage() {
               error={attention.error}
               isLoading={attention.isLoading}
               lastUpdatedAt={attention.lastUpdatedAt}
+              notificationDisplay={browserNotifications.display}
+              notificationEnabled={browserNotifications.enabled}
+              notificationIsEnabling={browserNotifications.isEnabling}
+              onDisableNotifications={browserNotifications.disable}
+              onEnableNotifications={browserNotifications.enable}
               onRefresh={attention.refresh}
               signals={attention.signals}
               state={attention.state}
@@ -467,6 +477,11 @@ function AttentionPreviewCard({
   error,
   isLoading,
   lastUpdatedAt,
+  notificationDisplay,
+  notificationEnabled,
+  notificationIsEnabling,
+  onDisableNotifications,
+  onEnableNotifications,
   onRefresh,
   signals,
   state,
@@ -474,6 +489,11 @@ function AttentionPreviewCard({
   error: string | null;
   isLoading: boolean;
   lastUpdatedAt: string | null;
+  notificationDisplay: BrowserNotificationOptInDisplay;
+  notificationEnabled: boolean;
+  notificationIsEnabling: boolean;
+  onDisableNotifications: () => void;
+  onEnableNotifications: () => Promise<void>;
   onRefresh: () => void;
   signals: RunInspectorAttentionSignal[];
   state: RunInspectorAttentionState;
@@ -515,6 +535,14 @@ function AttentionPreviewCard({
             </Button>
           </span>
         </div>
+
+        <BrowserNotificationOptInRow
+          display={notificationDisplay}
+          enabled={notificationEnabled}
+          isEnabling={notificationIsEnabling}
+          onDisable={onDisableNotifications}
+          onEnable={onEnableNotifications}
+        />
 
         {isLoading && newestFirst.length === 0 ? (
           <div className="flex items-center gap-3 border border-border bg-secondary/20 px-3 py-4 text-sm text-muted-foreground">
@@ -563,6 +591,59 @@ function AttentionPreviewCard({
         )}
       </CardContent>
     </Card>
+  );
+}
+
+function BrowserNotificationOptInRow({
+  display,
+  enabled,
+  isEnabling,
+  onDisable,
+  onEnable,
+}: {
+  display: BrowserNotificationOptInDisplay;
+  enabled: boolean;
+  isEnabling: boolean;
+  onDisable: () => void;
+  onEnable: () => Promise<void>;
+}) {
+  const canEnable =
+    display.state === "disabled" ||
+    display.state === "promptable" ||
+    display.state === "degraded";
+  const canDisable = enabled && display.state === "enabled";
+
+  return (
+    <div className="flex min-w-0 flex-wrap items-center justify-between gap-2 border border-border bg-background px-3 py-2">
+      <div className="flex min-w-0 flex-col gap-1">
+        <span className="flex min-w-0 flex-wrap items-center gap-2">
+          <Badge tone={BADGE_TONE[display.tone]} className="text-[10px]">
+            {display.label}
+          </Badge>
+          <span className="break-words text-xs text-muted-foreground">
+            {display.message}
+          </span>
+        </span>
+      </div>
+      <div className="flex shrink-0 items-center gap-2">
+        {canDisable ? (
+          <Button type="button" size="sm" outlined onClick={onDisable}>
+            Disable
+          </Button>
+        ) : canEnable ? (
+          <Button
+            type="button"
+            size="sm"
+            outlined
+            disabled={isEnabling}
+            onClick={onEnable}
+            prefix={isEnabling ? <Spinner /> : <Bell />}
+          >
+            Enable
+          </Button>
+        ) : null}
+      </div>
+    </div>
   );
 }
 

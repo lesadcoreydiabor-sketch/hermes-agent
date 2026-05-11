@@ -610,6 +610,94 @@ def test_run_inspector_attention_preview_describes_states_and_tones():
     assert payload["toneWarning"] == "warning"
 
 
+def test_run_inspector_browser_notification_policy_requires_opt_in_and_dedupes():
+    payload = run_attention_script(
+        textwrap.dedent(
+            """
+            const signal = {
+              kind: "run_failed",
+              severity: "critical",
+              title: "Run failed",
+              body: "Safe failure summary",
+              route: "/run-inspector?token=secret",
+              run_id: "run_1",
+              session_id: null,
+              timestamp: "2026-05-11T00:00:00Z",
+              dedupe_key: "run_failed:run_1",
+              ttl_ms: 600000,
+              privacy_class: "redacted_summary",
+            };
+            const nowMs = Date.parse("2026-05-11T00:01:00Z");
+            const states = {
+              disabled: attention.describeBrowserNotificationOptIn({
+                enabled: false,
+                permission: "default",
+              }),
+              enabled: attention.describeBrowserNotificationOptIn({
+                deliveredCount: 2,
+                enabled: true,
+                permission: "granted",
+              }),
+              denied: attention.describeBrowserNotificationOptIn({
+                enabled: false,
+                permission: "denied",
+              }),
+              unsupported: attention.describeBrowserNotificationOptIn({
+                enabled: false,
+                permission: "unsupported",
+              }),
+              degraded: attention.describeBrowserNotificationOptIn({
+                enabled: true,
+                error: "delivery_failed",
+                permission: "granted",
+              }),
+            };
+            const deliverable = {
+              fresh: attention.isAttentionSignalDeliverable(signal, { nowMs }),
+              duplicate: attention.isAttentionSignalDeliverable(signal, {
+                deliveredExpiresAt: nowMs + 1000,
+                nowMs,
+              }),
+              expired: attention.isAttentionSignalDeliverable(signal, {
+                nowMs: Date.parse("2026-05-11T00:20:00Z"),
+              }),
+              expiresAt: attention.attentionSignalExpiresAt(signal),
+            };
+            const safePayload = attention.safeNotificationPayload(signal);
+            console.log(JSON.stringify({ states, deliverable, safePayload }));
+            """
+        )
+    )
+
+    assert payload["states"]["disabled"] == {
+        "label": "Notifications off",
+        "message": "Enable manually",
+        "state": "disabled",
+        "tone": "muted",
+    }
+    assert payload["states"]["enabled"] == {
+        "label": "Notifications on",
+        "message": "2 delivered this session",
+        "state": "enabled",
+        "tone": "success",
+    }
+    assert payload["states"]["denied"]["state"] == "blocked"
+    assert payload["states"]["unsupported"]["state"] == "unsupported"
+    assert payload["states"]["degraded"]["state"] == "degraded"
+    assert payload["deliverable"] == {
+        "fresh": True,
+        "duplicate": False,
+        "expired": False,
+        "expiresAt": 1778458200000,
+    }
+    assert payload["safePayload"] == {
+        "body": "Safe failure summary",
+        "route": "/run-inspector",
+        "tag": "run_failed:run_1",
+        "title": "Run failed",
+    }
+
+
 def test_run_inspector_gateway_controls_follow_run_state_and_events():
     payload = run_gateway_controls_script(
         textwrap.dedent(
@@ -906,3 +994,24 @@ def test_run_inspector_attention_preview_uses_safe_api_without_notifications() -
     assert "Notification.requestPermission" not in hook_source
     assert "new Notification" not in page_source
     assert "new Notification" not in hook_source
+
+
+def test_run_inspector_browser_notifications_are_explicit_opt_in() -> None:
+    page_source = (
+        ROOT / "web" / "src" / "pages" / "RunInspectorPage.tsx"
+    ).read_text(encoding="utf-8")
+    attention_hook_source = (
+        ROOT / "web" / "src" / "hooks" / "useRunInspectorAttention.ts"
+    ).read_text(encoding="utf-8")
+    browser_hook_source = (
+        ROOT / "web" / "src" / "hooks" / "useRunInspectorBrowserNotifications.ts"
+    ).read_text(encoding="utf-8")
+
+    assert "useRunInspectorBrowserNotifications" in page_source
+    assert "BrowserNotificationOptInRow" in page_source
+    assert "Notification.requestPermission" not in page_source
+    assert "Notification.requestPermission" not in attention_hook_source
+    assert "requestPermission()" in browser_hook_source
+    assert "new window.Notification(payload.title" in browser_hook_source
+    assert "window.location.assign(payload.route)" in browser_hook_source
+    assert "token=" not in browser_hook_source
