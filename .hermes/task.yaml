@@ -1002,7 +1002,7 @@ tasks:
       - No candidate edits skills, memory provider data, tests, or task.yaml automatically.
     verify:
       - venv/Scripts/python.exe -m pytest tests/runtime/test_failure_review_candidates.py tests/runtime/test_learning_journal.py -q -o addopts=
-    status: pending
+    status: completed
     risk: high
 
   - id: HMAM-10
@@ -1755,6 +1755,15 @@ progress_report:
       verification_result: "passed: venv/Scripts/python.exe -m pytest tests/runtime/test_multi_agent_memory_workbench.py tests/runtime/test_working_checkpoint.py tests/runtime/test_learning_journal.py -q -o addopts= (22 passed); passed: venv/Scripts/python.exe -m pytest tests/hermes_cli/test_run_inspector_api.py -q -o addopts= (10 passed); passed: venv/Scripts/python.exe -m pytest tests/web/test_run_inspector_status_policy.py -q -o addopts= (27 passed); passed: cd web; npm.cmd run build; passed: Playwright desktop and narrow /run-inspector smoke with Multi-Agent Memory visible and no horizontal overflow"
       blockers: []
       next_step: "Implement HMAM-09 failure-review and long-term queue candidates from failed verification and repeated runtime errors."
+    - task_id: HMAM-09
+      status: completed
+      changed_files:
+        - hermes_cli/failure_review_candidates.py
+        - tests/runtime/test_failure_review_candidates.py
+        - .hermes/task.yaml
+      verification_result: "passed: venv/Scripts/python.exe -m pytest tests/runtime/test_failure_review_candidates.py tests/runtime/test_learning_journal.py -q -o addopts= (15 passed); candidates are build-only, deduped by safe key, redaction failures remain blockers, and raw leaked content is redacted"
+      blockers: []
+      next_step: "Implement HMAM-10 GitNexus source-bundle research template for code, docs, Issues, PRs, and Discussions evidence."
 
 failure_review:
   enabled: true
