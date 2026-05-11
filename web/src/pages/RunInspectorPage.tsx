@@ -32,6 +32,7 @@ import { useRunInspectorAttention } from "@/hooks/useRunInspectorAttention";
 import { useRunInspectorBrowserNotifications } from "@/hooks/useRunInspectorBrowserNotifications";
 import { useRunInspectorDesktopStatus } from "@/hooks/useRunInspectorDesktopStatus";
 import { useRunInspectorEvents } from "@/hooks/useRunInspectorEvents";
+import { useRunInspectorMemoryWorkbench } from "@/hooks/useRunInspectorMemoryWorkbench";
 import { useRunInspectorStatus } from "@/hooks/useRunInspectorStatus";
 import type {
   RunInspectorAttentionSignal,
@@ -39,6 +40,7 @@ import type {
   RunInspectorEvent,
   RunInspectorGatewayForwarder,
   RunInspectorGatewayRun,
+  RunInspectorMemoryWorkbench,
   RunInspectorMcpHealth,
   RunInspectorResponse,
   RunInspectorSnapshot,
@@ -80,6 +82,11 @@ import {
   type RunInspectorDesktopStatusState,
 } from "@/pages/runInspectorDesktopStatus";
 import {
+  describeMemoryWorkbenchState,
+  memoryProviderTone,
+  type RunInspectorMemoryWorkbenchState,
+} from "@/pages/runInspectorMemoryWorkbench";
+import {
   describeGatewayRunDetail,
   describeGatewayRunList,
   describeGatewayRunControlState,
@@ -113,6 +120,7 @@ export default function RunInspectorPage() {
   const eventStream = useRunInspectorEvents();
   const attention = useRunInspectorAttention();
   const desktopStatus = useRunInspectorDesktopStatus();
+  const memoryWorkbench = useRunInspectorMemoryWorkbench();
   const browserNotifications = useRunInspectorBrowserNotifications({
     signals: attention.signals,
   });
@@ -351,11 +359,13 @@ export default function RunInspectorPage() {
   useEffect(() => {
     attention.refresh();
     desktopStatus.refresh();
+    memoryWorkbench.refresh();
   }, [
     attention.refresh,
     desktopStatus.refresh,
     eventStream.lastUpdatedAt,
     inspector.lastUpdatedAt,
+    memoryWorkbench.refresh,
   ]);
 
   useLayoutEffect(() => {
@@ -449,6 +459,14 @@ export default function RunInspectorPage() {
               onRefresh={attention.refresh}
               signals={attention.signals}
               state={attention.state}
+            />
+            <MultiAgentMemoryWorkbenchCard
+              error={memoryWorkbench.error}
+              isLoading={memoryWorkbench.isLoading}
+              lastUpdatedAt={memoryWorkbench.lastUpdatedAt}
+              onRefresh={memoryWorkbench.refresh}
+              state={memoryWorkbench.state}
+              workbench={memoryWorkbench.workbench}
             />
             <OverviewCard
               response={inspector.response}
@@ -630,6 +648,188 @@ function AttentionPreviewCard({
             })}
           </div>
         )}
+      </CardContent>
+    </Card>
+  );
+}
+
+function MultiAgentMemoryWorkbenchCard({
+  error,
+  isLoading,
+  lastUpdatedAt,
+  onRefresh,
+  state,
+  workbench,
+}: {
+  error: string | null;
+  isLoading: boolean;
+  lastUpdatedAt: string | null;
+  onRefresh: () => void;
+  state: RunInspectorMemoryWorkbenchState;
+  workbench: RunInspectorMemoryWorkbench | null;
+}) {
+  const display = describeMemoryWorkbenchState(state, workbench, error);
+  const activeWork = workbench?.active_work ?? [];
+  const checkpoint = workbench?.checkpoint ?? null;
+  const memory = workbench?.memory ?? null;
+  const queue = workbench?.long_term_queue ?? null;
+  const journal = workbench?.skills_journal ?? null;
+  const providers = memory?.providers ?? [];
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex min-w-0 items-center justify-between gap-2">
+          <span className="flex min-w-0 items-center gap-2">
+            <Database className="h-4 w-4 shrink-0" />
+            <span className="truncate">Multi-Agent Memory</span>
+          </span>
+          <Badge tone={BADGE_TONE[display.tone]} className="shrink-0 text-[10px]">
+            {display.label}
+          </Badge>
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="flex min-w-0 flex-col gap-3">
+        <div className="flex min-w-0 flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
+          <span className="min-w-0 break-words">
+            {formatDisplayValue(error, display.message)}
+          </span>
+          <span className="flex shrink-0 items-center gap-2">
+            <span>{lastUpdatedAt ? formatDateTime(lastUpdatedAt) : "Not refreshed"}</span>
+            <Button
+              type="button"
+              size="sm"
+              outlined
+              disabled={isLoading}
+              onClick={onRefresh}
+              prefix={isLoading ? <Spinner /> : <RefreshCw />}
+            >
+              Refresh
+            </Button>
+          </span>
+        </div>
+
+        {isLoading && workbench === null ? (
+          <div className="flex items-center gap-3 border border-border bg-secondary/20 px-3 py-4 text-sm text-muted-foreground">
+            <Spinner />
+            <span>Loading safe memory workbench</span>
+          </div>
+        ) : null}
+
+        <div className="grid min-w-0 gap-2 sm:grid-cols-2">
+          <Metric
+            icon={<Activity className="h-4 w-4" />}
+            label="Work"
+            tone={display.tone}
+            value={`${activeWork.length} active`}
+          />
+          <Metric
+            icon={<Database className="h-4 w-4" />}
+            label="Memory"
+            tone={memoryProviderTone(memory?.status ?? "unavailable")}
+            value={formatDisplayValue(memory?.status, "Unavailable")}
+          />
+          <Metric
+            icon={<FileWarning className="h-4 w-4" />}
+            label="Queue"
+            tone={(queue?.unresolved_count ?? 0) > 0 ? "warning" : "muted"}
+            value={`${queue?.unresolved_count ?? 0} unresolved`}
+          />
+          <Metric
+            icon={<CheckCircle2 className="h-4 w-4" />}
+            label="Journal"
+            value={`${journal?.entries.length ?? 0} accepted`}
+          />
+        </div>
+
+        {checkpoint ? (
+          <div className="flex min-w-0 flex-col divide-y divide-border/70 border border-border">
+            <DetailRow
+              label="Current"
+              value={formatDisplayValue(checkpoint.current_task_id, "None")}
+            />
+            <DetailRow
+              label="Next"
+              value={formatDisplayValue(checkpoint.next_step, "No next step")}
+            />
+            <DetailRow
+              label="Verified"
+              value={formatDisplayValue(checkpoint.last_verification, "Unknown")}
+            />
+            <DetailRow
+              label="Blocked"
+              value={String(checkpoint.blocked_tasks.length)}
+            />
+          </div>
+        ) : null}
+
+        {activeWork.length === 0 ? (
+          <p className="border border-border bg-secondary/20 px-3 py-4 text-sm text-muted-foreground">
+            No active multi-agent work items
+          </p>
+        ) : (
+          <div className="flex min-w-0 flex-col divide-y divide-border/70 border border-border">
+            {activeWork.map((item, index) => (
+              <div
+                key={`${item.work_id ?? "work"}-${index}`}
+                className="grid min-w-0 gap-2 px-3 py-2 sm:grid-cols-[minmax(0,1fr)_auto]"
+              >
+                <div className="min-w-0">
+                  <div className="flex min-w-0 flex-wrap items-center gap-2">
+                    <span className="truncate font-mono-ui text-sm font-medium">
+                      {formatDisplayValue(item.work_id, "Unknown work")}
+                    </span>
+                    <Badge tone="outline" className="text-[10px]">
+                      {formatDisplayValue(item.role, "agent")}
+                    </Badge>
+                    <Badge tone={BADGE_TONE[display.tone]} className="text-[10px]">
+                      {formatDisplayValue(item.status, "unknown")}
+                    </Badge>
+                  </div>
+                  <p className="mt-1 break-words text-xs text-muted-foreground">
+                    {formatDisplayValue(item.summary, "No details")}
+                  </p>
+                </div>
+                <span className="font-mono-ui text-xs text-muted-foreground">
+                  {formatRunInspectorEventTime(item.timestamp ?? "")}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {providers.length > 0 ? (
+          <div className="flex min-w-0 flex-col divide-y divide-border/70 border border-border">
+            {providers.map((provider, index) => (
+              <div
+                key={`${provider.name ?? "provider"}-${index}`}
+                className="grid min-w-0 gap-2 px-3 py-2 sm:grid-cols-[minmax(0,1fr)_auto]"
+              >
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-medium">
+                    {formatDisplayValue(provider.name, "Unknown provider")}
+                  </p>
+                  <p className="truncate text-xs text-muted-foreground">
+                    {provider.tool_names.length} tools -{" "}
+                    {provider.initialized === true ? "initialized" : "not initialized"}
+                  </p>
+                </div>
+                <Badge
+                  tone={BADGE_TONE[memoryProviderTone(provider.availability)]}
+                  className="w-fit text-[10px]"
+                >
+                  {formatDisplayValue(provider.availability)}
+                </Badge>
+              </div>
+            ))}
+          </div>
+        ) : null}
+
+        {workbench?.degraded_reason ? (
+          <p className="break-words border border-warning/30 bg-warning/10 px-3 py-2 text-xs text-warning">
+            {formatDisplayValue(workbench.degraded_reason)}
+          </p>
+        ) : null}
       </CardContent>
     </Card>
   );

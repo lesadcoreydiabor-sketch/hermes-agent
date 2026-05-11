@@ -80,6 +80,11 @@ export const api = {
       `/api/run-inspector/desktop-status?port=${port}`,
       init,
     ),
+  getRunInspectorMemoryWorkbench: (limit = 12, init?: RequestInit) =>
+    fetchJSON<RunInspectorMemoryWorkbenchResponse>(
+      `/api/run-inspector/memory-workbench?limit=${limit}`,
+      init,
+    ),
   getGatewayRuns: (limit = 20, init?: RequestInit) =>
     fetchJSON<RunInspectorGatewayRunsResponse>(
       `/api/run-inspector/gateway-runs?limit=${limit}`,
@@ -600,6 +605,113 @@ export interface RunInspectorDesktopStatus {
 export interface RunInspectorDesktopStatusResponse {
   ok: boolean;
   status: RunInspectorDesktopStatus;
+  refreshed_at: string;
+}
+
+export type RunInspectorMemoryWorkbenchStatus =
+  | "empty"
+  | "active"
+  | "failed"
+  | "degraded"
+  | "unavailable"
+  | string;
+
+export interface RunInspectorMemoryWorkbenchTask {
+  task_id: string | null;
+  title: string | null;
+  status: string | null;
+}
+
+export interface RunInspectorMemoryWorkbenchCheckpoint {
+  schema_version?: number;
+  generated_at?: string;
+  source?: string;
+  active_capability?: string;
+  current_task_id: string | null;
+  completed_tasks: RunInspectorMemoryWorkbenchTask[];
+  pending_tasks: RunInspectorMemoryWorkbenchTask[];
+  blocked_tasks: RunInspectorMemoryWorkbenchTask[];
+  last_verification?: string | null;
+  open_decisions?: string[];
+  next_step: string;
+  degraded_reason?: string | null;
+  privacy_class?: string;
+}
+
+export interface RunInspectorMemoryWorkbenchActiveWork {
+  work_id: string | null;
+  parent_work_id?: string | null;
+  event_type?: string | null;
+  role?: string | null;
+  status: string | null;
+  summary: string | null;
+  timestamp?: string | null;
+}
+
+export interface RunInspectorMemoryWorkbenchMemoryProvider {
+  name: string | null;
+  kind: string | null;
+  availability: string;
+  initialized: boolean | null;
+  tool_names: string[];
+  last_lifecycle: {
+    event: string | null;
+    status: string | null;
+    timestamp: string | null;
+    error_type: string | null;
+  } | null;
+  privacy_class?: string;
+}
+
+export interface RunInspectorMemoryWorkbenchMemory {
+  status: string;
+  provider_count: number;
+  providers: RunInspectorMemoryWorkbenchMemoryProvider[];
+  registered_tools: string[];
+  degraded_reason: string | null;
+  privacy_class: string;
+}
+
+export interface RunInspectorMemoryWorkbenchEntry {
+  [key: string]: unknown;
+  entry_id?: string | null;
+  event_id?: string | null;
+  task_id?: string | null;
+  status?: string | null;
+  state?: string | null;
+  summary?: string | null;
+  title?: string | null;
+  timestamp?: string | null;
+}
+
+export interface RunInspectorMemoryWorkbench {
+  schema_version: number;
+  generated_at: string;
+  status: RunInspectorMemoryWorkbenchStatus;
+  status_reason: string;
+  active_work: RunInspectorMemoryWorkbenchActiveWork[];
+  memory: RunInspectorMemoryWorkbenchMemory;
+  checkpoint: RunInspectorMemoryWorkbenchCheckpoint;
+  action_ledger: {
+    entries: RunInspectorMemoryWorkbenchEntry[];
+    degraded_reason: string | null;
+  };
+  long_term_queue: {
+    entries: RunInspectorMemoryWorkbenchEntry[];
+    unresolved_count: number;
+    degraded_reason: string | null;
+  };
+  skills_journal: {
+    entries: RunInspectorMemoryWorkbenchEntry[];
+    degraded_reason: string | null;
+  };
+  degraded_reason: string | null;
+  privacy_class: string;
+}
+
+export interface RunInspectorMemoryWorkbenchResponse {
+  ok: boolean;
+  workbench: RunInspectorMemoryWorkbench;
   refreshed_at: string;
 }
 

@@ -148,6 +148,34 @@ const desktopStatus = moduleRef.exports;
     return json.loads(completed.stdout)
 
 
+def run_memory_workbench_script(script: str) -> dict:
+    node_script = f"""
+const fs = require("node:fs");
+const vm = require("node:vm");
+const ts = require("typescript");
+const source = fs.readFileSync("src/pages/runInspectorMemoryWorkbench.ts", "utf8");
+const output = ts.transpileModule(source, {{
+  compilerOptions: {{
+    module: ts.ModuleKind.CommonJS,
+    target: ts.ScriptTarget.ES2022,
+  }},
+}}).outputText;
+const moduleRef = {{ exports: {{}} }};
+const sandbox = {{ module: moduleRef, exports: moduleRef.exports, require, console }};
+vm.runInNewContext(output, sandbox, {{ filename: "runInspectorMemoryWorkbench.js" }});
+const workbench = moduleRef.exports;
+{script}
+"""
+    completed = subprocess.run(
+        ["node", "-e", node_script],
+        cwd=WEB_DIR,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    return json.loads(completed.stdout)
+
+
 def run_gateway_controls_script(script: str) -> dict:
     node_script = f"""
 const fs = require("node:fs");
@@ -1192,3 +1220,95 @@ def test_run_inspector_desktop_status_uses_safe_readonly_api() -> None:
     assert "fetcher = api.getRunInspectorDesktopStatus" in hook_source
     assert "stopDesktop" not in page_source
     assert "startDesktop" not in page_source
+
+
+def test_run_inspector_memory_workbench_describes_all_states() -> None:
+    payload = run_memory_workbench_script(
+        textwrap.dedent(
+            """
+            const base = {
+              schema_version: 1,
+              generated_at: "2026-05-11T00:00:00Z",
+              status: "empty",
+              status_reason: "No multi-agent memory work recorded",
+              active_work: [],
+              memory: {
+                status: "unavailable",
+                provider_count: 0,
+                providers: [],
+                registered_tools: [],
+                degraded_reason: null,
+                privacy_class: "redacted_summary",
+              },
+              checkpoint: {
+                current_task_id: null,
+                completed_tasks: [],
+                pending_tasks: [],
+                blocked_tasks: [],
+                next_step: "No next step recorded.",
+              },
+              action_ledger: { entries: [], degraded_reason: null },
+              long_term_queue: { entries: [], unresolved_count: 0, degraded_reason: null },
+              skills_journal: { entries: [], degraded_reason: null },
+              degraded_reason: null,
+              privacy_class: "redacted_summary",
+            };
+            const states = {
+              empty: workbench.describeMemoryWorkbenchState("ready", base).label,
+              active: workbench.describeMemoryWorkbenchState("ready", {
+                ...base,
+                status: "active",
+                status_reason: "Current task HMAM-08",
+              }).label,
+              failedTone: workbench.describeMemoryWorkbenchState("ready", {
+                ...base,
+                status: "failed",
+                status_reason: "Blocked work",
+              }).tone,
+              degradedTone: workbench.describeMemoryWorkbenchState("degraded", {
+                ...base,
+                status: "degraded",
+                degraded_reason: "action_ledger_missing",
+              }).tone,
+              unavailable: workbench.describeMemoryWorkbenchState("ready", {
+                ...base,
+                status: "unavailable",
+                degraded_reason: "workbench_unavailable",
+              }).label,
+              offlineTone: workbench.describeMemoryWorkbenchState("offline", null).tone,
+              providerTone: workbench.memoryProviderTone("available"),
+            };
+            console.log(JSON.stringify(states));
+            """
+        )
+    )
+
+    assert payload["empty"] == "Memory quiet"
+    assert payload["active"] == "Memory active"
+    assert payload["failedTone"] == "destructive"
+    assert payload["degradedTone"] == "warning"
+    assert payload["unavailable"] == "Memory unavailable"
+    assert payload["offlineTone"] == "destructive"
+    assert payload["providerTone"] == "success"
+
+
+def test_run_inspector_memory_workbench_uses_readonly_api() -> None:
+    page_source = (
+        ROOT / "web" / "src" / "pages" / "RunInspectorPage.tsx"
+    ).read_text(encoding="utf-8")
+    hook_source = (
+        ROOT / "web" / "src" / "hooks" / "useRunInspectorMemoryWorkbench.ts"
+    ).read_text(encoding="utf-8")
+    api_source = (ROOT / "web" / "src" / "lib" / "api.ts").read_text(
+        encoding="utf-8"
+    )
+
+    assert "useRunInspectorMemoryWorkbench" in page_source
+    assert "<MultiAgentMemoryWorkbenchCard" in page_source
+    assert "Multi-Agent Memory" in page_source
+    assert "api.getRunInspectorMemoryWorkbench" in hook_source
+    assert "/api/run-inspector/memory-workbench?limit=" in api_source
+    assert "fetcher = api.getRunInspectorMemoryWorkbench" in hook_source
+    assert "method:" not in hook_source
+    assert "spawn" not in hook_source.lower()
+    assert "write memory" not in page_source.lower()

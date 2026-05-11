@@ -986,7 +986,7 @@ tasks:
       - venv/Scripts/python.exe -m pytest tests/web/test_run_inspector_status_policy.py -q -o addopts=
       - cd web; npm.cmd run build
       - Playwright smoke for /run-inspector desktop and narrow viewports
-    status: pending
+    status: completed
     risk: high
 
   - id: HMAM-09
@@ -1739,6 +1739,22 @@ progress_report:
       verification_result: "passed: venv/Scripts/python.exe -m pytest tests/runtime/test_learning_journal.py -q -o addopts= (9 passed); queue and journal helpers are review-gated, redacted, explicit-write only, and do not edit SKILL.md or runtime providers"
       blockers: []
       next_step: "Implement HMAM-08 Run Inspector multi-agent memory workbench using read-only summaries from HMAM-03 through HMAM-07."
+    - task_id: HMAM-08
+      status: completed
+      changed_files:
+        - hermes_cli/multi_agent_memory_workbench.py
+        - hermes_cli/web_server.py
+        - web/src/lib/api.ts
+        - web/src/hooks/useRunInspectorMemoryWorkbench.ts
+        - web/src/pages/runInspectorMemoryWorkbench.ts
+        - web/src/pages/RunInspectorPage.tsx
+        - tests/runtime/test_multi_agent_memory_workbench.py
+        - tests/hermes_cli/test_run_inspector_api.py
+        - tests/web/test_run_inspector_status_policy.py
+        - .hermes/task.yaml
+      verification_result: "passed: venv/Scripts/python.exe -m pytest tests/runtime/test_multi_agent_memory_workbench.py tests/runtime/test_working_checkpoint.py tests/runtime/test_learning_journal.py -q -o addopts= (22 passed); passed: venv/Scripts/python.exe -m pytest tests/hermes_cli/test_run_inspector_api.py -q -o addopts= (10 passed); passed: venv/Scripts/python.exe -m pytest tests/web/test_run_inspector_status_policy.py -q -o addopts= (27 passed); passed: cd web; npm.cmd run build; passed: Playwright desktop and narrow /run-inspector smoke with Multi-Agent Memory visible and no horizontal overflow"
+      blockers: []
+      next_step: "Implement HMAM-09 failure-review and long-term queue candidates from failed verification and repeated runtime errors."
 
 failure_review:
   enabled: true

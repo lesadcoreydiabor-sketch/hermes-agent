@@ -49,6 +49,10 @@ from hermes_cli.config import (
     redact_key,
 )
 from hermes_cli.desktop_shell_status import build_desktop_status_payload
+from hermes_cli.multi_agent_memory_workbench import (
+    build_multi_agent_memory_workbench,
+    empty_multi_agent_memory_workbench,
+)
 from hermes_cli.run_inspector_events import (
     get_recent_run_inspector_events,
     record_run_inspector_event_frame,
@@ -622,6 +626,31 @@ async def get_run_inspector_desktop_status(port: int = 9119):
             clear_stale_record=False,
             port=port,
         ),
+        "refreshed_at": _utc_now_iso(),
+    }
+
+
+@app.get("/api/run-inspector/memory-workbench")
+async def get_run_inspector_memory_workbench(limit: int = 12):
+    """Return read-only multi-agent memory workbench summaries."""
+    ok = True
+    try:
+        events = get_recent_run_inspector_events(limit=limit)
+        workbench = build_multi_agent_memory_workbench(
+            PROJECT_ROOT,
+            events=events,
+            limit=limit,
+        )
+    except Exception as exc:
+        ok = False
+        _log.warning("Run Inspector memory workbench failed: %s", exc)
+        workbench = empty_multi_agent_memory_workbench(
+            degraded_reason=f"memory_workbench_api_failed:{type(exc).__name__}",
+        )
+
+    return {
+        "ok": ok,
+        "workbench": workbench,
         "refreshed_at": _utc_now_iso(),
     }
 

@@ -267,3 +267,98 @@ def test_run_inspector_desktop_status_api_rejects_invalid_port(
     response = run_inspector_client.get("/api/run-inspector/desktop-status?port=70000")
 
     assert response.status_code == 400
+
+
+def test_run_inspector_memory_workbench_api_returns_safe_readonly_summary(
+    monkeypatch,
+    run_inspector_client,
+):
+    from hermes_cli import web_server
+
+    monkeypatch.setattr(
+        web_server,
+        "get_recent_run_inspector_events",
+        lambda limit=12: [
+            {
+                "id": 1,
+                "type": "agent.child.running",
+                "source": "multi_agent",
+                "run_id": "work-1",
+                "status": "running",
+                "message": "safe child running",
+            }
+        ],
+    )
+    monkeypatch.setattr(
+        web_server,
+        "build_multi_agent_memory_workbench",
+        lambda *args, **kwargs: {
+            "schema_version": 1,
+            "generated_at": "2026-05-11T00:00:00Z",
+            "status": "active",
+            "status_reason": "Current task HMAM-08",
+            "active_work": [
+                {
+                    "work_id": "work-1",
+                    "status": "running",
+                    "summary": "safe child running",
+                }
+            ],
+            "memory": {
+                "status": "unavailable",
+                "provider_count": 0,
+                "providers": [],
+                "registered_tools": [],
+                "degraded_reason": "memory_diagnostics_unavailable",
+                "privacy_class": "redacted_summary",
+            },
+            "checkpoint": {
+                "current_task_id": "HMAM-08",
+                "next_step": "Continue HMAM-08",
+                "pending_tasks": [],
+                "completed_tasks": [],
+                "blocked_tasks": [],
+            },
+            "action_ledger": {"entries": [], "degraded_reason": None},
+            "long_term_queue": {
+                "entries": [],
+                "unresolved_count": 0,
+                "degraded_reason": None,
+            },
+            "skills_journal": {"entries": [], "degraded_reason": None},
+            "degraded_reason": None,
+            "privacy_class": "redacted_summary",
+        },
+    )
+
+    response = run_inspector_client.get("/api/run-inspector/memory-workbench?limit=5")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["ok"] is True
+    assert payload["refreshed_at"]
+    assert payload["workbench"]["status"] == "active"
+    assert payload["workbench"]["active_work"][0]["work_id"] == "work-1"
+    assert payload["workbench"]["checkpoint"]["current_task_id"] == "HMAM-08"
+    assert "token=" not in json.dumps(payload)
+
+
+def test_run_inspector_memory_workbench_api_degrades_when_builder_fails(
+    monkeypatch,
+    run_inspector_client,
+):
+    from hermes_cli import web_server
+
+    def fail(*args, **kwargs):
+        raise RuntimeError("token=secret")
+
+    monkeypatch.setattr(web_server, "build_multi_agent_memory_workbench", fail)
+
+    response = run_inspector_client.get("/api/run-inspector/memory-workbench")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["ok"] is False
+    assert payload["workbench"]["status"] == "unavailable"
+    assert payload["workbench"]["degraded_reason"] == "memory_workbench_api_failed:RuntimeError"
+    assert "token=secret" not in json.dumps(payload)
