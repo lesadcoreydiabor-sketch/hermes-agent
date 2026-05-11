@@ -343,6 +343,41 @@ def test_multi_agent_memory_workbench_degrades_when_sources_are_missing(tmp_path
     assert "task_contract_missing" in workbench["degraded_reason"]
     assert "action_ledger_missing" in workbench["degraded_reason"]
     assert workbench["checkpoint"]["pending_tasks"] == []
+    assert "task_contract_missing" in workbench["agent_assignments"]["degraded_reason"]
+    assert (
+        "task_contract_missing"
+        in workbench["agent_assignments"]["parallel_plan"]["degraded_reason"]
+    )
+
+
+def test_multi_agent_memory_workbench_degrades_assignment_plan_on_bad_task_contract(
+    tmp_path,
+) -> None:
+    hermes_dir = tmp_path / ".hermes"
+    hermes_dir.mkdir()
+    (hermes_dir / "task.yaml").write_text(
+        "tasks:\n  - id: HMAMO-10\n    title: [unterminated\n",
+        encoding="utf-8",
+    )
+    (hermes_dir / "action_ledger.jsonl").write_text("", encoding="utf-8")
+    (hermes_dir / "long_term_queue.jsonl").write_text("", encoding="utf-8")
+    (hermes_dir / "skills_journal.jsonl").write_text("", encoding="utf-8")
+
+    workbench = build_multi_agent_memory_workbench(
+        tmp_path,
+        events=[],
+        memory_diagnostics={"providers": [], "degraded_reason": None},
+        generated_at="2026-05-11T00:00:00Z",
+    )
+
+    assignments = workbench["agent_assignments"]
+    assert assignments["assignments"] == []
+    assert assignments["degraded_reason"] == "task_contract_parse_error"
+    assert assignments["parallel_plan"]["degraded_reason"] == (
+        "task_contract_parse_error"
+    )
+    rendered = json.dumps(assignments, sort_keys=True)
+    assert "unterminated" not in rendered
 
 
 def test_multi_agent_memory_workbench_empty_state_with_empty_safe_sources(tmp_path) -> None:

@@ -1446,6 +1446,26 @@ tasks:
     status: completed
     risk: medium
 
+  - id: HMAMO-10
+    title: Cover degraded assignment plan states
+    description: Ensure missing or invalid task contracts and workbench API fallback propagate safe degraded metadata into assignment and parallel plan summaries.
+    depends_on:
+      - HMAMO-07
+      - HMAMO-08
+    acceptance:
+      - Missing task contracts mark both agent_assignments and parallel_plan degraded without exposing raw file content.
+      - Invalid task contracts mark both agent_assignments and parallel_plan degraded without exposing parse payload text.
+      - API fallback payload includes agent_assignments.parallel_plan degraded metadata when the workbench builder fails.
+      - Frontend view-model helper reports Plan degraded when parallel_plan.degraded_reason is present.
+      - Coverage remains read-only and does not spawn agents, dispatch tools, write files, mutate memory, edit skills, or mutate task.yaml.
+    verify:
+      - venv/Scripts/python.exe -m pytest tests/runtime/test_multi_agent_memory_workbench.py tests/runtime/test_agent_task_assignment.py tests/hermes_cli/test_run_inspector_api.py -q -o addopts=
+      - venv/Scripts/python.exe -m pytest tests/web/test_run_inspector_status_policy.py -q -o addopts=
+      - venv/Scripts/python.exe -c "import yaml; yaml.safe_load(open('.hermes/task.yaml', encoding='utf-8'))"
+      - git diff --check -- hermes_cli/multi_agent_memory_workbench.py tests/runtime/test_multi_agent_memory_workbench.py tests/hermes_cli/test_run_inspector_api.py tests/web/test_run_inspector_status_policy.py .hermes/task.yaml
+    status: completed
+    risk: low
+
 risk_flags:
   destructive_file_change:
     pause: true
@@ -2371,6 +2391,17 @@ progress_report:
       verification_result: "passed: venv/Scripts/python.exe -m pytest tests/web/test_run_inspector_status_policy.py -q -o addopts= (27 passed); passed: cd web; npm.cmd run build; passed: Playwright temporary dashboard smoke on port 9135 desktop/narrow; passed: venv/Scripts/python.exe -c yaml.safe_load task.yaml; passed: git diff --check for HMAMO-09 files"
       blockers: []
       next_step: "Add browser/API coverage for assignment and parallel plan degraded states if needed."
+    - task_id: HMAMO-10
+      status: completed
+      changed_files:
+        - hermes_cli/multi_agent_memory_workbench.py
+        - tests/runtime/test_multi_agent_memory_workbench.py
+        - tests/hermes_cli/test_run_inspector_api.py
+        - tests/web/test_run_inspector_status_policy.py
+        - .hermes/task.yaml
+      verification_result: "passed: venv/Scripts/python.exe -m pytest tests/runtime/test_multi_agent_memory_workbench.py tests/runtime/test_agent_task_assignment.py tests/hermes_cli/test_run_inspector_api.py -q -o addopts= (33 passed); passed: venv/Scripts/python.exe -m pytest tests/web/test_run_inspector_status_policy.py -q -o addopts= (27 passed); passed: venv/Scripts/python.exe -c yaml.safe_load task.yaml; passed: git diff --check for HMAMO-10 files"
+      blockers: []
+      next_step: "Review whether assignment plan summaries need TUI parity after current unrelated TUI changes settle."
 
 failure_review:
   enabled: true

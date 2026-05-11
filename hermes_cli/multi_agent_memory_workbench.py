@@ -253,9 +253,17 @@ def _agent_assignment_summary(workspace: Path, *, limit: int) -> Dict[str, Any]:
     assignments = build_agent_task_assignments_from_task_contract(contract)
     summary = summarize_agent_task_assignments(assignments)
     degraded_reason = _join_reasons([*reasons, summary.get("degraded_reason")])
+    parallel_plan = plan_agent_assignment_batches(assignments)
+    if degraded_reason:
+        parallel_plan = {
+            **parallel_plan,
+            "degraded_reason": _join_reasons(
+                [parallel_plan.get("degraded_reason"), degraded_reason]
+            ),
+        }
     return {
         "summary": summary,
-        "parallel_plan": plan_agent_assignment_batches(assignments),
+        "parallel_plan": parallel_plan,
         "assignments": assignments[:limit],
         "degraded_reason": degraded_reason,
         "privacy_class": WORKBENCH_PRIVACY_CLASS,
@@ -264,11 +272,16 @@ def _agent_assignment_summary(workspace: Path, *, limit: int) -> Dict[str, Any]:
 
 def _empty_agent_assignment_summary(reason: Any) -> Dict[str, Any]:
     summary = summarize_agent_task_assignments([])
+    degraded_reason = _safe_label(reason, fallback=None, limit=LABEL_LIMIT)
+    parallel_plan = {
+        **plan_agent_assignment_batches([]),
+        "degraded_reason": degraded_reason,
+    }
     return {
         "summary": summary,
-        "parallel_plan": plan_agent_assignment_batches([]),
+        "parallel_plan": parallel_plan,
         "assignments": [],
-        "degraded_reason": _safe_label(reason, fallback=None, limit=LABEL_LIMIT),
+        "degraded_reason": degraded_reason,
         "privacy_class": WORKBENCH_PRIVACY_CLASS,
     }
 

@@ -684,6 +684,7 @@ def test_run_inspector_event_timeline_describes_event_and_stream_states():
             "status": "completed",
             "message": None,
         },
+        "terminal": 3,
         "total": 6,
     }
 
@@ -1444,6 +1445,16 @@ def test_run_inspector_memory_workbench_describes_all_states() -> None:
                   },
                 },
               }).tone,
+              planDegraded: workbench.describeParallelAssignmentPlanState({
+                ...base,
+                agent_assignments: {
+                  ...base.agent_assignments,
+                  parallel_plan: {
+                    ...base.agent_assignments.parallel_plan,
+                    degraded_reason: "task_contract_parse_error",
+                  },
+                },
+              }).label,
               planMissing: workbench.describeParallelAssignmentPlanState(null).tone,
               persistenceMissing: workbench.describeRuntimePersistenceState(null).tone,
               offlineTone: workbench.describeMemoryWorkbenchState("offline", null).tone,
@@ -1468,6 +1479,7 @@ def test_run_inspector_memory_workbench_describes_all_states() -> None:
     assert payload["planQuiet"] == "Plan quiet"
     assert payload["planReady"] == "2 tasks / 1 batches"
     assert payload["planSequenced"] == "warning"
+    assert payload["planDegraded"] == "Plan degraded"
     assert payload["planMissing"] == "muted"
     assert payload["persistenceMissing"] == "muted"
     assert payload["offlineTone"] == "destructive"

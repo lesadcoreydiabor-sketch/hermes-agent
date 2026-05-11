@@ -508,4 +508,7 @@ def test_run_inspector_memory_workbench_api_degrades_when_builder_fails(
     assert payload["workbench"]["degraded_reason"] == "memory_workbench_api_failed:RuntimeError"
     assert "runtime_persistence" in payload["workbench"]
     assert "agent_assignments" in payload["workbench"]
+    assert payload["workbench"]["agent_assignments"]["parallel_plan"]["degraded_reason"] == (
+        "memory_workbench_api_failed:RuntimeError"
+    )
     assert "token=secret" not in json.dumps(payload)
