@@ -168,6 +168,16 @@ export function summarizeRunInspectorEvents(
   };
 }
 
+export function describeRunInspectorEventEmptyState(
+  total: number,
+  filter: RunInspectorEventFilter,
+): string {
+  if (total <= 0 || filter === "all") {
+    return "No recent events";
+  }
+  return `No ${filter} events`;
+}
+
 export function describeRunInspectorEventStream(
   state: RunInspectorEventStreamState,
 ): RunInspectorEventDisplay {

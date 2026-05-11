@@ -66,6 +66,7 @@ import {
 import {
   describeRunInspectorEvent,
   describeRunInspectorEventContext,
+  describeRunInspectorEventEmptyState,
   describeRunInspectorEventStream,
   filterRunInspectorEvents,
   formatRunInspectorEventTime,
@@ -1838,7 +1839,7 @@ function EventTimelineCard({
 
         {newestFirst.length === 0 ? (
           <p className="border border-border bg-secondary/20 px-3 py-4 text-sm text-muted-foreground">
-            No recent events
+            {describeRunInspectorEventEmptyState(summary.total, filter)}
           </p>
         ) : (
           <div className="flex min-w-0 flex-col divide-y divide-border/70 border border-border">

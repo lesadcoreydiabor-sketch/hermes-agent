@@ -634,7 +634,11 @@ def test_run_inspector_event_timeline_describes_event_and_stream_states():
               tool: timeline.filterRunInspectorEvents(events, "tool").map((event) => event.id),
             };
             const summary = timeline.summarizeRunInspectorEvents(events);
-            console.log(JSON.stringify({ failed, connected, auth, forwarder, context, emptyContext, filters, summary }));
+            const emptyStates = {
+              allEmpty: timeline.describeRunInspectorEventEmptyState(0, "all"),
+              terminalEmpty: timeline.describeRunInspectorEventEmptyState(events.length, "terminal"),
+            };
+            console.log(JSON.stringify({ failed, connected, auth, forwarder, context, emptyContext, filters, summary, emptyStates }));
             """
         )
     )
@@ -686,6 +690,10 @@ def test_run_inspector_event_timeline_describes_event_and_stream_states():
         },
         "terminal": 3,
         "total": 6,
+    }
+    assert payload["emptyStates"] == {
+        "allEmpty": "No recent events",
+        "terminalEmpty": "No terminal events",
     }
 
 
