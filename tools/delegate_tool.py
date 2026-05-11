@@ -132,6 +132,7 @@ _MIN_SPAWN_DEPTH = 1
 _MAX_SPAWN_DEPTH_CAP = 3
 _DELEGATE_ACTION_LEDGER_ENV = "HERMES_DELEGATE_ACTION_LEDGER"
 _DELEGATE_WORKING_CHECKPOINT_ENV = "HERMES_DELEGATE_WORKING_CHECKPOINT"
+_DELEGATE_FAILURE_QUEUE_ENV = "HERMES_DELEGATE_FAILURE_QUEUE"
 
 
 # ---------------------------------------------------------------------------
@@ -238,6 +239,12 @@ def _delegate_working_checkpoint_enabled() -> bool:
     return is_truthy_value(os.environ.get(_DELEGATE_WORKING_CHECKPOINT_ENV, False))
 
 
+def _delegate_failure_queue_enabled() -> bool:
+    """Return whether delegate failures may append review queue candidates."""
+
+    return is_truthy_value(os.environ.get(_DELEGATE_FAILURE_QUEUE_ENV, False))
+
+
 def _append_delegate_action_ledger_event(
     event: Dict[str, Any],
     *,
@@ -281,6 +288,50 @@ def _refresh_delegate_working_checkpoint() -> None:
         write_working_checkpoint_from_files()
     except Exception:
         logger.debug("delegate working checkpoint refresh failed", exc_info=True)
+
+
+def _append_delegate_failure_candidate(
+    event: Dict[str, Any],
+    *,
+    task_id: Optional[str] = None,
+) -> None:
+    """Best-effort, opt-in review queue capture for failed delegate children."""
+
+    if not _delegate_failure_queue_enabled():
+        return
+
+    status = str(event.get("status") or "").lower()
+    event_type = str(event.get("type") or "").lower()
+    if status not in {"failed", "error", "timeout"} and event_type not in {
+        "agent.child.failed",
+        "agent.child.timeout",
+    }:
+        return
+
+    try:
+        from hermes_cli.failure_review_candidates import (
+            append_failure_review_candidates_to_long_term_queue,
+            build_failure_review_candidate,
+        )
+
+        error_type = "SubagentTimeout" if status == "timeout" else "SubagentFailed"
+        dedupe_task = task_id or event.get("work_id")
+        candidate = build_failure_review_candidate(
+            "repeated_runtime_error",
+            task_id=dedupe_task,
+            tool_name="delegate_task",
+            error_type=error_type,
+            what_happened=f"delegate child ended with status={status or 'unknown'}",
+            likely_cause="Subagent lifecycle ended in a non-success state",
+            evidence=[
+                event.get("type"),
+                event.get("message"),
+            ],
+            dedupe_key=f"delegate_task:{error_type}:{dedupe_task or 'unknown'}",
+        )
+        append_failure_review_candidates_to_long_term_queue([candidate])
+    except Exception:
+        logger.debug("delegate failure queue append failed", exc_info=True)
 
 
 def _record_multi_agent_work_event(
@@ -333,6 +384,7 @@ def _record_multi_agent_work_event(
         )
         _append_delegate_action_ledger_event(event, task_id=parent_work_id)
         _refresh_delegate_working_checkpoint()
+        _append_delegate_failure_candidate(event, task_id=parent_work_id)
         record_run_inspector_event(**multi_agent_event_to_run_inspector_kwargs(event))
     except Exception:
         logger.debug("multi-agent work event recording failed", exc_info=True)

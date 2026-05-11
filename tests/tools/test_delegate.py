@@ -608,6 +608,126 @@ class TestDelegateRunInspectorEvents(unittest.TestCase):
         self.assertEqual(result["results"][0]["status"], "failed")
         self.assertIn("agent.child.failed", self._event_types())
 
+    def test_delegate_failure_queue_write_is_disabled_by_default(self):
+        parent = _make_mock_parent(depth=0)
+
+        with tempfile.TemporaryDirectory() as tmpdir, _temporary_cwd(tmpdir), patch.dict(
+            os.environ,
+            {},
+            clear=True,
+        ), patch("run_agent.AIAgent") as MockAgent:
+            MockAgent.return_value = self._mock_child(
+                {
+                    "final_response": "",
+                    "completed": False,
+                    "interrupted": False,
+                    "api_calls": 2,
+                    "messages": [],
+                }
+            )
+
+            result = json.loads(delegate_task(goal="fail safely", parent_agent=parent))
+            queue_exists = (Path(tmpdir) / ".hermes" / "long_term_queue.jsonl").exists()
+
+        self.assertEqual(result["results"][0]["status"], "failed")
+        self.assertFalse(queue_exists)
+
+    def test_delegate_failure_queue_write_is_opt_in_and_redacted(self):
+        parent = _make_mock_parent(depth=0)
+        parent._current_task_id = "parent-work"
+        raw_goal = "Fail token=super-secret C:\\Users\\XQQ\\secret.txt"
+
+        with tempfile.TemporaryDirectory() as tmpdir, _temporary_cwd(tmpdir), patch.dict(
+            os.environ,
+            {"HERMES_DELEGATE_FAILURE_QUEUE": "1"},
+            clear=True,
+        ), patch("run_agent.AIAgent") as MockAgent:
+            MockAgent.return_value = self._mock_child(
+                {
+                    "final_response": "",
+                    "completed": False,
+                    "interrupted": False,
+                    "api_calls": 2,
+                    "messages": [],
+                }
+            )
+
+            result = json.loads(delegate_task(goal=raw_goal, parent_agent=parent))
+            entries = [
+                json.loads(line)
+                for line in (Path(tmpdir) / ".hermes" / "long_term_queue.jsonl")
+                .read_text(encoding="utf-8")
+                .splitlines()
+            ]
+
+        self.assertEqual(result["results"][0]["status"], "failed")
+        self.assertEqual(len(entries), 1)
+        self.assertEqual(entries[0]["category"], "recurring_failure")
+        self.assertEqual(entries[0]["state"], "candidate")
+        self.assertEqual(entries[0]["source_task_id"], "parent-work")
+        self.assertEqual(
+            entries[0]["dedupe_key"],
+            "delegate_task:SubagentFailed:parent-work",
+        )
+        serialized = json.dumps(entries, sort_keys=True)
+        self.assertNotIn("super-secret", serialized)
+        self.assertNotIn("secret.txt", serialized)
+
+    def test_delegate_failure_queue_append_failure_does_not_fail_delegation(self):
+        parent = _make_mock_parent(depth=0)
+
+        with tempfile.TemporaryDirectory() as tmpdir, _temporary_cwd(tmpdir), patch.dict(
+            os.environ,
+            {"HERMES_DELEGATE_FAILURE_QUEUE": "1"},
+            clear=True,
+        ), patch("run_agent.AIAgent") as MockAgent, patch(
+            "hermes_cli.failure_review_candidates.append_failure_review_candidates_to_long_term_queue",
+            side_effect=RuntimeError("queue unavailable"),
+        ):
+            MockAgent.return_value = self._mock_child(
+                {
+                    "final_response": "",
+                    "completed": False,
+                    "interrupted": False,
+                    "api_calls": 2,
+                    "messages": [],
+                }
+            )
+
+            result = json.loads(delegate_task(goal="fail safely", parent_agent=parent))
+
+        self.assertEqual(result["results"][0]["status"], "failed")
+
+    def test_delegate_failure_queue_ignores_completed_and_interrupted_events(self):
+        parent = _make_mock_parent(depth=0)
+        parent._current_task_id = "parent-work"
+        child = MagicMock()
+        child._subagent_id = "child-work"
+
+        with tempfile.TemporaryDirectory() as tmpdir, _temporary_cwd(tmpdir), patch.dict(
+            os.environ,
+            {"HERMES_DELEGATE_FAILURE_QUEUE": "1"},
+            clear=True,
+        ):
+            _record_multi_agent_work_event(
+                "agent.child.completed",
+                task_index=0,
+                child=child,
+                parent_agent=parent,
+                status="completed",
+                message="child completed",
+            )
+            _record_multi_agent_work_event(
+                "agent.child.interrupted",
+                task_index=0,
+                child=child,
+                parent_agent=parent,
+                status="interrupted",
+                message="child interrupted",
+            )
+
+            self.assertFalse((Path(tmpdir) / ".hermes" / "long_term_queue.jsonl").exists())
+
     def test_interrupted_child_lifecycle_is_mirrored(self):
         parent = _make_mock_parent(depth=0)
 

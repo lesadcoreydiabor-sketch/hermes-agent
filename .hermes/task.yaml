@@ -1127,6 +1127,24 @@ tasks:
     status: completed
     risk: medium
 
+  - id: HMAMR-05
+    title: Capture failed delegate lifecycle as review queue candidates
+    description: Wire failed or timed-out delegate child lifecycle events to long_term_queue candidates only when explicitly enabled.
+    depends_on:
+      - HMAMR-03
+      - HMAMR-04
+    acceptance:
+      - Failed or timed-out delegate children append reviewable recurring-failure candidates only when HERMES_DELEGATE_FAILURE_QUEUE is truthy.
+      - Completed and interrupted delegate children do not create failure candidates.
+      - Queue append failures are swallowed and do not alter delegate_task return structure, depth limits, interruptions, or cost rollup.
+      - Queue entries remain review-gated candidates and do not accept, apply, edit skills, or write memory provider data.
+    verify:
+      - venv/Scripts/python.exe -m pytest tests/tools/test_delegate.py tests/runtime/test_failure_review_candidates.py tests/runtime/test_learning_journal.py tests/agent/test_subagent_stop_hook.py -q -o addopts=
+      - venv/Scripts/python.exe -c "import yaml; yaml.safe_load(open('.hermes/task.yaml', encoding='utf-8'))"
+      - git diff --check -- tools/delegate_tool.py tests/tools/test_delegate.py .hermes/task.yaml
+    status: completed
+    risk: high
+
 risk_flags:
   destructive_file_change:
     pause: true
@@ -1896,6 +1914,15 @@ progress_report:
       verification_result: "passed: venv/Scripts/python.exe -m pytest tests/runtime/test_failure_review_candidates.py tests/runtime/test_learning_journal.py -q -o addopts= (17 passed); passed: venv/Scripts/python.exe -c yaml.safe_load task.yaml"
       blockers: []
       next_step: "Wire failed delegate lifecycle to reviewable long-term queue candidates only behind an explicit opt-in."
+    - task_id: HMAMR-05
+      status: completed
+      changed_files:
+        - tools/delegate_tool.py
+        - tests/tools/test_delegate.py
+        - .hermes/task.yaml
+      verification_result: "passed: venv/Scripts/python.exe -m pytest tests/tools/test_delegate.py tests/runtime/test_failure_review_candidates.py tests/runtime/test_learning_journal.py tests/agent/test_subagent_stop_hook.py -q -o addopts= (165 passed); passed: venv/Scripts/python.exe -c yaml.safe_load task.yaml"
+      blockers: []
+      next_step: "Review Run Inspector workbench visibility for newly persisted ledger, checkpoint, and queue files."
 
 failure_review:
   enabled: true
