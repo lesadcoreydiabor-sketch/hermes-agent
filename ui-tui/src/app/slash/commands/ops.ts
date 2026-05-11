@@ -16,6 +16,7 @@ import type {
   RunInspectorHealthSummary,
   RunInspectorMemoryWorkbench,
   RunInspectorMemoryWorkbenchResponse,
+  RunInspectorRecoveryGates,
   RunInspectorSnapshotSummary,
   RunInspectorStatusResponse,
   SlashExecResponse,
@@ -464,6 +465,20 @@ const renderInspectorSourceCounts = (sourceCounts?: Record<string, number>): str
   return entries.map(([source, count]) => `${source}:${count}`).join(' / ')
 }
 
+const renderInspectorRecoveryLatest = (
+  recovery?: RunInspectorRecoveryGates
+): string => {
+  const parts = [
+    recovery?.latest_event_type,
+    recovery?.latest_status,
+    recovery?.latest_source,
+    recovery?.latest_timestamp
+  ]
+    .map(part => clipInspectorText(part, '', 64))
+    .filter(Boolean)
+  return parts.length ? parts.join(' / ') : 'none'
+}
+
 const renderRunInspectorMemoryWorkbenchSummary = (
   workbench?: null | RunInspectorMemoryWorkbench
 ): [string, string][] => {
@@ -556,6 +571,7 @@ const renderRunInspectorRecoveryRows = (
   const rows: [string, string][] = [
     ['Status', clipInspectorText(recovery.status, 'unknown', 48)],
     ['Sources', renderInspectorSourceCounts(recovery.source_counts)],
+    ['Latest', renderInspectorRecoveryLatest(recovery)],
     ['Verified', renderInspectorTaskIds(recovery.verification_task_ids)],
     ['Blocked', renderInspectorTaskIds(recovery.blocked_task_ids)],
     ['Monitoring', renderInspectorTaskIds(recovery.monitoring_task_ids)],

@@ -863,6 +863,7 @@ function MultiAgentMemoryWorkbenchCard({
               label="Sources"
               value={formatRecoverySourceCounts(recoveryGates.source_counts)}
             />
+            <DetailRow label="Latest" value={formatRecoveryLatest(recoveryGates)} />
             <DetailRow
               label="Verified"
               value={formatDisplayValue(
@@ -2000,6 +2001,21 @@ function formatRecoverySourceCounts(sourceCounts?: Record<string, number>): stri
     return "none";
   }
   return entries.map(([source, count]) => `${source}:${count}`).join(" / ");
+}
+
+function formatRecoveryLatest(
+  recoveryGates: RunInspectorMemoryWorkbench["action_ledger"]["recovery_gates"],
+): string {
+  if (!recoveryGates) {
+    return "none";
+  }
+  const parts = [
+    recoveryGates.latest_event_type,
+    recoveryGates.latest_status,
+    recoveryGates.latest_source,
+    recoveryGates.latest_timestamp,
+  ].filter(Boolean);
+  return parts.length ? parts.join(" / ") : "none";
 }
 
 function HealthSummary({

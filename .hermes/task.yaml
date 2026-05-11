@@ -1688,6 +1688,30 @@ tasks:
     status: completed
     risk: low
 
+  - id: HMAMO-22
+    title: Add latest recovery lifecycle marker
+    description: Expose the latest safe delegate lifecycle event, status, timestamp, and source in recovery gate diagnostics.
+    depends_on:
+      - HMAMO-20
+      - HMAMO-21
+    acceptance:
+      - Recovery gate summaries include latest_event_type, latest_status, latest_timestamp, and latest_source.
+      - Latest marker is derived only from the latest per-child or per-work recovery entries.
+      - Run Inspector and TUI memory workbench views render the latest marker without exposing raw events, prompts, logs, tool args, diffs, secrets, absolute paths, or file contents.
+      - Empty recovery gates report null latest marker fields and remain privacy-safe.
+      - Slice remains read-only and does not write ledgers, spawn agents, dispatch tools, mutate memory, edit skills, edit config, or mutate task ownership.
+    verify:
+      - venv/Scripts/python.exe -m pytest tests/runtime/test_multi_agent_memory_workbench.py tests/hermes_cli/test_run_inspector_api.py tests/test_tui_gateway_server.py -q -o addopts=
+      - venv/Scripts/python.exe -m pytest tests/web/test_run_inspector_status_policy.py -q -o addopts=
+      - cd ui-tui; npm.cmd test -- createSlashHandler.test.ts
+      - cd ui-tui; npm.cmd run type-check
+      - cd ui-tui; npm.cmd run build
+      - cd web; npm.cmd run build
+      - venv/Scripts/python.exe -c "import yaml; yaml.safe_load(open('.hermes/task.yaml', encoding='utf-8'))"
+      - git diff --check -- hermes_cli/multi_agent_memory_workbench.py tests/runtime/test_multi_agent_memory_workbench.py web/src/lib/api.ts web/src/pages/RunInspectorPage.tsx tests/web/test_run_inspector_status_policy.py ui-tui/src/gatewayTypes.ts ui-tui/src/app/slash/commands/ops.ts ui-tui/src/__tests__/createSlashHandler.test.ts .hermes/task.yaml
+    status: completed
+    risk: medium
+
 risk_flags:
   destructive_file_change:
     pause: true
@@ -2740,6 +2764,21 @@ progress_report:
         - docs/plans/hermes-multi-agent-memory-prd.md
         - .hermes/task.yaml
       verification_result: "passed: git diff --check -- docs/plans/hermes-multi-agent-memory-prd.md .hermes/task.yaml; passed: venv/Scripts/python.exe -c yaml.safe_load task.yaml"
+      blockers: []
+      next_step: "Continue HERMES Multi-Agent Memory orchestration integration with broader live event diagnostics or review-gated controls."
+    - task_id: HMAMO-22
+      status: completed
+      changed_files:
+        - hermes_cli/multi_agent_memory_workbench.py
+        - tests/runtime/test_multi_agent_memory_workbench.py
+        - web/src/lib/api.ts
+        - web/src/pages/RunInspectorPage.tsx
+        - tests/web/test_run_inspector_status_policy.py
+        - ui-tui/src/gatewayTypes.ts
+        - ui-tui/src/app/slash/commands/ops.ts
+        - ui-tui/src/__tests__/createSlashHandler.test.ts
+        - .hermes/task.yaml
+      verification_result: "passed: venv/Scripts/python.exe -m pytest tests/runtime/test_multi_agent_memory_workbench.py tests/hermes_cli/test_run_inspector_api.py tests/test_tui_gateway_server.py -q -o addopts= (211 passed); passed: venv/Scripts/python.exe -m pytest tests/web/test_run_inspector_status_policy.py -q -o addopts= (27 passed); passed: cd ui-tui; npm.cmd test -- createSlashHandler.test.ts (100 passed); passed: cd ui-tui; npm.cmd run type-check; passed: cd ui-tui; npm.cmd run build; passed: cd web; npm.cmd run build"
       blockers: []
       next_step: "Continue HERMES Multi-Agent Memory orchestration integration with broader live event diagnostics or review-gated controls."
 

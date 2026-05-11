@@ -555,6 +555,10 @@ export interface RunInspectorRecoveryGates {
   blockers?: string[]
   completed_count?: number
   degraded_reason?: null | string
+  latest_event_type?: null | string
+  latest_source?: null | string
+  latest_status?: null | string
+  latest_timestamp?: null | string
   monitoring_count?: number
   monitoring_task_ids?: string[]
   next_steps?: string[]

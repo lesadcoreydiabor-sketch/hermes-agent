@@ -186,6 +186,14 @@ def test_multi_agent_memory_workbench_reads_runtime_persisted_files(tmp_path) ->
     assert workbench["action_ledger"]["recovery_gates"]["source_counts"] == {
         "action_ledger": 1
     }
+    assert (
+        workbench["action_ledger"]["recovery_gates"]["latest_event_type"]
+        == "agent.child.running"
+    )
+    assert workbench["action_ledger"]["recovery_gates"]["latest_status"] == "running"
+    assert workbench["action_ledger"]["recovery_gates"]["latest_source"] == (
+        "action_ledger"
+    )
     assert workbench["long_term_queue"]["unresolved_count"] == 1
     assert workbench["long_term_queue"]["entries"][0]["category"] == "recurring_failure"
     rendered = json.dumps(workbench, sort_keys=True)
@@ -212,6 +220,7 @@ def test_multi_agent_memory_workbench_summarizes_delegate_recovery_gates(
             "summary": "delegate child completed",
             "verification": "delegate child completed",
             "next_step": "Review delegate child handoff summary.",
+            "timestamp": "2026-05-11T00:00:00Z",
         },
         ledger_path=ledger_path,
     )
@@ -224,6 +233,7 @@ def test_multi_agent_memory_workbench_summarizes_delegate_recovery_gates(
             "summary": "failed token=super-secret C:\\Users\\XQQ\\secret.txt",
             "blockers": ["token=super-secret C:\\Users\\XQQ\\secret.txt"],
             "next_step": "Review delegate failure and decide retry, reassignment, or handoff.",
+            "timestamp": "2026-05-11T00:01:00Z",
         },
         ledger_path=ledger_path,
     )
@@ -243,6 +253,10 @@ def test_multi_agent_memory_workbench_summarizes_delegate_recovery_gates(
     assert gates["blocked_count"] == 1
     assert gates["monitoring_count"] == 0
     assert gates["source_counts"] == {"action_ledger": 2}
+    assert gates["latest_event_type"] == "agent.child.failed"
+    assert gates["latest_status"] == "failed"
+    assert gates["latest_timestamp"] == "2026-05-11T00:01:00Z"
+    assert gates["latest_source"] == "action_ledger"
     assert gates["verification_task_ids"] == ["HMAMO-14"]
     assert gates["blocked_task_ids"] == ["HMAMO-15"]
     assert gates["next_steps"] == [
@@ -301,6 +315,10 @@ def test_multi_agent_memory_workbench_derives_recovery_gates_from_events(
     assert gates["blocked_count"] == 1
     assert gates["monitoring_count"] == 1
     assert gates["source_counts"] == {"event_stream": 2}
+    assert gates["latest_event_type"] == "agent.child.failed"
+    assert gates["latest_status"] == "failed"
+    assert gates["latest_timestamp"] == "2026-05-11T00:01:00Z"
+    assert gates["latest_source"] == "event_stream"
     assert gates["blocked_task_ids"] == ["HMAMO-18"]
     assert gates["monitoring_task_ids"] == ["HMAMO-18"]
     assert gates["next_steps"] == [

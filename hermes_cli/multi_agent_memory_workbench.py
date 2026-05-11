@@ -372,6 +372,10 @@ def _delegate_recovery_gate_summary(
     next_steps: list[str] = []
     blockers: list[str] = []
     source_counts: dict[str, int] = {}
+    latest_event_type: Optional[str] = None
+    latest_status: Optional[str] = None
+    latest_timestamp: Optional[str] = None
+    latest_source: Optional[str] = None
 
     for entry in _latest_delegate_recovery_entries(entries):
         if not isinstance(entry, dict):
@@ -387,6 +391,12 @@ def _delegate_recovery_gate_summary(
         source_counts[source] = source_counts.get(source, 0) + 1
 
         status = _safe_status(entry.get("status")) or "unknown"
+        timestamp = _safe_summary(entry.get("timestamp"), fallback=None)
+        if _is_latest_recovery_marker(timestamp, latest_timestamp):
+            latest_event_type = event_type
+            latest_status = status
+            latest_timestamp = timestamp
+            latest_source = source
         task_id = (
             _safe_identifier(entry.get("task_id"))
             or _safe_identifier(entry.get("work_id"))
@@ -439,6 +449,10 @@ def _delegate_recovery_gate_summary(
         "next_steps": next_steps,
         "blockers": blockers,
         "source_counts": source_counts,
+        "latest_event_type": latest_event_type,
+        "latest_status": latest_status,
+        "latest_timestamp": latest_timestamp,
+        "latest_source": latest_source,
         "degraded_reason": None,
         "privacy_class": WORKBENCH_PRIVACY_CLASS,
     }
@@ -465,6 +479,17 @@ def _latest_delegate_recovery_entries(
             order.append(key)
         latest_by_work[key] = entry
     return [latest_by_work[key] for key in order]
+
+
+def _is_latest_recovery_marker(
+    timestamp: Optional[str],
+    current_latest: Optional[str],
+) -> bool:
+    if not current_latest:
+        return True
+    if not timestamp:
+        return False
+    return timestamp >= current_latest
 
 
 def _delegate_recovery_entries_from_action_ledger(

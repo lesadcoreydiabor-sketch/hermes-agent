@@ -837,6 +837,10 @@ export interface RunInspectorMemoryWorkbenchRecoveryGates {
   next_steps: string[];
   blockers: string[];
   source_counts: Record<string, number>;
+  latest_event_type: string | null;
+  latest_status: string | null;
+  latest_timestamp: string | null;
+  latest_source: string | null;
   degraded_reason: string | null;
   privacy_class: string;
 }
