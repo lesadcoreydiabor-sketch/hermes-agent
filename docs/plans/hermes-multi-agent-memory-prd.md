@@ -364,6 +364,83 @@ Add a standard PM research artifact that records:
 
 This can become the input format for future product-manager skill evals.
 
+Minimum source-bundle template:
+
+```yaml
+schema_version: 1
+repository:
+  name: string
+  url: string
+  default_branch: string | null
+  commit: string | null
+  researched_at: string
+gitnexus:
+  indexed_repo: string | null
+  indexed_at: string | null
+  indexed_commit: string | null
+  freshness: fresh | stale | unknown
+  evidence:
+    - symbol_or_process: string
+      file: string | null
+      summary: string
+source_classes:
+  code:
+    status: read | partial | missing | unavailable
+    evidence:
+      - source: gitnexus | local_search | docs
+        summary: string
+        reference: string | null
+  docs:
+    status: read | partial | missing | unavailable
+    evidence:
+      - title: string
+        url_or_path: string | null
+        summary: string
+  issues:
+    status: read | partial | missing | unavailable
+    evidence:
+      - id: string
+        title: string
+        state: open | closed | unknown
+        summary: string
+  prs:
+    status: read | partial | missing | unavailable
+    evidence:
+      - id: string
+        title: string
+        state: open | merged | closed | unknown
+        summary: string
+  discussions_or_changelog:
+    status: read | partial | missing | unavailable
+    evidence:
+      - title: string
+        url_or_path: string | null
+        summary: string
+evidence_gaps:
+  - type: stale_gitnexus_index | missing_credentials | network_failure | rate_limit | missing_source_class | unknown
+    source_class: code | docs | issues | prs | discussions_or_changelog | unknown
+    detail: string
+transferable_patterns:
+  - pattern: string
+    evidence_refs: []
+    hermes_fit: direct | adapted | rejected
+non_transferable_risks:
+  - risk: string
+    reason: string
+pm_outputs:
+  prd_implication: string
+  agent_ready_issue_hint: string
+privacy_class: redacted_summary
+```
+
+Source-bundle rules:
+
+- Read code structure through GitNexus when indexed; if the index is stale, record the stale commit or timestamp and cross-check with local search.
+- Read docs, Issues, PRs, and Discussions/changelog as separate source classes; do not imply coverage when one class is missing.
+- Record GitHub credential failures, network failures, and rate limits as evidence gaps instead of silently dropping those sources.
+- Keep GitHub access read-only for this artifact. The template does not create issues, comment on PRs, mutate labels, or write remote state.
+- Summaries must stay privacy-safe: no raw prompts, secrets, full logs, diffs, private file bodies, or tokenized URLs.
+
 ## Privacy And Safety Rules
 
 - Default all new records to `privacy_class: redacted_summary`.

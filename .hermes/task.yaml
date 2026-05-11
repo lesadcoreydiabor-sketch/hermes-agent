@@ -1017,7 +1017,7 @@ tasks:
     verify:
       - git diff --check -- docs/plans/hermes-multi-agent-memory-prd.md .hermes/task.yaml
       - venv/Scripts/python.exe -c "import yaml; yaml.safe_load(open('.hermes/task.yaml', encoding='utf-8'))"
-    status: pending
+    status: completed
     risk: low
 
   - id: HMAM-11
@@ -1764,6 +1764,14 @@ progress_report:
       verification_result: "passed: venv/Scripts/python.exe -m pytest tests/runtime/test_failure_review_candidates.py tests/runtime/test_learning_journal.py -q -o addopts= (15 passed); candidates are build-only, deduped by safe key, redaction failures remain blockers, and raw leaked content is redacted"
       blockers: []
       next_step: "Implement HMAM-10 GitNexus source-bundle research template for code, docs, Issues, PRs, and Discussions evidence."
+    - task_id: HMAM-10
+      status: completed
+      changed_files:
+        - docs/plans/hermes-multi-agent-memory-prd.md
+        - .hermes/task.yaml
+      verification_result: "passed: git diff --check -- docs/plans/hermes-multi-agent-memory-prd.md .hermes/task.yaml; passed: venv/Scripts/python.exe -c yaml.safe_load task.yaml"
+      blockers: []
+      next_step: "Implement HMAM-11 agent-ready task ownership and handoff policy."
 
 failure_review:
   enabled: true
