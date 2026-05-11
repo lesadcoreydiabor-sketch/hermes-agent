@@ -1273,6 +1273,25 @@ tasks:
     status: completed
     risk: low
 
+  - id: HMAMO-01
+    title: Add agent-ready assignment schema helper
+    description: Implement a pure helper for agent roles, task ownership, dependencies, write scopes, verification, handoff payloads, and conflict policy.
+    depends_on:
+      - HMAM-11
+      - HMAMR-12
+    acceptance:
+      - Helper normalizes planner, orchestrator, worker, reviewer, and observer assignment payloads using the PRD handoff template.
+      - Helper preserves task ownership, dependency ids, required artifacts, allowed tools, delegate limits, verification, handoff, and conflict policy fields.
+      - Helper redacts secret-like values, absolute paths, diffs, raw prompts, raw logs, raw tool args, and private file paths.
+      - Conflict helper detects direct parallel write-scope overlap while ignoring dependency-ordered, completed, reviewer, and observer work.
+      - Helper is pure and does not spawn agents, dispatch tools, write ledgers, mutate memory, edit skills, write task.yaml, or call remote APIs.
+    verify:
+      - venv/Scripts/python.exe -m pytest tests/runtime/test_agent_task_assignment.py -q -o addopts=
+      - venv/Scripts/python.exe -c "import yaml; yaml.safe_load(open('.hermes/task.yaml', encoding='utf-8'))"
+      - git diff --check -- hermes_cli/agent_task_assignment.py tests/runtime/test_agent_task_assignment.py .hermes/task.yaml
+    status: completed
+    risk: medium
+
 risk_flags:
   destructive_file_change:
     pause: true
@@ -2110,6 +2129,16 @@ progress_report:
       verification_result: "passed: PowerShell temporary dashboard smoke on port 9134 with Playwright desktop 1440x1000 and narrow 390x900 viewports; passed: venv/Scripts/python.exe -c yaml.safe_load task.yaml; passed: git diff --check for task.yaml"
       blockers: []
       next_step: "Review TUI parity for runtime persistence visibility after the browser UI path is covered."
+    - task_id: HMAMO-01
+      status: completed
+      changed_files:
+        - hermes_cli/agent_task_assignment.py
+        - tests/runtime/test_agent_task_assignment.py
+        - .hermes/task.yaml
+      verification_result: "passed: venv/Scripts/python.exe -m pytest tests/runtime/test_agent_task_assignment.py -q -o addopts= (5 passed); passed: venv/Scripts/python.exe -c yaml.safe_load task.yaml; passed: git diff --check for HMAMO-01 files"
+      blockers:
+        - "TUI parity files currently have unrelated staged approval/failed event summary changes, so HMAMO-01 avoids that write scope."
+      next_step: "Expose assignment summaries to Run Inspector only after a read-only assignment source is added."
 
 failure_review:
   enabled: true
