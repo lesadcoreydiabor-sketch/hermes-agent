@@ -372,6 +372,8 @@ def _delegate_recovery_gate_summary(
     next_steps: list[str] = []
     blockers: list[str] = []
     source_counts: dict[str, int] = {}
+    event_type_counts: dict[str, int] = {}
+    status_counts: dict[str, int] = {}
     latest_event_type: Optional[str] = None
     latest_status: Optional[str] = None
     latest_timestamp: Optional[str] = None
@@ -391,6 +393,8 @@ def _delegate_recovery_gate_summary(
         source_counts[source] = source_counts.get(source, 0) + 1
 
         status = _safe_status(entry.get("status")) or "unknown"
+        event_type_counts[event_type] = event_type_counts.get(event_type, 0) + 1
+        status_counts[status] = status_counts.get(status, 0) + 1
         timestamp = _safe_summary(entry.get("timestamp"), fallback=None)
         if _is_latest_recovery_marker(timestamp, latest_timestamp):
             latest_event_type = event_type
@@ -449,6 +453,8 @@ def _delegate_recovery_gate_summary(
         "next_steps": next_steps,
         "blockers": blockers,
         "source_counts": source_counts,
+        "event_type_counts": event_type_counts,
+        "status_counts": status_counts,
         "latest_event_type": latest_event_type,
         "latest_status": latest_status,
         "latest_timestamp": latest_timestamp,

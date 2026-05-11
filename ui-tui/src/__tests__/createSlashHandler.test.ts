@@ -1393,6 +1393,8 @@ describe('createSlashHandler', () => {
               next_steps: ['Review delegate failure and decide retry, reassignment, or handoff.'],
               blockers: ['delegate child failed'],
               source_counts: { action_ledger: 1, event_stream: 2 },
+              event_type_counts: { 'agent.child.failed': 1, 'agent.child.running': 1 },
+              status_counts: { failed: 1, running: 1 },
               latest_event_type: 'agent.child.failed',
               latest_status: 'failed',
               latest_source: 'event_stream',
@@ -1519,6 +1521,8 @@ describe('createSlashHandler', () => {
             rows: expect.arrayContaining([
               ['Status', 'blocked'],
               ['Sources', 'action_ledger:1 / event_stream:2'],
+              ['Types', 'agent.child.failed:1 / agent.child.running:1'],
+              ['Statuses', 'failed:1 / running:1'],
               ['Latest', 'agent.child.failed / failed / event_stream / 2026-05-11T00:01:00Z'],
               ['Verified', 'HMAMO-10'],
               ['Blocked', 'HMAMO-12'],

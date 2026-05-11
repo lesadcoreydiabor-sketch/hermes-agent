@@ -455,8 +455,8 @@ const plannedInspectorTaskCount = (plan?: RunInspectorAssignmentPlan): number =>
   return plan.batches.reduce((count, batch) => count + inspectorListCount(batch.task_ids), 0)
 }
 
-const renderInspectorSourceCounts = (sourceCounts?: Record<string, number>): string => {
-  const entries = Object.entries(sourceCounts ?? {})
+const renderInspectorCountMap = (counts?: Record<string, number>): string => {
+  const entries = Object.entries(counts ?? {})
     .filter(([, count]) => count > 0)
     .sort(([left], [right]) => left.localeCompare(right))
   if (!entries.length) {
@@ -570,7 +570,9 @@ const renderRunInspectorRecoveryRows = (
 
   const rows: [string, string][] = [
     ['Status', clipInspectorText(recovery.status, 'unknown', 48)],
-    ['Sources', renderInspectorSourceCounts(recovery.source_counts)],
+    ['Sources', renderInspectorCountMap(recovery.source_counts)],
+    ['Types', renderInspectorCountMap(recovery.event_type_counts)],
+    ['Statuses', renderInspectorCountMap(recovery.status_counts)],
     ['Latest', renderInspectorRecoveryLatest(recovery)],
     ['Verified', renderInspectorTaskIds(recovery.verification_task_ids)],
     ['Blocked', renderInspectorTaskIds(recovery.blocked_task_ids)],

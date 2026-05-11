@@ -186,6 +186,12 @@ def test_multi_agent_memory_workbench_reads_runtime_persisted_files(tmp_path) ->
     assert workbench["action_ledger"]["recovery_gates"]["source_counts"] == {
         "action_ledger": 1
     }
+    assert workbench["action_ledger"]["recovery_gates"]["event_type_counts"] == {
+        "agent.child.running": 1
+    }
+    assert workbench["action_ledger"]["recovery_gates"]["status_counts"] == {
+        "running": 1
+    }
     assert (
         workbench["action_ledger"]["recovery_gates"]["latest_event_type"]
         == "agent.child.running"
@@ -253,6 +259,11 @@ def test_multi_agent_memory_workbench_summarizes_delegate_recovery_gates(
     assert gates["blocked_count"] == 1
     assert gates["monitoring_count"] == 0
     assert gates["source_counts"] == {"action_ledger": 2}
+    assert gates["event_type_counts"] == {
+        "agent.child.completed": 1,
+        "agent.child.failed": 1,
+    }
+    assert gates["status_counts"] == {"completed": 1, "failed": 1}
     assert gates["latest_event_type"] == "agent.child.failed"
     assert gates["latest_status"] == "failed"
     assert gates["latest_timestamp"] == "2026-05-11T00:01:00Z"
@@ -315,6 +326,11 @@ def test_multi_agent_memory_workbench_derives_recovery_gates_from_events(
     assert gates["blocked_count"] == 1
     assert gates["monitoring_count"] == 1
     assert gates["source_counts"] == {"event_stream": 2}
+    assert gates["event_type_counts"] == {
+        "agent.child.failed": 1,
+        "agent.child.running": 1,
+    }
+    assert gates["status_counts"] == {"failed": 1, "running": 1}
     assert gates["latest_event_type"] == "agent.child.failed"
     assert gates["latest_status"] == "failed"
     assert gates["latest_timestamp"] == "2026-05-11T00:01:00Z"
@@ -414,6 +430,11 @@ def test_multi_agent_memory_workbench_uses_latest_recovery_gate_state(
         "action_ledger": 1,
         "event_stream": 1,
     }
+    assert gates["event_type_counts"] == {
+        "agent.child.completed": 1,
+        "agent.child.failed": 1,
+    }
+    assert gates["status_counts"] == {"completed": 1, "failed": 1}
     assert gates["verification_task_ids"] == ["HMAMO-19"]
     assert gates["blocked_task_ids"] == ["HMAMO-19"]
     assert gates["monitoring_task_ids"] == []

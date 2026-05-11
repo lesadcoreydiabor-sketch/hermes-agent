@@ -861,7 +861,15 @@ function MultiAgentMemoryWorkbenchCard({
             />
             <DetailRow
               label="Sources"
-              value={formatRecoverySourceCounts(recoveryGates.source_counts)}
+              value={formatRecoveryCountMap(recoveryGates.source_counts)}
+            />
+            <DetailRow
+              label="Types"
+              value={formatRecoveryCountMap(recoveryGates.event_type_counts)}
+            />
+            <DetailRow
+              label="Statuses"
+              value={formatRecoveryCountMap(recoveryGates.status_counts)}
             />
             <DetailRow label="Latest" value={formatRecoveryLatest(recoveryGates)} />
             <DetailRow
@@ -1993,8 +2001,8 @@ function DetailRow({ label, value }: { label: string; value: string }) {
   );
 }
 
-function formatRecoverySourceCounts(sourceCounts?: Record<string, number>): string {
-  const entries = Object.entries(sourceCounts ?? {})
+function formatRecoveryCountMap(counts?: Record<string, number>): string {
+  const entries = Object.entries(counts ?? {})
     .filter(([, count]) => count > 0)
     .sort(([left], [right]) => left.localeCompare(right));
   if (entries.length === 0) {

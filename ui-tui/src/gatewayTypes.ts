@@ -555,6 +555,7 @@ export interface RunInspectorRecoveryGates {
   blockers?: string[]
   completed_count?: number
   degraded_reason?: null | string
+  event_type_counts?: Record<string, number>
   latest_event_type?: null | string
   latest_source?: null | string
   latest_status?: null | string
@@ -565,6 +566,7 @@ export interface RunInspectorRecoveryGates {
   privacy_class?: string
   source_counts?: Record<string, number>
   status?: string
+  status_counts?: Record<string, number>
   verification_task_ids?: string[]
 }
 
