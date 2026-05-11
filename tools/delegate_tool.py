@@ -269,11 +269,60 @@ def _append_delegate_action_ledger_event(
                 "parent_agent_id": event.get("parent_agent_id"),
                 "status": event.get("status"),
                 "summary": event.get("message") or event.get("title"),
+                "verification": _delegate_action_ledger_verification(event),
+                "blockers": _delegate_action_ledger_blockers(event),
+                "next_step": _delegate_action_ledger_next_step(event),
                 "privacy_class": "redacted_summary",
             }
         )
     except Exception:
         logger.debug("delegate action ledger append failed", exc_info=True)
+
+
+def _delegate_action_ledger_verification(event: Dict[str, Any]) -> Optional[str]:
+    """Return a safe verification summary for terminal delegate success."""
+
+    status = str(event.get("status") or "").lower()
+    event_type = str(event.get("type") or "").lower()
+    if status == "completed" or event_type == "agent.child.completed":
+        return "delegate child completed"
+    return None
+
+
+def _delegate_action_ledger_blockers(event: Dict[str, Any]) -> List[Any]:
+    """Return safe blocker candidates for non-success terminal delegate events."""
+
+    status = str(event.get("status") or "").lower()
+    event_type = str(event.get("type") or "").lower()
+    if status in {"failed", "error", "timeout", "interrupted"} or event_type in {
+        "agent.child.failed",
+        "agent.child.timeout",
+        "agent.child.interrupted",
+    }:
+        return [event.get("message") or event.get("title") or event_type or status]
+    return []
+
+
+def _delegate_action_ledger_next_step(event: Dict[str, Any]) -> Optional[str]:
+    """Return a safe resume-oriented next step for delegate lifecycle entries."""
+
+    status = str(event.get("status") or "").lower()
+    event_type = str(event.get("type") or "").lower()
+    if status == "completed" or event_type == "agent.child.completed":
+        return "Review delegate child handoff summary."
+    if status in {"failed", "error", "timeout"} or event_type in {
+        "agent.child.failed",
+        "agent.child.timeout",
+    }:
+        return "Review delegate failure and decide retry, reassignment, or handoff."
+    if status == "interrupted" or event_type == "agent.child.interrupted":
+        return "Resume or reassign interrupted delegate work."
+    if status in {"queued", "running"} or event_type in {
+        "agent.child.spawned",
+        "agent.child.running",
+    }:
+        return "Monitor delegate child lifecycle."
+    return None
 
 
 def _refresh_delegate_working_checkpoint() -> None:

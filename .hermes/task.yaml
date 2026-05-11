@@ -1530,6 +1530,26 @@ tasks:
     status: completed
     risk: medium
 
+  - id: HMAMO-14
+    title: Enrich delegate action ledger recovery gates
+    description: Add safe verification, blocker, and next-step metadata to opt-in delegate lifecycle action ledger entries.
+    depends_on:
+      - HMAM-05
+      - HMAM-06
+      - HMAMO-13
+    acceptance:
+      - Completed delegate child ledger events include a safe verification summary and resume-oriented next step.
+      - Failed, timeout, error, and interrupted delegate child ledger events include safe blocker and next-step metadata.
+      - Working checkpoint refresh can derive last_verification and next_step from opt-in delegate lifecycle ledger entries.
+      - Raw goal text, child transcripts, prompts, logs, tool args, diffs, secrets, absolute paths, and file contents remain excluded or redacted.
+      - Slice remains opt-in and does not change delegate_task return shape, default ledger writing, depth, concurrency, interrupt, cost rollup, or Run Inspector event behavior.
+    verify:
+      - venv/Scripts/python.exe -m pytest tests/tools/test_delegate.py tests/agent/test_subagent_stop_hook.py -q -o addopts=
+      - venv/Scripts/python.exe -c "import yaml; yaml.safe_load(open('.hermes/task.yaml', encoding='utf-8'))"
+      - git diff --check -- tools/delegate_tool.py tests/tools/test_delegate.py .hermes/task.yaml
+    status: completed
+    risk: high
+
 risk_flags:
   destructive_file_change:
     pause: true
@@ -2504,6 +2524,15 @@ progress_report:
       verification_result: "passed: venv/Scripts/python.exe -m pytest tests/web/test_run_inspector_status_policy.py -q -o addopts= (27 passed); passed: cd ui-tui; npm.cmd test -- createSlashHandler.test.ts (100 passed); passed: cd ui-tui; npm.cmd run type-check; passed: cd ui-tui; npm.cmd run build; passed: cd web; npm.cmd run build; passed: venv/Scripts/python.exe -c yaml.safe_load task.yaml; passed: git diff --check for HMAMO-13 files"
       blockers: []
       next_step: "Begin real orchestration ledger integration for safe task lifecycle events, or add browser smoke for handoff UI layout."
+    - task_id: HMAMO-14
+      status: completed
+      changed_files:
+        - tools/delegate_tool.py
+        - tests/tools/test_delegate.py
+        - .hermes/task.yaml
+      verification_result: "passed: venv/Scripts/python.exe -m pytest tests/tools/test_delegate.py tests/agent/test_subagent_stop_hook.py -q -o addopts= (149 passed); passed: venv/Scripts/python.exe -c yaml.safe_load task.yaml"
+      blockers: []
+      next_step: "Continue HERMES Multi-Agent Memory orchestration integration after verifying delegate recovery gates."
 
 failure_review:
   enabled: true

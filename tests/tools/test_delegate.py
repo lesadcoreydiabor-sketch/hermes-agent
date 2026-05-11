@@ -832,6 +832,11 @@ class TestDelegateRunInspectorEvents(unittest.TestCase):
             ],
         )
         self.assertTrue(all(entry["session_id"] == "parent-work" for entry in entries))
+        self.assertEqual(entries[0]["next_step"], "Monitor delegate child lifecycle.")
+        self.assertEqual(entries[1]["next_step"], "Monitor delegate child lifecycle.")
+        self.assertEqual(entries[2]["verification"], "delegate child completed")
+        self.assertEqual(entries[2]["next_step"], "Review delegate child handoff summary.")
+        self.assertEqual(entries[2]["blockers"], [])
         serialized = json.dumps(entries, sort_keys=True)
         self.assertNotIn("super-secret", serialized)
         self.assertNotIn("secret.txt", serialized)
@@ -878,6 +883,11 @@ class TestDelegateRunInspectorEvents(unittest.TestCase):
         self.assertEqual(result["results"][0]["status"], "completed")
         self.assertEqual(checkpoint["current_task_id"], "parent-work")
         self.assertEqual(checkpoint["privacy_class"], "redacted_summary")
+        self.assertEqual(checkpoint["last_verification"], "delegate child completed")
+        self.assertEqual(
+            checkpoint["next_step"],
+            "Review delegate child handoff summary.",
+        )
         serialized = json.dumps(checkpoint, sort_keys=True)
         self.assertNotIn("super-secret", serialized)
         self.assertNotIn("secret.txt", serialized)
@@ -945,6 +955,48 @@ class TestDelegateRunInspectorEvents(unittest.TestCase):
         self.assertEqual(entry["parent_agent_id"], "parent-agent")
         self.assertEqual(entry["privacy_class"], "redacted_summary")
         self.assertEqual(entry["summary"], "Redacted")
+        self.assertEqual(entry["verification"], "delegate child completed")
+        self.assertEqual(entry["next_step"], "Review delegate child handoff summary.")
+        self.assertEqual(entry["blockers"], [])
+        serialized = json.dumps(entry, sort_keys=True)
+        self.assertNotIn("super-secret", serialized)
+        self.assertNotIn("secret.txt", serialized)
+
+    def test_failed_action_ledger_event_records_safe_recovery_gate(self):
+        parent = _make_mock_parent(depth=0)
+        parent._current_task_id = "parent-work"
+        child = MagicMock()
+        child._subagent_id = "child-work"
+
+        with tempfile.TemporaryDirectory() as tmpdir, _temporary_cwd(tmpdir), patch.dict(
+            os.environ,
+            {"HERMES_DELEGATE_ACTION_LEDGER": "1"},
+            clear=True,
+        ):
+            _record_multi_agent_work_event(
+                "agent.child.failed",
+                task_index=0,
+                child=child,
+                parent_agent=parent,
+                status="failed",
+                message="failed token=super-secret C:\\Users\\XQQ\\secret.txt",
+            )
+
+            ledger_path = Path(tmpdir) / ".hermes" / "action_ledger.jsonl"
+            entries = [
+                json.loads(line)
+                for line in ledger_path.read_text(encoding="utf-8").splitlines()
+            ]
+
+        self.assertEqual(len(entries), 1)
+        entry = entries[0]
+        self.assertEqual(entry["event_type"], "agent.child.failed")
+        self.assertIsNone(entry["verification"])
+        self.assertEqual(
+            entry["next_step"],
+            "Review delegate failure and decide retry, reassignment, or handoff.",
+        )
+        self.assertEqual(entry["blockers"], ["Redacted"])
         serialized = json.dumps(entry, sort_keys=True)
         self.assertNotIn("super-secret", serialized)
         self.assertNotIn("secret.txt", serialized)
