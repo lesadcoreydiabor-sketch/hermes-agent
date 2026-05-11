@@ -612,7 +612,20 @@ def test_run_inspector_event_timeline_describes_event_and_stream_states():
               status: "completed",
               message: null,
             });
-            console.log(JSON.stringify({ failed, connected, auth, forwarder, context, emptyContext }));
+            const events = [
+              { id: 5, type: "tool.progress", source: "dashboard_chat", timestamp: "2026-05-11T00:00:00Z", run_id: null, session_id: null, tool: "shell", status: "running", message: "working" },
+              { id: 6, type: "approval.request", source: "gateway_run", timestamp: "2026-05-11T00:00:00Z", run_id: "run_wait", session_id: null, tool: null, status: "waiting", message: null },
+              { id: 7, type: "run.failed", source: "gateway_run", timestamp: "2026-05-11T00:00:00Z", run_id: "run_fail", session_id: null, tool: null, status: "failed", message: null },
+              { id: 8, type: "gateway.forwarder.started", source: "run_inspector", timestamp: "2026-05-11T00:00:00Z", run_id: "run_forward", session_id: null, tool: null, status: "running", message: null },
+            ];
+            const filters = {
+              all: timeline.filterRunInspectorEvents(events, "all").map((event) => event.id),
+              attention: timeline.filterRunInspectorEvents(events, "attention").map((event) => event.id),
+              gateway: timeline.filterRunInspectorEvents(events, "gateway").map((event) => event.id),
+              run: timeline.filterRunInspectorEvents(events, "run").map((event) => event.id),
+              tool: timeline.filterRunInspectorEvents(events, "tool").map((event) => event.id),
+            };
+            console.log(JSON.stringify({ failed, connected, auth, forwarder, context, emptyContext, filters }));
             """
         )
     )
@@ -631,6 +644,13 @@ def test_run_inspector_event_timeline_describes_event_and_stream_states():
     }
     assert payload["context"] == "run=run_1 / session=session_1 / tool=shell"
     assert payload["emptyContext"] == ""
+    assert payload["filters"] == {
+        "all": [5, 6, 7, 8],
+        "attention": [6, 7],
+        "gateway": [6, 7, 8],
+        "run": [7],
+        "tool": [5],
+    }
 
 
 def test_run_inspector_attention_preview_describes_states_and_tones():

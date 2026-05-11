@@ -67,7 +67,10 @@ import {
   describeRunInspectorEvent,
   describeRunInspectorEventContext,
   describeRunInspectorEventStream,
+  filterRunInspectorEvents,
   formatRunInspectorEventTime,
+  RUN_INSPECTOR_EVENT_FILTERS,
+  type RunInspectorEventFilter,
   type RunInspectorEventStreamState,
 } from "@/pages/runInspectorEventTimeline";
 import {
@@ -134,6 +137,8 @@ export default function RunInspectorPage() {
   const [gatewayRuns, setGatewayRuns] = useState<RunInspectorGatewayRun[]>([]);
   const [gatewayRunFilter, setGatewayRunFilter] =
     useState<GatewayRunListFilter>("all");
+  const [eventTimelineFilter, setEventTimelineFilter] =
+    useState<RunInspectorEventFilter>("all");
   const [gatewayRunsError, setGatewayRunsError] = useState<string | null>(null);
   const [gatewayRunsBusy, setGatewayRunsBusy] = useState(false);
   const [gatewayLaunchInput, setGatewayLaunchInput] = useState(
@@ -519,7 +524,9 @@ export default function RunInspectorPage() {
             <EventTimelineCard
               error={eventStream.error}
               events={eventStream.events}
+              filter={eventTimelineFilter}
               lastUpdatedAt={eventStream.lastUpdatedAt}
+              onFilterChange={setEventTimelineFilter}
               state={eventStream.state}
             />
             <PrivacyCard snapshot={snapshot} />
@@ -1596,16 +1603,21 @@ function SelectedGatewayRunDetail({ detail }: { detail: GatewayRunDetailState })
 function EventTimelineCard({
   error,
   events,
+  filter,
   lastUpdatedAt,
+  onFilterChange,
   state,
 }: {
   error: string | null;
   events: RunInspectorEvent[];
+  filter: RunInspectorEventFilter;
   lastUpdatedAt: string | null;
+  onFilterChange: (filter: RunInspectorEventFilter) => void;
   state: RunInspectorEventStreamState;
 }) {
   const stream = describeRunInspectorEventStream(state);
-  const newestFirst = [...events].reverse();
+  const filteredEvents = filterRunInspectorEvents(events, filter);
+  const newestFirst = [...filteredEvents].reverse();
 
   return (
     <Card>
@@ -1628,6 +1640,30 @@ function EventTimelineCard({
           <span className="shrink-0">
             {lastUpdatedAt ? formatDateTime(lastUpdatedAt) : "Not refreshed"}
           </span>
+        </div>
+
+        <div className="grid min-w-0 gap-2 sm:grid-cols-5">
+          {RUN_INSPECTOR_EVENT_FILTERS.map((item) => {
+            const selected = filter === item;
+            const count = filterRunInspectorEvents(events, item).length;
+            return (
+              <Button
+                key={item}
+                aria-pressed={selected}
+                type="button"
+                size="sm"
+                outlined={!selected}
+                onClick={() => onFilterChange(item)}
+              >
+                <span className="flex min-w-0 items-center justify-center gap-2">
+                  <span className="truncate capitalize">{item}</span>
+                  <Badge tone={selected ? "secondary" : "outline"} className="text-[10px]">
+                    {count}
+                  </Badge>
+                </span>
+              </Button>
+            );
+          })}
         </div>
 
         {newestFirst.length === 0 ? (

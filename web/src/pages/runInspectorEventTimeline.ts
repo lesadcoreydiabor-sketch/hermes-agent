@@ -16,6 +16,15 @@ export interface RunInspectorEventDisplay {
 }
 
 export const RUN_INSPECTOR_EVENT_LIMIT = 50;
+export const RUN_INSPECTOR_EVENT_FILTERS = [
+  "all",
+  "attention",
+  "gateway",
+  "run",
+  "tool",
+] as const;
+
+export type RunInspectorEventFilter = (typeof RUN_INSPECTOR_EVENT_FILTERS)[number];
 
 const EVENT_LABELS: Record<string, string> = {
   "tool.started": "Tool started",
@@ -70,6 +79,36 @@ export function describeRunInspectorEventContext(event: RunInspectorEvent): stri
     event.tool ? `tool=${event.tool}` : null,
   ].filter(Boolean);
   return parts.join(" / ");
+}
+
+export function filterRunInspectorEvents(
+  events: RunInspectorEvent[],
+  filter: RunInspectorEventFilter,
+): RunInspectorEvent[] {
+  if (filter === "all") {
+    return events;
+  }
+
+  return events.filter((event) => {
+    if (filter === "attention") {
+      return (
+        event.type === "approval.request" ||
+        event.status === "waiting" ||
+        event.status === "failed" ||
+        event.type.endsWith(".failed")
+      );
+    }
+    if (filter === "gateway") {
+      return event.type.startsWith("gateway.") || event.source.includes("gateway");
+    }
+    if (filter === "run") {
+      return event.type.startsWith("run.");
+    }
+    if (filter === "tool") {
+      return event.type.startsWith("tool.");
+    }
+    return true;
+  });
 }
 
 export function describeRunInspectorEventStream(
