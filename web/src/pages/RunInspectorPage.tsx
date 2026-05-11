@@ -1795,6 +1795,12 @@ function EventTimelineCard({
             tone={summary.failed > 0 ? "destructive" : "muted"}
           />
           <Metric
+            icon={<Terminal className="h-4 w-4" />}
+            label="Terminal"
+            value={String(summary.terminal)}
+            tone={summary.terminal > 0 ? "primary" : "muted"}
+          />
+          <Metric
             icon={<Clock className="h-4 w-4" />}
             label="Latest"
             value={

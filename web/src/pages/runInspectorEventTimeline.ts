@@ -23,6 +23,7 @@ export interface RunInspectorEventSummary {
   completed: number;
   failed: number;
   latest: RunInspectorEvent | null;
+  terminal: number;
   total: number;
 }
 
@@ -162,6 +163,7 @@ export function summarizeRunInspectorEvents(
     completed: filterRunInspectorEvents(events, "completed").length,
     failed,
     latest: ordered.length > 0 ? ordered[ordered.length - 1] : null,
+    terminal: filterRunInspectorEvents(events, "terminal").length,
     total: events.length,
   };
 }
