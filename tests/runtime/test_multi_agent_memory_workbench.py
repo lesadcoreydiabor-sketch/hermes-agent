@@ -308,6 +308,94 @@ def test_multi_agent_memory_workbench_derives_recovery_gates_from_events(
     assert "C:\\Users" not in rendered
 
 
+def test_multi_agent_memory_workbench_uses_latest_recovery_gate_state(
+    tmp_path,
+) -> None:
+    hermes_dir = tmp_path / ".hermes"
+    hermes_dir.mkdir()
+    (hermes_dir / "task.yaml").write_text(
+        yaml.safe_dump({"capability": "hermes-multi-agent-memory"}, sort_keys=False),
+        encoding="utf-8",
+    )
+    ledger_path = hermes_dir / "action_ledger.jsonl"
+    append_action_ledger_entry(
+        {
+            "event_type": "agent.child.spawned",
+            "task_id": "HMAMO-19",
+            "run_id": "child-1",
+            "agent_id": "child-1",
+            "status": "queued",
+            "next_step": "Monitor delegate child lifecycle.",
+        },
+        ledger_path=ledger_path,
+    )
+    append_action_ledger_entry(
+        {
+            "event_type": "agent.child.running",
+            "task_id": "HMAMO-19",
+            "run_id": "child-1",
+            "agent_id": "child-1",
+            "status": "running",
+            "next_step": "Monitor delegate child lifecycle.",
+        },
+        ledger_path=ledger_path,
+    )
+    append_action_ledger_entry(
+        {
+            "event_type": "agent.child.completed",
+            "task_id": "HMAMO-19",
+            "run_id": "child-1",
+            "agent_id": "child-1",
+            "status": "completed",
+            "verification": "delegate child completed",
+            "next_step": "Review delegate child handoff summary.",
+        },
+        ledger_path=ledger_path,
+    )
+    (hermes_dir / "long_term_queue.jsonl").write_text("", encoding="utf-8")
+    (hermes_dir / "skills_journal.jsonl").write_text("", encoding="utf-8")
+
+    workbench = build_multi_agent_memory_workbench(
+        tmp_path,
+        events=[
+            {
+                "id": 1,
+                "type": "agent.child.running",
+                "source": "multi_agent",
+                "run_id": "child-2",
+                "session_id": "HMAMO-19",
+                "status": "running",
+                "timestamp": "2026-05-11T00:00:00Z",
+            },
+            {
+                "id": 2,
+                "type": "agent.child.failed",
+                "source": "multi_agent",
+                "run_id": "child-2",
+                "session_id": "HMAMO-19",
+                "status": "failed",
+                "message": "delegate child failed",
+                "timestamp": "2026-05-11T00:01:00Z",
+            },
+        ],
+        memory_diagnostics={"providers": [], "degraded_reason": None},
+        generated_at="2026-05-11T00:02:00Z",
+    )
+
+    gates = workbench["action_ledger"]["recovery_gates"]
+    assert gates["status"] == "blocked"
+    assert gates["completed_count"] == 1
+    assert gates["blocked_count"] == 1
+    assert gates["monitoring_count"] == 0
+    assert gates["verification_task_ids"] == ["HMAMO-19"]
+    assert gates["blocked_task_ids"] == ["HMAMO-19"]
+    assert gates["monitoring_task_ids"] == []
+    assert gates["next_steps"] == [
+        "Review delegate child handoff summary.",
+        "Review delegate failure and decide retry, reassignment, or handoff.",
+    ]
+
+
 def test_multi_agent_memory_workbench_reports_runtime_persistence_flags(
     tmp_path,
     monkeypatch,

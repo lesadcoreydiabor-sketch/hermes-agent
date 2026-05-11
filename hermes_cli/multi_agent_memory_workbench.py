@@ -372,7 +372,7 @@ def _delegate_recovery_gate_summary(
     next_steps: list[str] = []
     blockers: list[str] = []
 
-    for entry in entries:
+    for entry in _latest_delegate_recovery_entries(entries):
         if not isinstance(entry, dict):
             continue
         event_type = _safe_label(entry.get("event_type"), fallback="", limit=LABEL_LIMIT)
@@ -434,6 +434,29 @@ def _delegate_recovery_gate_summary(
         "degraded_reason": None,
         "privacy_class": WORKBENCH_PRIVACY_CLASS,
     }
+
+
+def _latest_delegate_recovery_entries(
+    entries: Iterable[Dict[str, Any]],
+) -> list[Dict[str, Any]]:
+    latest_by_work: dict[str, Dict[str, Any]] = {}
+    order: list[str] = []
+    for entry in entries:
+        if not isinstance(entry, dict):
+            continue
+        key = (
+            _safe_identifier(entry.get("agent_id"))
+            or _safe_identifier(entry.get("run_id"))
+            or _safe_identifier(entry.get("work_id"))
+            or _safe_identifier(entry.get("task_id"))
+            or _safe_identifier(entry.get("event_id"))
+        )
+        if not key:
+            continue
+        if key not in latest_by_work:
+            order.append(key)
+        latest_by_work[key] = entry
+    return [latest_by_work[key] for key in order]
 
 
 def _delegate_recovery_entries_from_events(
