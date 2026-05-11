@@ -638,7 +638,12 @@ def test_run_inspector_event_timeline_describes_event_and_stream_states():
               allEmpty: timeline.describeRunInspectorEventEmptyState(0, "all"),
               terminalEmpty: timeline.describeRunInspectorEventEmptyState(events.length, "terminal"),
             };
-            console.log(JSON.stringify({ failed, connected, auth, forwarder, context, emptyContext, filters, summary, emptyStates }));
+            const labels = {
+              all: timeline.runInspectorEventFilterLabel("all"),
+              attention: timeline.runInspectorEventFilterLabel("attention"),
+              terminal: timeline.runInspectorEventFilterLabel("terminal"),
+            };
+            console.log(JSON.stringify({ failed, connected, auth, forwarder, context, emptyContext, filters, summary, emptyStates, labels }));
             """
         )
     )
@@ -693,7 +698,12 @@ def test_run_inspector_event_timeline_describes_event_and_stream_states():
     }
     assert payload["emptyStates"] == {
         "allEmpty": "No recent events",
-        "terminalEmpty": "No terminal events",
+        "terminalEmpty": "No done events",
+    }
+    assert payload["labels"] == {
+        "all": "All",
+        "attention": "Needs action",
+        "terminal": "Done",
     }
 
 

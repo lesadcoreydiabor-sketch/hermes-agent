@@ -72,6 +72,7 @@ import {
   filterRunInspectorEvents,
   formatRunInspectorEventTime,
   RUN_INSPECTOR_EVENT_FILTERS,
+  runInspectorEventFilterLabel,
   summarizeRunInspectorEvents,
   type RunInspectorEventFilter,
   type RunInspectorEventStreamState,
@@ -1858,7 +1859,7 @@ function EventTimelineCard({
           />
           <Metric
             icon={<Terminal className="h-4 w-4" />}
-            label="Terminal"
+            label="Done"
             value={String(summary.terminal)}
             tone={summary.terminal > 0 ? "primary" : "muted"}
           />
@@ -1888,7 +1889,7 @@ function EventTimelineCard({
                 onClick={() => onFilterChange(item)}
               >
                 <span className="flex min-w-0 items-center justify-center gap-2">
-                  <span className="truncate capitalize">{item}</span>
+                  <span className="truncate">{runInspectorEventFilterLabel(item)}</span>
                   <Badge tone={selected ? "secondary" : "outline"} className="text-[10px]">
                     {count}
                   </Badge>

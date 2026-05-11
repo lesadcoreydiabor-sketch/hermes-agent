@@ -44,6 +44,20 @@ export const RUN_INSPECTOR_EVENT_FILTERS = [
 
 export type RunInspectorEventFilter = (typeof RUN_INSPECTOR_EVENT_FILTERS)[number];
 
+const FILTER_LABELS: Record<RunInspectorEventFilter, string> = {
+  all: "All",
+  active: "Active",
+  attention: "Needs action",
+  approval: "Approval",
+  cancelled: "Cancelled",
+  completed: "Completed",
+  failed: "Failed",
+  terminal: "Done",
+  gateway: "Gateway",
+  run: "Run",
+  tool: "Tool",
+};
+
 const EVENT_LABELS: Record<string, string> = {
   "tool.started": "Tool started",
   "tool.progress": "Tool progress",
@@ -175,7 +189,11 @@ export function describeRunInspectorEventEmptyState(
   if (total <= 0 || filter === "all") {
     return "No recent events";
   }
-  return `No ${filter} events`;
+  return `No ${runInspectorEventFilterLabel(filter).toLowerCase()} events`;
+}
+
+export function runInspectorEventFilterLabel(filter: RunInspectorEventFilter): string {
+  return FILTER_LABELS[filter];
 }
 
 export function describeRunInspectorEventStream(
