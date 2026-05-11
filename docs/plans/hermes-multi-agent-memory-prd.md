@@ -601,6 +601,7 @@ Run Inspector display policy:
 - Memory provider diagnostics show provider name, availability, initialized state, tool names, and lifecycle status only. They do not show memory contents, provider raw responses, prompts, or tool arguments.
 - Failure-review export previews can surface as read-only workbench payloads with summary lines, counts, blocked effects, and degraded state only; the UI must not render export, approve, write-file, or mark-applied controls from that preview.
 - Failure-review export handoff readiness can surface as read-only workbench payloads with required decision fields and allowed decisions only; the UI must still avoid approval or export controls until an explicit reviewed action slice exists.
+- Reviewed export application gates can surface as read-only workbench payloads with `export_allowed: false` until a real reviewer decision is supplied to a separate reviewed-plan helper.
 - Operator views can render export preview status, counts, one summary line, and blocked-effect labels as diagnostics; these views remain informational and do not perform the export.
 - Operator views can also render export handoff readiness, required decision fields, allowed decisions, and requested effects as diagnostics; these views do not approve the export or produce files.
 - The Multi-Agent Memory workbench is read-only. It does not approve, deny, stop, spawn, write memory, edit skills, mutate config, or write remote systems.

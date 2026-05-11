@@ -596,6 +596,27 @@ def test_multi_agent_memory_workbench_summarizes_learning_review_requests(
     rendered_handoff = json.dumps(export_handoff, sort_keys=True)
     assert "token=secret" not in rendered_handoff
 
+    export_application = workbench["failure_review_export_application_gate"]
+    assert export_application["status"] == "waiting_review"
+    assert export_application["state"] == "waiting_review"
+    assert export_application["action"] == "apply_reviewed_failure_review_export"
+    assert export_application["review_required"] is True
+    assert export_application["export_allowed"] is False
+    assert export_application["decision"] is None
+    assert export_application["handoff_id"] == "failure-review-export-handoff"
+    assert export_application["preview_id"] == "failure-review-export-preview"
+    assert export_application["entry_count"] == 2
+    assert export_application["required_decision_fields"] == (
+        export_handoff["required_decision_fields"]
+    )
+    assert export_application["allowed_decisions"] == (
+        export_handoff["allowed_decisions"]
+    )
+    assert export_application["requested_effect"] == "reviewed_export_plan_required"
+    assert "write_export_file_without_review" in export_application["blocked_effects"]
+    rendered_application = json.dumps(export_application, sort_keys=True)
+    assert "token=secret" not in rendered_application
+
 
 def test_multi_agent_memory_workbench_summarizes_agent_assignments(tmp_path) -> None:
     hermes_dir = tmp_path / ".hermes"
@@ -900,6 +921,12 @@ def test_empty_multi_agent_memory_workbench_is_safe_unavailable_payload() -> Non
     assert workbench["failure_review_export"]["entry_count"] == 0
     assert workbench["failure_review_export_handoff"]["status"] == "unavailable"
     assert workbench["failure_review_export_handoff"]["entry_count"] == 0
+    assert (
+        workbench["failure_review_export_application_gate"]["status"]
+        == "unavailable"
+    )
+    assert workbench["failure_review_export_application_gate"]["entry_count"] == 0
+    assert workbench["failure_review_export_application_gate"]["export_allowed"] is False
     assert (
         workbench["agent_assignments"]["handoff_protocol"]["degraded_reason"]
         == "Redacted"

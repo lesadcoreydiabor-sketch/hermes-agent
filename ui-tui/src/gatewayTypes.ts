@@ -662,6 +662,29 @@ export interface RunInspectorFailureReviewExportHandoffSummary {
   timestamp?: string
 }
 
+export interface RunInspectorFailureReviewExportApplicationGateSummary {
+  action?: string
+  allowed_decisions?: string[]
+  blocked_effects?: string[]
+  decision?: null | string
+  degraded_reason?: null | string
+  entry_count?: number
+  export_allowed?: boolean
+  gate_id?: string
+  handoff_id?: null | string
+  output_kind?: string
+  preview_id?: null | string
+  privacy_class?: string
+  requested_effect?: string
+  required_decision_fields?: string[]
+  review_required?: boolean
+  schema_version?: number
+  state?: string
+  status?: string
+  target_ref?: null | string
+  timestamp?: string
+}
+
 export interface RunInspectorMemoryWorkbench {
   active_work?: unknown[]
   action_ledger?: {
@@ -678,6 +701,7 @@ export interface RunInspectorMemoryWorkbench {
   }
   degraded_reason?: null | string
   failure_review_export?: RunInspectorFailureReviewExportSummary
+  failure_review_export_application_gate?: RunInspectorFailureReviewExportApplicationGateSummary
   failure_review_export_handoff?: RunInspectorFailureReviewExportHandoffSummary
   generated_at?: string
   learning_review?: RunInspectorLearningReviewSummary

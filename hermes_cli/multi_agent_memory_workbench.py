@@ -144,6 +144,13 @@ def build_multi_agent_memory_workbench(
         degraded_reason=queue_degraded,
         generated_at=generated_at,
     )
+    failure_review_export_application_gate = (
+        _failure_review_export_application_gate_summary(
+            failure_review_export_handoff,
+            degraded_reason=queue_degraded,
+            generated_at=generated_at,
+        )
+    )
 
     degraded_reasons = [
         checkpoint.get("degraded_reason"),
@@ -189,6 +196,9 @@ def build_multi_agent_memory_workbench(
         "learning_review": learning_review,
         "failure_review_export": failure_review_export,
         "failure_review_export_handoff": failure_review_export_handoff,
+        "failure_review_export_application_gate": (
+            failure_review_export_application_gate
+        ),
         "skills_journal": {
             "entries": journal_entries,
             "degraded_reason": journal_degraded,
@@ -206,6 +216,24 @@ def empty_multi_agent_memory_workbench(
     """Return a safe unavailable workbench payload."""
 
     reason = _safe_summary(degraded_reason, fallback="workbench_unavailable")
+    failure_review_export = _failure_review_export_preview_summary(
+        [],
+        degraded_reason=reason,
+        generated_at=generated_at,
+        limit=ENTRY_LIMIT,
+    )
+    failure_review_export_handoff = _failure_review_export_handoff_summary(
+        failure_review_export,
+        degraded_reason=reason,
+        generated_at=generated_at,
+    )
+    failure_review_export_application_gate = (
+        _failure_review_export_application_gate_summary(
+            failure_review_export_handoff,
+            degraded_reason=reason,
+            generated_at=generated_at,
+        )
+    )
     return {
         "schema_version": WORKBENCH_SCHEMA_VERSION,
         "generated_at": generated_at or _utc_now_iso(),
@@ -252,21 +280,10 @@ def empty_multi_agent_memory_workbench(
             degraded_reason=reason,
             limit=ENTRY_LIMIT,
         ),
-        "failure_review_export": _failure_review_export_preview_summary(
-            [],
-            degraded_reason=reason,
-            generated_at=generated_at,
-            limit=ENTRY_LIMIT,
-        ),
-        "failure_review_export_handoff": _failure_review_export_handoff_summary(
-            _failure_review_export_preview_summary(
-                [],
-                degraded_reason=reason,
-                generated_at=generated_at,
-                limit=ENTRY_LIMIT,
-            ),
-            degraded_reason=reason,
-            generated_at=generated_at,
+        "failure_review_export": failure_review_export,
+        "failure_review_export_handoff": failure_review_export_handoff,
+        "failure_review_export_application_gate": (
+            failure_review_export_application_gate
         ),
         "skills_journal": {"entries": [], "degraded_reason": reason},
         "degraded_reason": reason,
@@ -496,6 +513,62 @@ def _failure_review_export_handoff_summary(
     return {
         **handoff,
         "status": status,
+        "degraded_reason": degraded_reason,
+        "privacy_class": WORKBENCH_PRIVACY_CLASS,
+    }
+
+
+def _failure_review_export_application_gate_summary(
+    handoff: Dict[str, Any],
+    *,
+    degraded_reason: Optional[str],
+    generated_at: Optional[str],
+) -> Dict[str, Any]:
+    entry_count = _safe_count(handoff.get("entry_count"))
+    if degraded_reason and entry_count == 0:
+        status = "unavailable"
+        state = "unavailable"
+    elif entry_count:
+        status = "waiting_review"
+        state = "waiting_review"
+    else:
+        status = "empty"
+        state = "empty"
+    return {
+        "schema_version": WORKBENCH_SCHEMA_VERSION,
+        "gate_id": "failure-review-export-application-gate",
+        "timestamp": generated_at or _utc_now_iso(),
+        "action": "apply_reviewed_failure_review_export",
+        "state": state,
+        "status": status,
+        "review_required": entry_count > 0,
+        "export_allowed": False,
+        "decision": None,
+        "handoff_id": _safe_identifier(handoff.get("handoff_id")),
+        "preview_id": _safe_identifier(handoff.get("preview_id")),
+        "output_kind": _safe_label(
+            handoff.get("output_kind"),
+            fallback="failure_review_summary",
+            limit=LABEL_LIMIT,
+        ),
+        "target_ref": _safe_summary(handoff.get("target_ref"), fallback=None),
+        "entry_count": entry_count,
+        "required_decision_fields": _safe_list(
+            handoff.get("required_decision_fields")
+            if isinstance(handoff.get("required_decision_fields"), list)
+            else []
+        ),
+        "allowed_decisions": _safe_list(
+            handoff.get("allowed_decisions")
+            if isinstance(handoff.get("allowed_decisions"), list)
+            else []
+        ),
+        "requested_effect": "reviewed_export_plan_required",
+        "blocked_effects": _safe_list(
+            handoff.get("blocked_effects")
+            if isinstance(handoff.get("blocked_effects"), list)
+            else []
+        ),
         "degraded_reason": degraded_reason,
         "privacy_class": WORKBENCH_PRIVACY_CLASS,
     }
@@ -1149,6 +1222,14 @@ def _safe_limit(limit: Any) -> int:
     except (TypeError, ValueError):
         return ENTRY_LIMIT
     return max(1, min(value, 50))
+
+
+def _safe_count(value: Any) -> int:
+    try:
+        count = int(value)
+    except (TypeError, ValueError):
+        return 0
+    return max(0, min(count, 10_000))
 
 
 def _safe_summary(value: Any, *, fallback: Optional[str]) -> Optional[str]:
