@@ -60,6 +60,20 @@ export function getDesktopShellUrl(status: RunInspectorDesktopStatus | null): st
   return url || null;
 }
 
+export function getDesktopShellReuseCommand(
+  status: RunInspectorDesktopStatus | null,
+): string | null {
+  const command = status?.reuse_command?.trim();
+  return command || null;
+}
+
+export function getDesktopShellStopCommand(
+  status: RunInspectorDesktopStatus | null,
+): string | null {
+  const command = status?.stop_command?.trim();
+  return command || null;
+}
+
 export function describeDesktopShellAttentionLevel(
   status: RunInspectorDesktopStatus | null,
 ): string {

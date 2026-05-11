@@ -92,6 +92,8 @@ import {
   describeDesktopShellSource,
   describeDesktopShellStatus,
   getDesktopShellNextCommand,
+  getDesktopShellReuseCommand,
+  getDesktopShellStopCommand,
   getDesktopShellUrl,
   type RunInspectorDesktopStatusState,
 } from "@/pages/runInspectorDesktopStatus";
@@ -1237,59 +1239,8 @@ function DesktopShellStatusCard({
   const nextAction = describeDesktopShellNextAction(status);
   const nextCommand = getDesktopShellNextCommand(status);
   const desktopUrl = getDesktopShellUrl(status);
-  const [copyState, setCopyState] = useState<"idle" | "copied" | "failed">("idle");
-  const [urlCopyState, setUrlCopyState] = useState<"idle" | "copied" | "failed">("idle");
-  const handleCopyNextCommand = useCallback(() => {
-    if (!nextCommand) {
-      return;
-    }
-    if (!navigator.clipboard) {
-      setCopyState("failed");
-      return;
-    }
-    navigator.clipboard
-      .writeText(nextCommand)
-      .then(() => setCopyState("copied"))
-      .catch(() => setCopyState("failed"));
-  }, [nextCommand]);
-
-  const handleCopyDesktopUrl = useCallback(() => {
-    if (!desktopUrl) {
-      return;
-    }
-    if (!navigator.clipboard) {
-      setUrlCopyState("failed");
-      return;
-    }
-    navigator.clipboard
-      .writeText(desktopUrl)
-      .then(() => setUrlCopyState("copied"))
-      .catch(() => setUrlCopyState("failed"));
-  }, [desktopUrl]);
-
-  useEffect(() => {
-    setCopyState("idle");
-  }, [nextCommand]);
-
-  useEffect(() => {
-    setUrlCopyState("idle");
-  }, [desktopUrl]);
-
-  useEffect(() => {
-    if (copyState === "idle") {
-      return undefined;
-    }
-    const timeout = window.setTimeout(() => setCopyState("idle"), 1500);
-    return () => window.clearTimeout(timeout);
-  }, [copyState]);
-
-  useEffect(() => {
-    if (urlCopyState === "idle") {
-      return undefined;
-    }
-    const timeout = window.setTimeout(() => setUrlCopyState("idle"), 1500);
-    return () => window.clearTimeout(timeout);
-  }, [urlCopyState]);
+  const reuseCommand = getDesktopShellReuseCommand(status);
+  const stopCommand = getDesktopShellStopCommand(status);
 
   return (
     <Card>
@@ -1339,20 +1290,9 @@ function DesktopShellStatusCard({
             value={formatDisplayValue(desktopUrl)}
             action={
               desktopUrl ? (
-                <Button
-                  type="button"
-                  size="sm"
-                  outlined
-                  aria-label="Copy desktop URL"
-                  onClick={handleCopyDesktopUrl}
-                  prefix={<Copy className="h-3 w-3" />}
-                >
-                  {urlCopyState === "copied"
-                    ? "Copied"
-                    : urlCopyState === "failed"
-                      ? "Copy failed"
-                      : "Copy URL"}
-                </Button>
+                <CopyDetailButton ariaLabel="Copy desktop URL" value={desktopUrl}>
+                  Copy URL
+                </CopyDetailButton>
               ) : null
             }
           />
@@ -1361,26 +1301,44 @@ function DesktopShellStatusCard({
             value={formatDisplayValue(nextAction, "None")}
             action={
               nextCommand ? (
-                <Button
-                  type="button"
-                  size="sm"
-                  outlined
-                  aria-label="Copy desktop next command"
-                  onClick={handleCopyNextCommand}
-                  prefix={<Copy className="h-3 w-3" />}
+                <CopyDetailButton
+                  ariaLabel="Copy desktop next command"
+                  value={nextCommand}
                 >
-                  {copyState === "copied"
-                    ? "Copied"
-                    : copyState === "failed"
-                      ? "Copy failed"
-                      : "Copy command"}
-                </Button>
+                  Copy command
+                </CopyDetailButton>
               ) : null
             }
           />
           <DetailRow label="Manual URL" value={formatDisplayValue(status?.manual_url, "None")} />
-          <DetailRow label="Reuse" value={formatDisplayValue(status?.reuse_command, "None")} />
-          <DetailRow label="Stop" value={formatDisplayValue(status?.stop_command, "None")} />
+          <DetailRow
+            label="Reuse"
+            value={formatDisplayValue(reuseCommand, "None")}
+            action={
+              reuseCommand ? (
+                <CopyDetailButton
+                  ariaLabel="Copy desktop reuse command"
+                  value={reuseCommand}
+                >
+                  Copy command
+                </CopyDetailButton>
+              ) : null
+            }
+          />
+          <DetailRow
+            label="Stop"
+            value={formatDisplayValue(stopCommand, "None")}
+            action={
+              stopCommand ? (
+                <CopyDetailButton
+                  ariaLabel="Copy desktop stop command"
+                  value={stopCommand}
+                >
+                  Copy command
+                </CopyDetailButton>
+              ) : null
+            }
+          />
         </div>
       </CardContent>
     </Card>
@@ -2151,6 +2109,57 @@ function DetailRow({
         {action ? <span className="shrink-0">{action}</span> : null}
       </span>
     </div>
+  );
+}
+
+function CopyDetailButton({
+  ariaLabel,
+  children,
+  value,
+}: {
+  ariaLabel: string;
+  children: string;
+  value: string;
+}) {
+  const [copyState, setCopyState] = useState<"idle" | "copied" | "failed">("idle");
+  const handleCopy = useCallback(() => {
+    if (!navigator.clipboard) {
+      setCopyState("failed");
+      return;
+    }
+    navigator.clipboard
+      .writeText(value)
+      .then(() => setCopyState("copied"))
+      .catch(() => setCopyState("failed"));
+  }, [value]);
+
+  useEffect(() => {
+    setCopyState("idle");
+  }, [value]);
+
+  useEffect(() => {
+    if (copyState === "idle") {
+      return undefined;
+    }
+    const timeout = window.setTimeout(() => setCopyState("idle"), 1500);
+    return () => window.clearTimeout(timeout);
+  }, [copyState]);
+
+  return (
+    <Button
+      type="button"
+      size="sm"
+      outlined
+      aria-label={ariaLabel}
+      onClick={handleCopy}
+      prefix={<Copy className="h-3 w-3" />}
+    >
+      {copyState === "copied"
+        ? "Copied"
+        : copyState === "failed"
+          ? "Copy failed"
+          : children}
+    </Button>
   );
 }
 

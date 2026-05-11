@@ -112,6 +112,12 @@ def test_run_inspector_desktop_status_formats_next_action_row() -> None:
             const url = desktopStatus.getDesktopShellUrl({
               url: " http://127.0.0.1:9222/run-inspector ",
             });
+            const reuse = desktopStatus.getDesktopShellReuseCommand({
+              reuse_command: " hermes desktop --port 9222 ",
+            });
+            const stop = desktopStatus.getDesktopShellStopCommand({
+              stop_command: " hermes desktop --port 9222 --stop ",
+            });
             const commandOnly = desktopStatus.describeDesktopShellNextAction({
               next_action: null,
               next_command: "hermes desktop --status",
@@ -123,16 +129,22 @@ def test_run_inspector_desktop_status_formats_next_action_row() -> None:
             const empty = desktopStatus.describeDesktopShellNextAction({});
             const noCommand = desktopStatus.getDesktopShellNextCommand({});
             const noUrl = desktopStatus.getDesktopShellUrl({});
+            const noReuse = desktopStatus.getDesktopShellReuseCommand({});
+            const noStop = desktopStatus.getDesktopShellStopCommand({});
             console.log(JSON.stringify({
               action,
               command,
               url,
+              reuse,
+              stop,
               commandOnly,
               attention,
               emptyAttention,
               empty,
               noCommand,
               noUrl,
+              noReuse,
+              noStop,
             }));
             """
         )
@@ -142,12 +154,16 @@ def test_run_inspector_desktop_status_formats_next_action_row() -> None:
         "action": "Reuse compatible dashboard: hermes desktop --port 9222",
         "command": "hermes desktop --port 9222",
         "url": "http://127.0.0.1:9222/run-inspector",
+        "reuse": "hermes desktop --port 9222",
+        "stop": "hermes desktop --port 9222 --stop",
         "commandOnly": "hermes desktop --status",
         "attention": "Warning",
         "emptyAttention": "Unknown",
         "empty": None,
         "noCommand": None,
         "noUrl": None,
+        "noReuse": None,
+        "noStop": None,
     }
 
 
@@ -160,18 +176,21 @@ def test_run_inspector_desktop_card_renders_next_action_row() -> None:
     assert "describeDesktopShellAttentionLevel" in page_source
     assert "getDesktopShellNextCommand" in page_source
     assert "getDesktopShellUrl" in page_source
+    assert "getDesktopShellReuseCommand" in page_source
+    assert "getDesktopShellStopCommand" in page_source
     assert 'label="Health reason"' in page_source
     assert 'formatDisplayValue(status?.health_reason, "Unknown")' in page_source
     assert 'label="Attention"' in page_source
     assert 'label="PID reason"' in page_source
     assert 'formatDisplayValue(status?.pid_reason, "Unknown")' in page_source
-    assert 'aria-label="Copy desktop URL"' in page_source
-    assert "writeText(desktopUrl)" in page_source
+    assert 'ariaLabel="Copy desktop URL"' in page_source
+    assert 'ariaLabel="Copy desktop reuse command"' in page_source
+    assert 'ariaLabel="Copy desktop stop command"' in page_source
+    assert "writeText(value)" in page_source
     assert 'label="Next"' in page_source
     assert 'formatDisplayValue(nextAction, "None")' in page_source
-    assert 'aria-label="Copy desktop next command"' in page_source
+    assert 'ariaLabel="Copy desktop next command"' in page_source
     assert "navigator.clipboard" in page_source
-    assert "writeText(nextCommand)" in page_source
     assert "api." not in page_source[
         page_source.index("function DesktopShellStatusCard") :
         page_source.index("function ActiveToolCard")
