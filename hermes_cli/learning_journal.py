@@ -97,6 +97,15 @@ EXPORT_HANDOFF_REQUIRED_FIELDS = (
     "verification",
     "rollback_note",
 )
+EXPORT_APPLICATION_BLOCKED_EFFECTS = (
+    "write_export_file_without_explicit_command",
+    "mark_queue_entries_applied_without_explicit_command",
+    "edit_skill_files",
+    "write_memory_provider_data",
+    "mutate_config",
+    "mutate_task_yaml",
+    "dispatch_tools_without_review",
+)
 
 _SECRET_RE = re.compile(
     r"\b(?:api[_-]?key|token|secret|password|credential)\s*[:=]\s*[^,\s;]+"
@@ -478,6 +487,89 @@ def build_failure_review_export_handoff(
     }
 
 
+def build_reviewed_failure_review_export_plan(
+    handoff: Dict[str, Any],
+    *,
+    decision: Any,
+    reviewer: Any,
+    verification: Any,
+    rollback_note: Any,
+    plan_id: Any = None,
+    timestamp: Optional[str] = None,
+    target_ref: Any = None,
+    privacy_class: Any = LEARNING_PRIVACY_CLASS,
+) -> Dict[str, Any]:
+    """Build a reviewed export application plan without writing the export."""
+
+    if not isinstance(handoff, dict):
+        raise ValueError("failure review export handoff is required")
+    if _safe_status(handoff.get("action")) != "review_failure_review_export":
+        raise ValueError("review_failure_review_export handoff is required")
+    if _safe_status(handoff.get("state")) != "pending_review":
+        raise ValueError("pending_review handoff state is required")
+
+    safe_decision = _safe_export_decision(decision)
+    if not safe_decision:
+        raise ValueError("supported export review decision is required")
+    allowed_decisions = _safe_list(
+        handoff.get("allowed_decisions")
+        if isinstance(handoff.get("allowed_decisions"), list)
+        else EXPORT_HANDOFF_ALLOWED_DECISIONS
+    )
+    if safe_decision not in allowed_decisions:
+        raise ValueError("decision is not allowed by handoff")
+
+    safe_reviewer = _safe_identifier(reviewer)
+    safe_verification = _safe_summary(verification, fallback=None)
+    safe_rollback_note = _safe_summary(rollback_note, fallback=None)
+    if not safe_reviewer:
+        raise ValueError("reviewer is required")
+    if not safe_verification:
+        raise ValueError("verification is required")
+    if not safe_rollback_note:
+        raise ValueError("rollback_note is required")
+
+    preview_id = _safe_identifier(handoff.get("preview_id"))
+    handoff_id = _safe_identifier(handoff.get("handoff_id"))
+    if not preview_id or not handoff_id:
+        raise ValueError("handoff_id and preview_id are required")
+
+    approved = safe_decision == "approve_export_summary"
+    return {
+        "schema_version": LEARNING_SCHEMA_VERSION,
+        "plan_id": _safe_identifier(plan_id) or _new_entry_id("export-plan"),
+        "timestamp": _safe_timestamp(timestamp) or _utc_now_iso(),
+        "action": "apply_reviewed_failure_review_export",
+        "state": _export_plan_state(safe_decision),
+        "review_complete": True,
+        "export_allowed": approved,
+        "decision": safe_decision,
+        "reviewer": safe_reviewer,
+        "verification": safe_verification,
+        "rollback_note": safe_rollback_note,
+        "handoff_id": handoff_id,
+        "preview_id": preview_id,
+        "output_kind": "failure_review_summary",
+        "target_ref": _safe_summary(target_ref, fallback=None)
+        or _safe_summary(handoff.get("target_ref"), fallback=None),
+        "entry_count": _safe_non_negative_int(handoff.get("entry_count")),
+        "category_counts": _safe_count_map(handoff.get("category_counts")),
+        "state_counts": _safe_count_map(handoff.get("state_counts")),
+        "summary_lines": _safe_list(
+            handoff.get("summary_lines")
+            if isinstance(handoff.get("summary_lines"), list)
+            else []
+        ),
+        "requested_effect": (
+            "manual_export_allowed_after_review"
+            if approved
+            else "no_export_until_review_changes_resolved"
+        ),
+        "blocked_effects": list(EXPORT_APPLICATION_BLOCKED_EFFECTS),
+        "privacy_class": _safe_privacy_class(privacy_class),
+    }
+
+
 def _atomic_append_jsonl(path: Path, entry: Dict[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     existing = ""
@@ -544,6 +636,21 @@ def _safe_review_action(value: Any) -> Optional[str]:
     if action in REVIEW_ACTIONS:
         return action
     return None
+
+
+def _safe_export_decision(value: Any) -> Optional[str]:
+    decision = _safe_status(value)
+    if decision in EXPORT_HANDOFF_ALLOWED_DECISIONS:
+        return decision
+    return None
+
+
+def _export_plan_state(decision: str) -> str:
+    if decision == "approve_export_summary":
+        return "approved_for_manual_export"
+    if decision == "request_changes":
+        return "changes_requested"
+    return "rejected"
 
 
 def _failure_review_export_entry(entry: Dict[str, Any]) -> Dict[str, Any]:

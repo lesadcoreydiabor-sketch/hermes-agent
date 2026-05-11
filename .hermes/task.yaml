@@ -1960,6 +1960,26 @@ tasks:
     status: completed
     risk: medium
 
+  - id: HMAMO-35
+    title: Add reviewed export application gate
+    description: Add a pure helper that validates reviewed failure-review export handoff decisions and returns a non-writing application plan.
+    depends_on:
+      - HMAMO-34
+    acceptance:
+      - Helper accepts a pending failure-review export handoff plus decision, reviewer, verification, and rollback_note.
+      - Approval returns an approved_for_manual_export plan with export_allowed true and summary/count metadata copied safely from the handoff.
+      - Request-changes or reject decisions return non-exportable plan states with export_allowed false.
+      - Helper rejects unsupported decisions, non-pending handoffs, and missing required review fields.
+      - Helper redacts secrets, absolute paths, diffs, and secret-looking ids while bounding summary lines and count maps.
+      - Helper is build-only and does not create export files, append JSONL, mark queue entries applied, edit skills, write memory provider data, mutate config, mutate task.yaml, dispatch tools, or spawn agents.
+      - PRD documents reviewed export application plan semantics and non-mutation boundaries.
+    verify:
+      - venv/Scripts/python.exe -m pytest tests/runtime/test_learning_journal.py tests/runtime/test_failure_review_candidates.py tests/runtime/test_multi_agent_memory_workbench.py -q -o addopts=
+      - venv/Scripts/python.exe -c "import yaml; yaml.safe_load(open('.hermes/task.yaml', encoding='utf-8'))"
+      - git diff --check -- hermes_cli/learning_journal.py tests/runtime/test_learning_journal.py docs/plans/hermes-multi-agent-memory-prd.md .hermes/task.yaml
+    status: completed
+    risk: low
+
 risk_flags:
   destructive_file_change:
     pause: true
@@ -3167,6 +3187,16 @@ progress_report:
       verification_result: "passed: venv/Scripts/python.exe -m pytest tests/web/test_run_inspector_status_policy.py -q -o addopts= (27 passed); passed: cd ui-tui; npm.cmd test -- createSlashHandler.test.ts (100 passed); passed: cd ui-tui; npm.cmd run type-check; passed: cd web; npm.cmd run build; passed: Playwright smoke at http://127.0.0.1:9146/run-inspector for 1280x720 and 390x844 viewports showed Multi-Agent Memory Gate diagnostics, no horizontal overflow, and no approve/export-file/mark-applied/write-memory/edit-skill buttons; passed: venv/Scripts/python.exe -c yaml.safe_load task.yaml; passed: git diff --check for HMAMO-34 files"
       blockers: []
       next_step: "Continue HERMES Multi-Agent Memory orchestration integration by defining a reviewed export application gate before any file-writing export action."
+    - task_id: HMAMO-35
+      status: completed
+      changed_files:
+        - hermes_cli/learning_journal.py
+        - tests/runtime/test_learning_journal.py
+        - docs/plans/hermes-multi-agent-memory-prd.md
+        - .hermes/task.yaml
+      verification_result: "passed: venv/Scripts/python.exe -m pytest tests/runtime/test_learning_journal.py tests/runtime/test_failure_review_candidates.py tests/runtime/test_multi_agent_memory_workbench.py -q -o addopts= (47 passed); passed: venv/Scripts/python.exe -c yaml.safe_load task.yaml; passed: git diff --check for HMAMO-35 files"
+      blockers: []
+      next_step: "Continue HERMES Multi-Agent Memory orchestration integration by surfacing reviewed export application plan diagnostics in the workbench."
 
 failure_review:
   enabled: true
