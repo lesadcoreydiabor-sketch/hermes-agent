@@ -439,3 +439,49 @@ export function describeFailureReviewExportHandoffState(
     tone: "muted",
   };
 }
+
+export function describeFailureReviewExportApplicationGateState(
+  workbench: RunInspectorMemoryWorkbench | null,
+): MemoryWorkbenchDisplay {
+  const gate = workbench?.failure_review_export_application_gate ?? null;
+  if (!gate) {
+    return {
+      label: "Apply unknown",
+      message: "No export application gate summary",
+      tone: "muted",
+    };
+  }
+  if (gate.degraded_reason) {
+    return {
+      label: "Apply degraded",
+      message: gate.degraded_reason,
+      tone: "warning",
+    };
+  }
+  if (gate.export_allowed) {
+    return {
+      label: "Apply ready",
+      message: `${gate.entry_count} reviewed entries`,
+      tone: "success",
+    };
+  }
+  if (gate.entry_count > 0 || gate.review_required) {
+    return {
+      label: "Apply waiting",
+      message: `${gate.entry_count} entries need reviewed plan`,
+      tone: "warning",
+    };
+  }
+  if (gate.status === "unavailable") {
+    return {
+      label: "Apply unavailable",
+      message: "Export application gate unavailable",
+      tone: "warning",
+    };
+  }
+  return {
+    label: "Apply quiet",
+    message: "No export application gate needed",
+    tone: "muted",
+  };
+}

@@ -499,6 +499,7 @@ const renderRunInspectorMemoryWorkbenchSummary = (
   const review = workbench?.learning_review
   const exportPreview = workbench?.failure_review_export
   const exportHandoff = workbench?.failure_review_export_handoff
+  const exportApplication = workbench?.failure_review_export_application_gate
   const plannedTasks = plannedInspectorTaskCount(plan)
   const rows: [string, string][] = [
     [
@@ -563,6 +564,12 @@ const renderRunInspectorMemoryWorkbenchSummary = (
         : 'unknown'
     ],
     [
+      'Apply gate',
+      exportApplication
+        ? `${exportApplication.entry_count ?? 0} entries / ${clipInspectorText(exportApplication.status, 'unknown', 48)} / allowed=${exportApplication.export_allowed ? 'yes' : 'no'}`
+        : 'unknown'
+    ],
+    [
       'Memory',
       `${workbench?.memory?.status ?? 'unknown'} / ${workbench?.memory?.provider_count ?? 0} providers`
     ],
@@ -582,6 +589,7 @@ const renderRunInspectorMemoryWorkbenchSummary = (
     review?.degraded_reason ||
     exportPreview?.degraded_reason ||
     exportHandoff?.degraded_reason ||
+    exportApplication?.degraded_reason ||
     workbench?.memory?.degraded_reason ||
     workbench?.runtime_persistence?.degraded_reason
   if (degraded) {
@@ -589,6 +597,35 @@ const renderRunInspectorMemoryWorkbenchSummary = (
   }
   if (workbench?.privacy_class) {
     rows.push(['Privacy', clipInspectorText(workbench.privacy_class, '', 48)])
+  }
+  return rows
+}
+
+const renderRunInspectorFailureReviewApplicationGateRows = (
+  workbench?: null | RunInspectorMemoryWorkbench
+): [string, string][] => {
+  const gate = workbench?.failure_review_export_application_gate
+  if (!gate) {
+    return [['Apply gate', 'none']]
+  }
+
+  const rows: [string, string][] = [
+    [
+      'Status',
+      `${clipInspectorText(gate.status, 'unknown', 48)} / ${gate.entry_count ?? 0} entries`
+    ],
+    ['Review', gate.review_required ? 'required' : 'none'],
+    ['Allowed', gate.export_allowed ? 'yes' : 'no'],
+    ['Effect', clipInspectorText(gate.requested_effect, 'none', 96)],
+    [
+      'Blocked effects',
+      gate.blocked_effects?.length
+        ? gate.blocked_effects.slice(0, 3).join(' / ')
+        : 'none'
+    ]
+  ]
+  if (gate.degraded_reason) {
+    rows.push(['Apply gate degraded', clipInspectorText(gate.degraded_reason)])
   }
   return rows
 }
@@ -1238,6 +1275,10 @@ export const opsCommands: SlashCommand[] = [
               {
                 rows: renderRunInspectorFailureReviewExportHandoffRows(r?.workbench),
                 title: 'Export Handoff'
+              },
+              {
+                rows: renderRunInspectorFailureReviewApplicationGateRows(r?.workbench),
+                title: 'Application Gate'
               },
               {
                 text: 'read-only memory workbench; no review action, export file, agent spawn, tool dispatch, memory write, skill edit, config edit, or task mutation'

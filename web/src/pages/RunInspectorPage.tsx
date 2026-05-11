@@ -93,6 +93,7 @@ import {
 import {
   describeAgentAssignmentState,
   describeDelegateRecoveryGateState,
+  describeFailureReviewExportApplicationGateState,
   describeFailureReviewExportHandoffState,
   describeFailureReviewExportPreviewState,
   describeHandoffProtocolState,
@@ -704,6 +705,8 @@ function MultiAgentMemoryWorkbenchCard({
   const failureReviewExport = workbench?.failure_review_export ?? null;
   const failureReviewExportHandoff =
     workbench?.failure_review_export_handoff ?? null;
+  const failureReviewExportApplicationGate =
+    workbench?.failure_review_export_application_gate ?? null;
   const runtimePersistenceDisplay = describeRuntimePersistenceState(workbench);
   const assignmentDisplay = describeAgentAssignmentState(workbench);
   const recoveryDisplay = describeDelegateRecoveryGateState(workbench);
@@ -712,6 +715,8 @@ function MultiAgentMemoryWorkbenchCard({
     describeFailureReviewExportPreviewState(workbench);
   const failureReviewExportHandoffDisplay =
     describeFailureReviewExportHandoffState(workbench);
+  const failureReviewExportApplicationGateDisplay =
+    describeFailureReviewExportApplicationGateState(workbench);
   const handoffDisplay = describeHandoffProtocolState(workbench);
   const parallelPlanDisplay = describeParallelAssignmentPlanState(workbench);
   const runtimePersistenceFlags = runtimePersistence?.flags ?? [];
@@ -816,6 +821,12 @@ function MultiAgentMemoryWorkbenchCard({
             label="Gate"
             tone={failureReviewExportHandoffDisplay.tone}
             value={failureReviewExportHandoffDisplay.label}
+          />
+          <Metric
+            icon={<Shield className="h-4 w-4" />}
+            label="Apply"
+            tone={failureReviewExportApplicationGateDisplay.tone}
+            value={failureReviewExportApplicationGateDisplay.label}
           />
           <Metric
             icon={<Handshake className="h-4 w-4" />}
@@ -997,6 +1008,37 @@ function MultiAgentMemoryWorkbenchCard({
               label="Effect"
               value={formatDisplayValue(
                 failureReviewExportHandoff.requested_effect,
+                "None",
+              )}
+            />
+          </div>
+        ) : null}
+
+        {failureReviewExportApplicationGate ? (
+          <div className="flex min-w-0 flex-col divide-y divide-border/70 border border-border">
+            <DetailRow
+              label="Apply gate"
+              value={`${failureReviewExportApplicationGate.entry_count} entries / ${failureReviewExportApplicationGate.status}`}
+            />
+            <DetailRow
+              label="Review"
+              value={failureReviewExportApplicationGate.review_required ? "required" : "none"}
+            />
+            <DetailRow
+              label="Allowed"
+              value={failureReviewExportApplicationGate.export_allowed ? "yes" : "no"}
+            />
+            <DetailRow
+              label="Effect"
+              value={formatDisplayValue(
+                failureReviewExportApplicationGate.requested_effect,
+                "None",
+              )}
+            />
+            <DetailRow
+              label="Blocked effects"
+              value={formatStringList(
+                failureReviewExportApplicationGate.blocked_effects,
                 "None",
               )}
             />

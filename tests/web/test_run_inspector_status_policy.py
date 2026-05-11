@@ -1468,6 +1468,28 @@ def test_run_inspector_memory_workbench_describes_all_states() -> None:
                 degraded_reason: null,
                 privacy_class: "redacted_summary",
               },
+              failure_review_export_application_gate: {
+                schema_version: 1,
+                gate_id: "failure-review-export-application-gate",
+                timestamp: "2026-05-11T00:00:00Z",
+                action: "apply_reviewed_failure_review_export",
+                state: "empty",
+                status: "empty",
+                review_required: false,
+                export_allowed: false,
+                decision: null,
+                handoff_id: "failure-review-export-handoff",
+                preview_id: "failure-review-export-preview",
+                output_kind: "failure_review_summary",
+                target_ref: null,
+                entry_count: 0,
+                required_decision_fields: ["reviewer", "decision"],
+                allowed_decisions: ["approve_export_summary"],
+                requested_effect: "reviewed_export_plan_required",
+                blocked_effects: [],
+                degraded_reason: null,
+                privacy_class: "redacted_summary",
+              },
               skills_journal: { entries: [], degraded_reason: null },
               degraded_reason: null,
               privacy_class: "redacted_summary",
@@ -1698,6 +1720,35 @@ def test_run_inspector_memory_workbench_describes_all_states() -> None:
                 },
               }).label,
               exportGateMissing: workbench.describeFailureReviewExportHandoffState(null).tone,
+              applyGateQuiet: workbench.describeFailureReviewExportApplicationGateState(base).label,
+              applyGateWaiting: workbench.describeFailureReviewExportApplicationGateState({
+                ...base,
+                failure_review_export_application_gate: {
+                  ...base.failure_review_export_application_gate,
+                  status: "waiting_review",
+                  state: "waiting_review",
+                  review_required: true,
+                  entry_count: 2,
+                },
+              }).message,
+              applyGateReady: workbench.describeFailureReviewExportApplicationGateState({
+                ...base,
+                failure_review_export_application_gate: {
+                  ...base.failure_review_export_application_gate,
+                  status: "approved_for_manual_export",
+                  state: "approved_for_manual_export",
+                  export_allowed: true,
+                  entry_count: 2,
+                },
+              }).label,
+              applyGateDegraded: workbench.describeFailureReviewExportApplicationGateState({
+                ...base,
+                failure_review_export_application_gate: {
+                  ...base.failure_review_export_application_gate,
+                  degraded_reason: "long_term_queue_missing",
+                },
+              }).label,
+              applyGateMissing: workbench.describeFailureReviewExportApplicationGateState(null).tone,
               reviewMissing: workbench.describeLearningReviewState(null).tone,
               recoveryMissing: workbench.describeDelegateRecoveryGateState(null).tone,
               handoffMissing: workbench.describeHandoffProtocolState(null).tone,
@@ -1745,6 +1796,11 @@ def test_run_inspector_memory_workbench_describes_all_states() -> None:
     assert payload["exportGateReady"] == "2 entries need review"
     assert payload["exportGateDegraded"] == "Gate degraded"
     assert payload["exportGateMissing"] == "muted"
+    assert payload["applyGateQuiet"] == "Apply quiet"
+    assert payload["applyGateWaiting"] == "2 entries need reviewed plan"
+    assert payload["applyGateReady"] == "Apply ready"
+    assert payload["applyGateDegraded"] == "Apply degraded"
+    assert payload["applyGateMissing"] == "muted"
     assert payload["reviewMissing"] == "muted"
     assert payload["recoveryMissing"] == "muted"
     assert payload["handoffMissing"] == "muted"
@@ -1776,12 +1832,14 @@ def test_run_inspector_memory_workbench_uses_readonly_api() -> None:
     assert "describeLearningReviewState" in page_source
     assert "describeFailureReviewExportPreviewState" in page_source
     assert "describeFailureReviewExportHandoffState" in page_source
+    assert "describeFailureReviewExportApplicationGateState" in page_source
     assert 'label="Persistence"' in page_source
     assert 'label="Assignments"' in page_source
     assert 'label="Recovery"' in page_source
     assert 'label="Review"' in page_source
     assert 'label="Export"' in page_source
     assert 'label="Gate"' in page_source
+    assert 'label="Apply"' in page_source
     assert 'label="Sources"' in page_source
     assert 'label="Types"' in page_source
     assert 'label="Statuses"' in page_source
@@ -1834,6 +1892,9 @@ def test_run_inspector_memory_workbench_uses_readonly_api() -> None:
         ROOT / "web" / "src" / "pages" / "runInspectorMemoryWorkbench.ts"
     ).read_text(encoding="utf-8")
     assert "describeFailureReviewExportHandoffState" in (
+        ROOT / "web" / "src" / "pages" / "runInspectorMemoryWorkbench.ts"
+    ).read_text(encoding="utf-8")
+    assert "describeFailureReviewExportApplicationGateState" in (
         ROOT / "web" / "src" / "pages" / "runInspectorMemoryWorkbench.ts"
     ).read_text(encoding="utf-8")
     assert "/api/run-inspector/memory-workbench?limit=" in api_source

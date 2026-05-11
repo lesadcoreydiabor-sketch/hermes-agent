@@ -604,6 +604,7 @@ Run Inspector display policy:
 - Reviewed export application gates can surface as read-only workbench payloads with `export_allowed: false` until a real reviewer decision is supplied to a separate reviewed-plan helper.
 - Operator views can render export preview status, counts, one summary line, and blocked-effect labels as diagnostics; these views remain informational and do not perform the export.
 - Operator views can also render export handoff readiness, required decision fields, allowed decisions, and requested effects as diagnostics; these views do not approve the export or produce files.
+- Operator views can render export application gate status and `export_allowed`; unless a reviewed plan exists, this remains a waiting-review diagnostic and does not trigger an application action.
 - The Multi-Agent Memory workbench is read-only. It does not approve, deny, stop, spawn, write memory, edit skills, mutate config, or write remote systems.
 
 Migration limits:

@@ -1464,6 +1464,26 @@ describe('createSlashHandler', () => {
             degraded_reason: null,
             privacy_class: 'redacted_summary'
           },
+          failure_review_export_application_gate: {
+            status: 'waiting_review',
+            gate_id: 'failure-review-export-application-gate',
+            action: 'apply_reviewed_failure_review_export',
+            state: 'waiting_review',
+            review_required: true,
+            export_allowed: false,
+            decision: null,
+            handoff_id: 'failure-review-export-handoff',
+            preview_id: 'failure-review-export-preview',
+            output_kind: 'failure_review_summary',
+            entry_count: 2,
+            requested_effect: 'reviewed_export_plan_required',
+            blocked_effects: [
+              'write_export_file_without_review',
+              'mark_queue_entries_applied'
+            ],
+            degraded_reason: null,
+            privacy_class: 'redacted_summary'
+          },
           agent_assignments: {
             summary: {
               total_count: 3,
@@ -1549,6 +1569,7 @@ describe('createSlashHandler', () => {
               ['Review', '1 ready / 1 blocked'],
               ['Export', '2 entries / ready'],
               ['Export gate', '2 entries / ready'],
+              ['Apply gate', '2 entries / waiting_review / allowed=no'],
               ['Memory', 'available / 1 providers'],
               ['Persistence', 'disabled / 0 enabled'],
               ['Privacy', 'redacted_summary']
@@ -1623,6 +1644,16 @@ describe('createSlashHandler', () => {
               ['Effect', 'manual_export_after_review']
             ]),
             title: 'Export Handoff'
+          }),
+          expect.objectContaining({
+            rows: expect.arrayContaining([
+              ['Status', 'waiting_review / 2 entries'],
+              ['Review', 'required'],
+              ['Allowed', 'no'],
+              ['Effect', 'reviewed_export_plan_required'],
+              ['Blocked effects', 'write_export_file_without_review / mark_queue_entries_applied']
+            ]),
+            title: 'Application Gate'
           })
         ])
       )
