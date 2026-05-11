@@ -278,6 +278,7 @@ def test_multi_agent_memory_workbench_summarizes_agent_assignments(tmp_path) -> 
     assignments = workbench["agent_assignments"]
     summary = assignments["summary"]
     plan = assignments["parallel_plan"]
+    handoff = assignments["handoff_protocol"]
     assert summary["status"] == "conflict"
     assert summary["total_count"] == 3
     assert summary["ready_task_ids"] == ["HMAMO-02"]
@@ -285,6 +286,9 @@ def test_multi_agent_memory_workbench_summarizes_agent_assignments(tmp_path) -> 
     assert plan["batches"][0]["task_ids"] == ["HMAMO-02"]
     assert plan["active_task_ids"] == ["HMAMO-03"]
     assert plan["conflict_task_ids"] == ["HMAMO-02", "HMAMO-03"]
+    assert handoff["status"] == "needs_verification"
+    assert handoff["handoff_task_ids"] == ["HMAMO-01"]
+    assert handoff["verification_missing_task_ids"] == ["HMAMO-01"]
     assert assignments["assignments"][1]["verification"]["command"] == (
         "pytest assignment summary"
     )
@@ -348,6 +352,10 @@ def test_multi_agent_memory_workbench_degrades_when_sources_are_missing(tmp_path
         "task_contract_missing"
         in workbench["agent_assignments"]["parallel_plan"]["degraded_reason"]
     )
+    assert (
+        "task_contract_missing"
+        in workbench["agent_assignments"]["handoff_protocol"]["degraded_reason"]
+    )
 
 
 def test_multi_agent_memory_workbench_degrades_assignment_plan_on_bad_task_contract(
@@ -374,6 +382,9 @@ def test_multi_agent_memory_workbench_degrades_assignment_plan_on_bad_task_contr
     assert assignments["assignments"] == []
     assert assignments["degraded_reason"] == "task_contract_parse_error"
     assert assignments["parallel_plan"]["degraded_reason"] == (
+        "task_contract_parse_error"
+    )
+    assert assignments["handoff_protocol"]["degraded_reason"] == (
         "task_contract_parse_error"
     )
     rendered = json.dumps(assignments, sort_keys=True)
@@ -512,6 +523,11 @@ def test_empty_multi_agent_memory_workbench_is_safe_unavailable_payload() -> Non
     assert workbench["degraded_reason"] == "Redacted"
     assert workbench["memory"]["status"] == "unavailable"
     assert workbench["agent_assignments"]["parallel_plan"]["status"] == "empty"
+    assert workbench["agent_assignments"]["handoff_protocol"]["status"] == "empty"
+    assert (
+        workbench["agent_assignments"]["handoff_protocol"]["degraded_reason"]
+        == "Redacted"
+    )
 
 
 def _write_jsonl(path, entries) -> None:

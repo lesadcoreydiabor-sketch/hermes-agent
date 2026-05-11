@@ -333,6 +333,112 @@ def summarize_agent_task_assignments(
     }
 
 
+def summarize_agent_handoff_protocol(
+    assignments: Iterable[Dict[str, Any]],
+) -> Dict[str, Any]:
+    """Summarize handoff readiness and conflict policy gates."""
+
+    normalized = []
+    invalid_count = 0
+    for assignment in assignments:
+        if not isinstance(assignment, dict):
+            invalid_count += 1
+            continue
+        try:
+            normalized.append(normalize_agent_task_assignment(assignment))
+        except (TypeError, ValueError):
+            invalid_count += 1
+
+    conflict_pairs = find_agent_task_assignment_conflicts(normalized)
+    conflict_task_id_list = _dedupe(
+        task_id
+        for conflict in conflict_pairs
+        for task_id in conflict.get("task_ids", [])
+    )
+    conflict_task_ids = set(conflict_task_id_list)
+    policy_counts = Counter(
+        item["conflict_policy"]["conflict_resolution"] for item in normalized
+    )
+
+    handoff_task_ids = []
+    ready_task_ids = []
+    blocked_task_ids = []
+    verification_missing_task_ids = []
+    reviewer_required_task_ids = []
+    human_decision_task_ids = []
+
+    for item in normalized:
+        task_id = item["task_id"]
+        status = item["status"]
+        handoff = item["handoff_payload"]
+        verification = item["verification"]
+        conflict_policy = item["conflict_policy"]
+        write_scope = item["write_scope"]
+        blockers = handoff["blockers"]
+        is_handoff_candidate = status in {"review", "completed"} or bool(blockers)
+
+        if is_handoff_candidate:
+            handoff_task_ids.append(task_id)
+        if blockers or status in {"blocked", "failed"}:
+            blocked_task_ids.append(task_id)
+        if (
+            is_handoff_candidate
+            and status not in {"blocked", "failed"}
+            and verification["required_before_handoff"]
+            and not handoff["verification_result"]
+        ):
+            verification_missing_task_ids.append(task_id)
+        if conflict_policy["shared_contract_requires_reviewer"] and (
+            write_scope["shared_contracts"] or task_id in conflict_task_ids
+        ):
+            reviewer_required_task_ids.append(task_id)
+        if (
+            conflict_policy["conflict_resolution"] == "human_decides"
+            and task_id in conflict_task_ids
+        ):
+            human_decision_task_ids.append(task_id)
+
+        if (
+            is_handoff_candidate
+            and task_id not in blocked_task_ids
+            and task_id not in verification_missing_task_ids
+            and task_id not in reviewer_required_task_ids
+            and task_id not in human_decision_task_ids
+        ):
+            ready_task_ids.append(task_id)
+
+    status = "empty"
+    if normalized:
+        status = "quiet"
+    if ready_task_ids:
+        status = "ready"
+    if reviewer_required_task_ids:
+        status = "needs_review"
+    if verification_missing_task_ids:
+        status = "needs_verification"
+    if blocked_task_ids or human_decision_task_ids:
+        status = "blocked"
+    if invalid_count and not normalized:
+        status = "degraded"
+
+    return {
+        "schema_version": AGENT_TASK_ASSIGNMENT_SCHEMA_VERSION,
+        "status": status,
+        "handoff_task_ids": handoff_task_ids[:LIST_LIMIT],
+        "ready_task_ids": ready_task_ids[:LIST_LIMIT],
+        "blocked_task_ids": _dedupe(blocked_task_ids)[:LIST_LIMIT],
+        "verification_missing_task_ids": _dedupe(verification_missing_task_ids)[
+            :LIST_LIMIT
+        ],
+        "reviewer_required_task_ids": _dedupe(reviewer_required_task_ids)[:LIST_LIMIT],
+        "human_decision_task_ids": _dedupe(human_decision_task_ids)[:LIST_LIMIT],
+        "conflict_task_ids": conflict_task_id_list[:LIST_LIMIT],
+        "policy_counts": _counter_payload(policy_counts, CONFLICT_RESOLUTIONS),
+        "degraded_reason": f"invalid_assignments:{invalid_count}" if invalid_count else None,
+        "privacy_class": AGENT_TASK_ASSIGNMENT_PRIVACY_CLASS,
+    }
+
+
 def plan_agent_assignment_batches(
     assignments: Iterable[Dict[str, Any]],
     *,

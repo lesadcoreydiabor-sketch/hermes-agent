@@ -8,6 +8,7 @@ from hermes_cli.agent_task_assignment import (
     find_agent_task_assignment_conflicts,
     normalize_agent_task_assignment,
     plan_agent_assignment_batches,
+    summarize_agent_handoff_protocol,
     summarize_agent_task_assignments,
 )
 
@@ -464,3 +465,114 @@ def test_plan_agent_assignment_batches_redacts_sensitive_conflict_values() -> No
     assert "token=secret" not in rendered
     assert "C:\\Users" not in rendered
     assert plan["conflicts"][0]["overlap"] == ["Redacted"]
+
+
+def test_summarize_agent_handoff_protocol_reports_gates_and_policy() -> None:
+    ready = build_agent_task_assignment(
+        "HMAMO-10",
+        "Ready handoff",
+        status="completed",
+        handoff_payload={
+            "summary": "Done",
+            "changed_files": ["hermes_cli/agent_task_assignment.py"],
+            "verification_result": "passed",
+            "next_step": "Review",
+        },
+    )
+    missing_verification = build_agent_task_assignment(
+        "HMAMO-11",
+        "Needs verification",
+        status="review",
+        handoff_payload={"summary": "Needs test result"},
+    )
+    shared_contract = build_agent_task_assignment(
+        "HMAMO-12",
+        "Shared contract",
+        status="completed",
+        write_scope={"shared_contracts": [".hermes/task.yaml"]},
+        handoff_payload={"verification_result": "passed"},
+    )
+    human_left = build_agent_task_assignment(
+        "HMAMO-13",
+        "Human left",
+        status="review",
+        write_scope={"files": ["hermes_cli/agent_task_assignment.py"]},
+        handoff_payload={"verification_result": "passed"},
+        conflict_policy={"conflict_resolution": "human_decides"},
+    )
+    human_right = build_agent_task_assignment(
+        "HMAMO-14",
+        "Human right",
+        status="review",
+        write_scope={"directories": ["hermes_cli"]},
+        handoff_payload={"verification_result": "passed"},
+        conflict_policy={"conflict_resolution": "human_decides"},
+    )
+    blocked = build_agent_task_assignment(
+        "HMAMO-15",
+        "Blocked handoff",
+        status="blocked",
+        handoff_payload={"blockers": ["Need product decision"]},
+    )
+
+    summary = summarize_agent_handoff_protocol(
+        [
+            ready,
+            missing_verification,
+            shared_contract,
+            human_left,
+            human_right,
+            blocked,
+            {"title": "invalid"},
+        ]
+    )
+
+    assert summary["status"] == "blocked"
+    assert summary["handoff_task_ids"] == [
+        "HMAMO-10",
+        "HMAMO-11",
+        "HMAMO-12",
+        "HMAMO-13",
+        "HMAMO-14",
+        "HMAMO-15",
+    ]
+    assert summary["ready_task_ids"] == ["HMAMO-10"]
+    assert summary["verification_missing_task_ids"] == ["HMAMO-11"]
+    assert summary["reviewer_required_task_ids"] == [
+        "HMAMO-12",
+        "HMAMO-13",
+        "HMAMO-14",
+    ]
+    assert summary["human_decision_task_ids"] == ["HMAMO-13", "HMAMO-14"]
+    assert summary["blocked_task_ids"] == ["HMAMO-15"]
+    assert summary["conflict_task_ids"] == ["HMAMO-13", "HMAMO-14"]
+    assert summary["policy_counts"]["human_decides"] == 2
+    assert summary["degraded_reason"] == "invalid_assignments:1"
+
+
+def test_summarize_agent_handoff_protocol_redacts_sensitive_values() -> None:
+    first = build_agent_task_assignment(
+        "task-token=secret",
+        "C:\\Users\\XQQ\\secret\\file.txt",
+        status="review",
+        write_scope={"files": ["C:\\Users\\XQQ\\secret\\file.txt"]},
+        handoff_payload={
+            "verification_result": "token=secret",
+            "blockers": ["api_key=hidden"],
+        },
+    )
+    second = build_agent_task_assignment(
+        "HMAMO-02",
+        "Worker B",
+        status="review",
+        write_scope={"files": ["C:\\Users\\XQQ\\secret\\file.txt"]},
+        handoff_payload={"verification_result": "passed"},
+    )
+
+    summary = summarize_agent_handoff_protocol([first, second])
+    rendered = json.dumps(summary, sort_keys=True)
+
+    assert "token=secret" not in rendered
+    assert "api_key=hidden" not in rendered
+    assert "C:\\Users" not in rendered
+    assert summary["conflict_task_ids"] == ["Redacted", "HMAMO-02"]

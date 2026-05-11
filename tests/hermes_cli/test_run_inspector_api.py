@@ -394,6 +394,24 @@ def test_run_inspector_memory_workbench_api_returns_safe_readonly_summary(
                     "degraded_reason": None,
                     "privacy_class": "redacted_summary",
                 },
+                "handoff_protocol": {
+                    "schema_version": 1,
+                    "status": "quiet",
+                    "handoff_task_ids": [],
+                    "ready_task_ids": [],
+                    "blocked_task_ids": [],
+                    "verification_missing_task_ids": [],
+                    "reviewer_required_task_ids": [],
+                    "human_decision_task_ids": [],
+                    "conflict_task_ids": [],
+                    "policy_counts": {
+                        "human_decides": 0,
+                        "pause_and_handoff": 1,
+                        "reviewer_decides": 0,
+                    },
+                    "degraded_reason": None,
+                    "privacy_class": "redacted_summary",
+                },
                 "assignments": [
                     {
                         "schema_version": 1,
@@ -483,6 +501,7 @@ def test_run_inspector_memory_workbench_api_returns_safe_readonly_summary(
     assignments = payload["workbench"]["agent_assignments"]
     assert assignments["summary"]["ready_task_ids"] == ["HMAM-08"]
     assert assignments["parallel_plan"]["batches"][0]["task_ids"] == ["HMAM-08"]
+    assert assignments["handoff_protocol"]["status"] == "quiet"
     assert assignments["assignments"][0]["task_id"] == "HMAM-08"
     assert "token=" not in json.dumps(payload)
 
@@ -509,6 +528,9 @@ def test_run_inspector_memory_workbench_api_degrades_when_builder_fails(
     assert "runtime_persistence" in payload["workbench"]
     assert "agent_assignments" in payload["workbench"]
     assert payload["workbench"]["agent_assignments"]["parallel_plan"]["degraded_reason"] == (
+        "memory_workbench_api_failed:RuntimeError"
+    )
+    assert payload["workbench"]["agent_assignments"]["handoff_protocol"]["degraded_reason"] == (
         "memory_workbench_api_failed:RuntimeError"
     )
     assert "token=secret" not in json.dumps(payload)

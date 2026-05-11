@@ -1488,6 +1488,26 @@ tasks:
     status: completed
     risk: medium
 
+  - id: HMAMO-12
+    title: Summarize handoff protocol and conflict policy gates
+    description: Add read-only handoff readiness and conflict-policy summaries to agent assignments and the Multi-Agent Memory workbench.
+    depends_on:
+      - HMAMO-01
+      - HMAMO-04
+      - HMAMO-10
+    acceptance:
+      - Helper summarizes handoff-ready, blocked, verification-missing, reviewer-required, human-decision, and conflict task ids.
+      - Helper reports conflict resolution policy counts without exposing raw paths, prompts, logs, tool args, diffs, secrets, or file contents.
+      - Workbench agent_assignments payload includes handoff_protocol and propagates degraded metadata for missing or invalid task contracts.
+      - API fallback payload includes safe handoff_protocol degraded metadata when workbench building fails.
+      - Slice is pure/read-only and does not spawn agents, dispatch tools, write ledgers, mutate memory, edit skills, edit config, or mutate task ownership.
+    verify:
+      - venv/Scripts/python.exe -m pytest tests/runtime/test_agent_task_assignment.py tests/runtime/test_multi_agent_memory_workbench.py tests/hermes_cli/test_run_inspector_api.py -q -o addopts=
+      - venv/Scripts/python.exe -c "import yaml; yaml.safe_load(open('.hermes/task.yaml', encoding='utf-8'))"
+      - git diff --check -- hermes_cli/agent_task_assignment.py hermes_cli/multi_agent_memory_workbench.py tests/runtime/test_agent_task_assignment.py tests/runtime/test_multi_agent_memory_workbench.py tests/hermes_cli/test_run_inspector_api.py .hermes/task.yaml
+    status: completed
+    risk: medium
+
 risk_flags:
   destructive_file_change:
     pause: true
@@ -2436,6 +2456,18 @@ progress_report:
       verification_result: "passed: venv/Scripts/python.exe -m pytest tests/test_tui_gateway_server.py -q -o addopts= (187 passed); passed: cd ui-tui; npm.cmd test -- createSlashHandler.test.ts (100 passed); passed: cd ui-tui; npm.cmd run type-check; passed: cd ui-tui; npm.cmd run build; passed: venv/Scripts/python.exe -c yaml.safe_load task.yaml; passed: git diff --check for HMAMO-11 files"
       blockers: []
       next_step: "Add operator coverage for handoff protocol and conflict-policy surfaces, or begin real orchestration ledger integration."
+    - task_id: HMAMO-12
+      status: completed
+      changed_files:
+        - hermes_cli/agent_task_assignment.py
+        - hermes_cli/multi_agent_memory_workbench.py
+        - tests/runtime/test_agent_task_assignment.py
+        - tests/runtime/test_multi_agent_memory_workbench.py
+        - tests/hermes_cli/test_run_inspector_api.py
+        - .hermes/task.yaml
+      verification_result: "passed: venv/Scripts/python.exe -m pytest tests/runtime/test_agent_task_assignment.py tests/runtime/test_multi_agent_memory_workbench.py tests/hermes_cli/test_run_inspector_api.py -q -o addopts= (35 passed); passed: venv/Scripts/python.exe -c yaml.safe_load task.yaml; passed: git diff --check for HMAMO-12 files"
+      blockers: []
+      next_step: "Expose handoff_protocol in frontend/TUI operator summaries, then evaluate real orchestration ledger integration."
 
 failure_review:
   enabled: true

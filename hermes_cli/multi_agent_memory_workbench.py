@@ -18,6 +18,7 @@ from hermes_cli.action_ledger import (
 from hermes_cli.agent_task_assignment import (
     build_agent_task_assignments_from_task_contract,
     plan_agent_assignment_batches,
+    summarize_agent_handoff_protocol,
     summarize_agent_task_assignments,
 )
 from hermes_cli.learning_journal import (
@@ -254,6 +255,7 @@ def _agent_assignment_summary(workspace: Path, *, limit: int) -> Dict[str, Any]:
     summary = summarize_agent_task_assignments(assignments)
     degraded_reason = _join_reasons([*reasons, summary.get("degraded_reason")])
     parallel_plan = plan_agent_assignment_batches(assignments)
+    handoff_protocol = summarize_agent_handoff_protocol(assignments)
     if degraded_reason:
         parallel_plan = {
             **parallel_plan,
@@ -261,9 +263,16 @@ def _agent_assignment_summary(workspace: Path, *, limit: int) -> Dict[str, Any]:
                 [parallel_plan.get("degraded_reason"), degraded_reason]
             ),
         }
+        handoff_protocol = {
+            **handoff_protocol,
+            "degraded_reason": _join_reasons(
+                [handoff_protocol.get("degraded_reason"), degraded_reason]
+            ),
+        }
     return {
         "summary": summary,
         "parallel_plan": parallel_plan,
+        "handoff_protocol": handoff_protocol,
         "assignments": assignments[:limit],
         "degraded_reason": degraded_reason,
         "privacy_class": WORKBENCH_PRIVACY_CLASS,
@@ -277,9 +286,14 @@ def _empty_agent_assignment_summary(reason: Any) -> Dict[str, Any]:
         **plan_agent_assignment_batches([]),
         "degraded_reason": degraded_reason,
     }
+    handoff_protocol = {
+        **summarize_agent_handoff_protocol([]),
+        "degraded_reason": degraded_reason,
+    }
     return {
         "summary": summary,
         "parallel_plan": parallel_plan,
+        "handoff_protocol": handoff_protocol,
         "assignments": [],
         "degraded_reason": degraded_reason,
         "privacy_class": WORKBENCH_PRIVACY_CLASS,
