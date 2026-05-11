@@ -71,7 +71,7 @@ interface SkillsReloadResponse {
 const INSPECTOR_DEFAULT_PORT = 9119
 const INSPECTOR_EVENTS_DEFAULT_LIMIT = 12
 const INSPECTOR_TEXT_LIMIT = 140
-const INSPECTOR_EVENT_FILTERS = ['all', 'approval', 'failed', 'gateway', 'run', 'tool'] as const
+const INSPECTOR_EVENT_FILTERS = ['all', 'attention', 'approval', 'failed', 'gateway', 'run', 'tool'] as const
 
 type InspectorEventFilter = (typeof INSPECTOR_EVENT_FILTERS)[number]
 
@@ -387,6 +387,9 @@ const filterRunInspectorEvents = (
     const status = String(event.status || '').toLowerCase()
     const sourceName = String(event.source || '').toLowerCase()
 
+    if (filter === 'attention') {
+      return isAttentionRunInspectorEvent(event)
+    }
     if (filter === 'approval') {
       return type === 'approval.request' || status === 'waiting'
     }
@@ -735,12 +738,12 @@ export const opsCommands: SlashCommand[] = [
 
   {
     aliases: ['run-inspector-events'],
-    help: 'show recent read-only Run Inspector events [/inspector-events [limit] [all|approval|failed|gateway|run|tool]]',
+    help: 'show recent read-only Run Inspector events [/inspector-events [limit] [all|attention|approval|failed|gateway|run|tool]]',
     name: 'inspector-events',
     run: (arg, ctx) => {
       const parsed = parseInspectorEventsArgs(arg)
       if (parsed === null) {
-        return ctx.transcript.sys('usage: /inspector-events [limit 1..100] [all|approval|failed|gateway|run|tool]')
+        return ctx.transcript.sys('usage: /inspector-events [limit 1..100] [all|attention|approval|failed|gateway|run|tool]')
       }
 
       ctx.gateway
