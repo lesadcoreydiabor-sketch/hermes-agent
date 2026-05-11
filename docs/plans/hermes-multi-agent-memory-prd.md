@@ -585,6 +585,7 @@ Review gates:
 - Long-term memory changes are never silently applied. Queue entries can propose memory facts, but promotion to a provider requires a later explicit provider integration and review.
 - Skill changes are never silently applied. A skills journal entry is evidence, not a patch to a skill package.
 - Failure-review candidates are not accepted by default. They must include what happened, likely cause, verification command or evidence, proposed badcase, and blocker state.
+- Failure-review export previews are build-only diagnostics. They may summarize eligible long-term queue items, but they must not create files, mark queue entries applied, edit skills, write memory, mutate config, mutate tasks, dispatch tools, or spawn agents.
 - Redaction failures are blocker-class candidates. They must not expose the leaked value and must add or reference a regression before promotion.
 - Rollback notes are required for skills journal entries so an accepted learning can be removed or revised without rewriting history.
 
@@ -596,6 +597,7 @@ Run Inspector display policy:
 - Recovery gates show the latest per-child state and source counts only; stale spawned or running states are hidden after the same child completes, fails, times out, or is interrupted.
 - `event_stream` recovery gates can remain visible while the action ledger is missing, but the missing ledger stays degraded metadata.
 - Memory provider diagnostics show provider name, availability, initialized state, tool names, and lifecycle status only. They do not show memory contents, provider raw responses, prompts, or tool arguments.
+- Failure-review export previews can surface as read-only workbench payloads with summary lines, counts, blocked effects, and degraded state only; the UI must not render export, approve, write-file, or mark-applied controls from that preview.
 - The Multi-Agent Memory workbench is read-only. It does not approve, deny, stop, spawn, write memory, edit skills, mutate config, or write remote systems.
 
 Migration limits:

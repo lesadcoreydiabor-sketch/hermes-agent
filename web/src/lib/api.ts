@@ -880,6 +880,41 @@ export interface RunInspectorMemoryWorkbenchLearningReview {
   privacy_class: string;
 }
 
+export interface RunInspectorMemoryWorkbenchFailureReviewExportEntry {
+  entry_id: string | null;
+  timestamp: string | null;
+  category: string;
+  state: string;
+  title: string;
+  source_task_id: string | null;
+  source_event_id: string | null;
+  evidence: string[];
+  proposed_change: string | null;
+  acceptance_criteria: string[];
+  target_type: string | null;
+  target_ref: string | null;
+  privacy_class: string;
+}
+
+export interface RunInspectorMemoryWorkbenchFailureReviewExport {
+  schema_version: number;
+  preview_id: string;
+  timestamp: string;
+  title: string;
+  state: string;
+  requires_review: boolean;
+  output_kind: string;
+  entry_count: number;
+  category_counts: Record<string, number>;
+  state_counts: Record<string, number>;
+  entries: RunInspectorMemoryWorkbenchFailureReviewExportEntry[];
+  summary_lines: string[];
+  blocked_effects: string[];
+  status: string;
+  degraded_reason: string | null;
+  privacy_class: string;
+}
+
 export interface RunInspectorMemoryWorkbench {
   schema_version: number;
   generated_at: string;
@@ -901,6 +936,7 @@ export interface RunInspectorMemoryWorkbench {
     degraded_reason: string | null;
   };
   learning_review?: RunInspectorMemoryWorkbenchLearningReview;
+  failure_review_export?: RunInspectorMemoryWorkbenchFailureReviewExport;
   skills_journal: {
     entries: RunInspectorMemoryWorkbenchEntry[];
     degraded_reason: string | null;

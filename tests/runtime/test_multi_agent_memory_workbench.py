@@ -520,7 +520,7 @@ def test_multi_agent_memory_workbench_summarizes_learning_review_requests(
                 "category": "skill_improvement",
                 "state": "needs_evidence",
                 "title": "Promote PM skill checklist",
-                "evidence": ["needs reviewer"],
+                "evidence": ["needs reviewer token=secret"],
                 "proposed_change": "Add checklist",
                 "target_type": "skill_update",
                 "target_ref": "product-manager",
@@ -552,6 +552,29 @@ def test_multi_agent_memory_workbench_summarizes_learning_review_requests(
     assert "edit_skill_files" in blocked["blocked_effects"]
     rendered = json.dumps(review, sort_keys=True)
     assert "token=secret" not in rendered
+
+    export_preview = workbench["failure_review_export"]
+    assert export_preview["status"] == "ready"
+    assert export_preview["state"] == "preview_only"
+    assert export_preview["output_kind"] == "failure_review_summary"
+    assert export_preview["requires_review"] is True
+    assert export_preview["entry_count"] == 2
+    assert export_preview["category_counts"] == {
+        "missing_test": 1,
+        "skill_improvement": 1,
+    }
+    assert export_preview["state_counts"] == {"candidate": 1, "needs_evidence": 1}
+    assert export_preview["summary_lines"][0] == (
+        "missing_test/candidate: Cover redaction badcase"
+    )
+    assert export_preview["summary_lines"][1] == (
+        "skill_improvement/needs_evidence: Promote PM skill checklist -> Add checklist"
+    )
+    assert "write_export_file_without_review" in export_preview["blocked_effects"]
+    assert export_preview["degraded_reason"] is None
+    assert export_preview["privacy_class"] == "redacted_summary"
+    rendered_preview = json.dumps(export_preview, sort_keys=True)
+    assert "token=secret" not in rendered_preview
 
 
 def test_multi_agent_memory_workbench_summarizes_agent_assignments(tmp_path) -> None:
@@ -852,6 +875,9 @@ def test_empty_multi_agent_memory_workbench_is_safe_unavailable_payload() -> Non
     assert workbench["agent_assignments"]["handoff_protocol"]["status"] == "empty"
     assert workbench["learning_review"]["status"] == "unavailable"
     assert workbench["learning_review"]["requests"] == []
+    assert workbench["failure_review_export"]["status"] == "unavailable"
+    assert workbench["failure_review_export"]["entries"] == []
+    assert workbench["failure_review_export"]["entry_count"] == 0
     assert (
         workbench["agent_assignments"]["handoff_protocol"]["degraded_reason"]
         == "Redacted"

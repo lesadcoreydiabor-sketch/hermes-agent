@@ -602,6 +602,41 @@ export interface RunInspectorLearningReviewSummary {
   status?: string
 }
 
+export interface RunInspectorFailureReviewExportEntry {
+  acceptance_criteria?: string[]
+  category?: string
+  entry_id?: null | string
+  evidence?: string[]
+  privacy_class?: string
+  proposed_change?: null | string
+  source_event_id?: null | string
+  source_task_id?: null | string
+  state?: string
+  target_ref?: null | string
+  target_type?: null | string
+  timestamp?: null | string
+  title?: string
+}
+
+export interface RunInspectorFailureReviewExportSummary {
+  blocked_effects?: string[]
+  category_counts?: Record<string, number>
+  degraded_reason?: null | string
+  entries?: RunInspectorFailureReviewExportEntry[]
+  entry_count?: number
+  output_kind?: string
+  preview_id?: string
+  privacy_class?: string
+  requires_review?: boolean
+  schema_version?: number
+  state?: string
+  state_counts?: Record<string, number>
+  status?: string
+  summary_lines?: string[]
+  timestamp?: string
+  title?: string
+}
+
 export interface RunInspectorMemoryWorkbench {
   active_work?: unknown[]
   action_ledger?: {
@@ -617,6 +652,7 @@ export interface RunInspectorMemoryWorkbench {
     pending_tasks?: unknown[]
   }
   degraded_reason?: null | string
+  failure_review_export?: RunInspectorFailureReviewExportSummary
   generated_at?: string
   learning_review?: RunInspectorLearningReviewSummary
   memory?: RunInspectorMemorySummary

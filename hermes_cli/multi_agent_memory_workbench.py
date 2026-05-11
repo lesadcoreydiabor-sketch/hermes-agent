@@ -26,6 +26,7 @@ from hermes_cli.learning_journal import (
     SKILLS_JOURNAL_PATH,
     REVIEW_ACTION_EFFECTS,
     REVIEW_ACTION_TARGET_TYPES,
+    build_failure_review_export_preview,
     build_learning_review_request,
     normalize_long_term_queue_entry,
     normalize_skills_journal_entry,
@@ -131,6 +132,12 @@ def build_multi_agent_memory_workbench(
         degraded_reason=queue_degraded,
         limit=safe_limit,
     )
+    failure_review_export = _failure_review_export_preview_summary(
+        queue_entries,
+        degraded_reason=queue_degraded,
+        generated_at=generated_at,
+        limit=safe_limit,
+    )
 
     degraded_reasons = [
         checkpoint.get("degraded_reason"),
@@ -174,6 +181,7 @@ def build_multi_agent_memory_workbench(
             "degraded_reason": queue_degraded,
         },
         "learning_review": learning_review,
+        "failure_review_export": failure_review_export,
         "skills_journal": {
             "entries": journal_entries,
             "degraded_reason": journal_degraded,
@@ -235,6 +243,12 @@ def empty_multi_agent_memory_workbench(
         "learning_review": _learning_review_request_summary(
             [],
             degraded_reason=reason,
+            limit=ENTRY_LIMIT,
+        ),
+        "failure_review_export": _failure_review_export_preview_summary(
+            [],
+            degraded_reason=reason,
+            generated_at=generated_at,
             limit=ENTRY_LIMIT,
         ),
         "skills_journal": {"entries": [], "degraded_reason": reason},
@@ -409,6 +423,35 @@ def _learning_review_request_summary(
         "ready_count": ready_count,
         "blocked_count": blocked_count,
         "requests": requests,
+        "degraded_reason": degraded_reason,
+        "privacy_class": WORKBENCH_PRIVACY_CLASS,
+    }
+
+
+def _failure_review_export_preview_summary(
+    queue_entries: Iterable[Dict[str, Any]],
+    *,
+    degraded_reason: Optional[str],
+    generated_at: Optional[str],
+    limit: int,
+) -> Dict[str, Any]:
+    preview = build_failure_review_export_preview(
+        queue_entries,
+        preview_id="failure-review-export-preview",
+        timestamp=generated_at,
+        limit=limit,
+        privacy_class=WORKBENCH_PRIVACY_CLASS,
+    )
+    entry_count = preview.get("entry_count")
+    if degraded_reason and entry_count == 0:
+        status = "unavailable"
+    elif entry_count:
+        status = "ready"
+    else:
+        status = "empty"
+    return {
+        **preview,
+        "status": status,
         "degraded_reason": degraded_reason,
         "privacy_class": WORKBENCH_PRIVACY_CLASS,
     }

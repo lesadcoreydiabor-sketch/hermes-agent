@@ -1857,6 +1857,27 @@ tasks:
     status: completed
     risk: low
 
+  - id: HMAMO-30
+    title: Surface failure review export preview in workbench
+    description: Add read-only Multi-Agent Memory workbench diagnostics for safe failure-review export previews without adding export or mutation controls.
+    depends_on:
+      - HMAMO-29
+    acceptance:
+      - Workbench payload includes failure_review_export with status, preview metadata, entry_count, category_counts, state_counts, safe entries, summary_lines, blocked_effects, degraded_reason, and privacy_class.
+      - Empty and unavailable workbench payloads include safe failure_review_export empty/unavailable summaries.
+      - API/TUI/web types include the read-only failure_review_export payload fields without adding mutation controls.
+      - Preview diagnostics do not create export files, append JSONL, mark queue entries applied, edit skills, write memory provider data, mutate config, mutate task.yaml, dispatch tools, or spawn agents.
+      - PRD documents workbench export preview semantics and non-mutation boundaries.
+    verify:
+      - venv/Scripts/python.exe -m pytest tests/runtime/test_multi_agent_memory_workbench.py tests/runtime/test_learning_journal.py tests/runtime/test_failure_review_candidates.py -q -o addopts=
+      - venv/Scripts/python.exe -m pytest tests/web/test_run_inspector_status_policy.py -q -o addopts=
+      - cd ui-tui; npm.cmd run type-check
+      - cd web; npm.cmd run build
+      - venv/Scripts/python.exe -c "import yaml; yaml.safe_load(open('.hermes/task.yaml', encoding='utf-8'))"
+      - git diff --check -- hermes_cli/multi_agent_memory_workbench.py tests/runtime/test_multi_agent_memory_workbench.py web/src/lib/api.ts ui-tui/src/gatewayTypes.ts tests/web/test_run_inspector_status_policy.py docs/plans/hermes-multi-agent-memory-prd.md .hermes/task.yaml
+    status: completed
+    risk: medium
+
 risk_flags:
   destructive_file_change:
     pause: true
@@ -3002,6 +3023,19 @@ progress_report:
       verification_result: "passed: venv/Scripts/python.exe -m pytest tests/runtime/test_learning_journal.py tests/runtime/test_failure_review_candidates.py tests/runtime/test_multi_agent_memory_workbench.py -q -o addopts= (39 passed); passed: venv/Scripts/python.exe -c yaml.safe_load task.yaml; passed: git diff --check for HMAMO-29 files"
       blockers: []
       next_step: "Continue HERMES Multi-Agent Memory orchestration integration by surfacing safe failure review export previews in read-only diagnostics."
+    - task_id: HMAMO-30
+      status: completed
+      changed_files:
+        - hermes_cli/multi_agent_memory_workbench.py
+        - tests/runtime/test_multi_agent_memory_workbench.py
+        - web/src/lib/api.ts
+        - ui-tui/src/gatewayTypes.ts
+        - tests/web/test_run_inspector_status_policy.py
+        - docs/plans/hermes-multi-agent-memory-prd.md
+        - .hermes/task.yaml
+      verification_result: "passed: venv/Scripts/python.exe -m pytest tests/runtime/test_multi_agent_memory_workbench.py tests/runtime/test_learning_journal.py tests/runtime/test_failure_review_candidates.py -q -o addopts= (39 passed); passed: venv/Scripts/python.exe -m pytest tests/web/test_run_inspector_status_policy.py -q -o addopts= (27 passed); passed: cd ui-tui; npm.cmd run type-check; passed: cd web; npm.cmd run build; passed: venv/Scripts/python.exe -c yaml.safe_load task.yaml; passed: git diff --check for HMAMO-30 files"
+      blockers: []
+      next_step: "Continue HERMES Multi-Agent Memory orchestration integration by rendering failure review export preview diagnostics in operator views."
 
 failure_review:
   enabled: true
