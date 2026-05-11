@@ -16,6 +16,7 @@ export interface RunInspectorEventDisplay {
 }
 
 export interface RunInspectorEventSummary {
+  active: number;
   attention: number;
   approval: number;
   cancelled: number;
@@ -28,6 +29,7 @@ export interface RunInspectorEventSummary {
 export const RUN_INSPECTOR_EVENT_LIMIT = 50;
 export const RUN_INSPECTOR_EVENT_FILTERS = [
   "all",
+  "active",
   "attention",
   "approval",
   "cancelled",
@@ -104,6 +106,9 @@ export function filterRunInspectorEvents(
   }
 
   return events.filter((event) => {
+    if (filter === "active") {
+      return isActiveRunInspectorEvent(event);
+    }
     if (filter === "attention") {
       return (
         event.type === "approval.request" ||
@@ -146,6 +151,7 @@ export function summarizeRunInspectorEvents(
   ).length;
 
   return {
+    active: filterRunInspectorEvents(events, "active").length,
     attention: filterRunInspectorEvents(events, "attention").length,
     approval: filterRunInspectorEvents(events, "approval").length,
     cancelled: filterRunInspectorEvents(events, "cancelled").length,
@@ -183,6 +189,18 @@ export function formatRunInspectorEventTime(value: string): string {
     return value || "Unknown";
   }
   return date.toLocaleTimeString();
+}
+
+function isActiveRunInspectorEvent(event: RunInspectorEvent): boolean {
+  return (
+    event.status === "running" ||
+    event.status === "queued" ||
+    event.type === "gateway.forwarder.started" ||
+    event.type === "run.started" ||
+    event.type === "run.running" ||
+    event.type === "tool.started" ||
+    event.type === "tool.progress"
+  );
 }
 
 function eventTone(event: RunInspectorEvent): Tone {

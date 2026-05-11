@@ -71,7 +71,7 @@ interface SkillsReloadResponse {
 const INSPECTOR_DEFAULT_PORT = 9119
 const INSPECTOR_EVENTS_DEFAULT_LIMIT = 12
 const INSPECTOR_TEXT_LIMIT = 140
-const INSPECTOR_EVENT_FILTERS = ['all', 'attention', 'approval', 'cancelled', 'completed', 'failed', 'gateway', 'run', 'tool'] as const
+const INSPECTOR_EVENT_FILTERS = ['all', 'active', 'attention', 'approval', 'cancelled', 'completed', 'failed', 'gateway', 'run', 'tool'] as const
 
 type InspectorEventFilter = (typeof INSPECTOR_EVENT_FILTERS)[number]
 
@@ -344,6 +344,20 @@ const isAttentionRunInspectorEvent = (event: RunInspectorEventSummary): boolean 
   return isApprovalRunInspectorEvent(event) || isFailedRunInspectorEvent(event)
 }
 
+const isActiveRunInspectorEvent = (event: RunInspectorEventSummary): boolean => {
+  const type = String(event.type || '').toLowerCase()
+  const status = String(event.status || '').toLowerCase()
+  return (
+    status === 'running' ||
+    status === 'queued' ||
+    type === 'gateway.forwarder.started' ||
+    type === 'run.started' ||
+    type === 'run.running' ||
+    type === 'tool.started' ||
+    type === 'tool.progress'
+  )
+}
+
 const isApprovalRunInspectorEvent = (event: RunInspectorEventSummary): boolean => {
   const type = String(event.type || '').toLowerCase()
   const status = String(event.status || '').toLowerCase()
@@ -384,6 +398,7 @@ const renderRunInspectorEventSummary = (
   return [
     ['Fetched', String(source.length)],
     ['Showing', filter === 'all' ? String(filtered.length) : `${filtered.length} ${filter}`],
+    ['Active', String(source.filter(isActiveRunInspectorEvent).length)],
     ['Attention', String(source.filter(isAttentionRunInspectorEvent).length)],
     ['Approval', String(source.filter(isApprovalRunInspectorEvent).length)],
     ['Cancelled', String(source.filter(isCancelledRunInspectorEvent).length)],
@@ -407,6 +422,9 @@ const filterRunInspectorEvents = (
     const status = String(event.status || '').toLowerCase()
     const sourceName = String(event.source || '').toLowerCase()
 
+    if (filter === 'active') {
+      return isActiveRunInspectorEvent(event)
+    }
     if (filter === 'attention') {
       return isAttentionRunInspectorEvent(event)
     }
@@ -764,12 +782,12 @@ export const opsCommands: SlashCommand[] = [
 
   {
     aliases: ['run-inspector-events'],
-    help: 'show recent read-only Run Inspector events [/inspector-events [limit] [all|attention|approval|cancelled|completed|failed|gateway|run|tool]]',
+    help: 'show recent read-only Run Inspector events [/inspector-events [limit] [all|active|attention|approval|cancelled|completed|failed|gateway|run|tool]]',
     name: 'inspector-events',
     run: (arg, ctx) => {
       const parsed = parseInspectorEventsArgs(arg)
       if (parsed === null) {
-        return ctx.transcript.sys('usage: /inspector-events [limit 1..100] [all|attention|approval|cancelled|completed|failed|gateway|run|tool]')
+        return ctx.transcript.sys('usage: /inspector-events [limit 1..100] [all|active|attention|approval|cancelled|completed|failed|gateway|run|tool]')
       }
 
       ctx.gateway
