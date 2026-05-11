@@ -70,6 +70,7 @@ import {
   filterRunInspectorEvents,
   formatRunInspectorEventTime,
   RUN_INSPECTOR_EVENT_FILTERS,
+  summarizeRunInspectorEvents,
   type RunInspectorEventFilter,
   type RunInspectorEventStreamState,
 } from "@/pages/runInspectorEventTimeline";
@@ -1623,6 +1624,8 @@ function EventTimelineCard({
 }) {
   const stream = describeRunInspectorEventStream(state);
   const filteredEvents = filterRunInspectorEvents(events, filter);
+  const summary = summarizeRunInspectorEvents(events);
+  const latestDisplay = summary.latest ? describeRunInspectorEvent(summary.latest) : null;
   const newestFirst = [...filteredEvents].reverse();
 
   return (
@@ -1646,6 +1649,37 @@ function EventTimelineCard({
           <span className="shrink-0">
             {lastUpdatedAt ? formatDateTime(lastUpdatedAt) : "Not refreshed"}
           </span>
+        </div>
+
+        <div className="grid min-w-0 gap-2 sm:grid-cols-4">
+          <Metric
+            icon={<Activity className="h-4 w-4" />}
+            label="Recent"
+            value={String(summary.total)}
+            tone={summary.total > 0 ? "primary" : "muted"}
+          />
+          <Metric
+            icon={<AlertTriangle className="h-4 w-4" />}
+            label="Attention"
+            value={String(summary.attention)}
+            tone={summary.attention > 0 ? "warning" : "muted"}
+          />
+          <Metric
+            icon={<XCircle className="h-4 w-4" />}
+            label="Failed"
+            value={String(summary.failed)}
+            tone={summary.failed > 0 ? "destructive" : "muted"}
+          />
+          <Metric
+            icon={<Clock className="h-4 w-4" />}
+            label="Latest"
+            value={
+              summary.latest
+                ? `${formatRunInspectorEventTime(summary.latest.timestamp)} ${latestDisplay?.label ?? summary.latest.type}`
+                : "None"
+            }
+            tone={latestDisplay?.tone ?? "muted"}
+          />
         </div>
 
         <div className="grid min-w-0 gap-2 sm:grid-cols-5">

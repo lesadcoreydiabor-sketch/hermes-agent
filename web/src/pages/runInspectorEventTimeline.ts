@@ -15,6 +15,13 @@ export interface RunInspectorEventDisplay {
   message: string;
 }
 
+export interface RunInspectorEventSummary {
+  attention: number;
+  failed: number;
+  latest: RunInspectorEvent | null;
+  total: number;
+}
+
 export const RUN_INSPECTOR_EVENT_LIMIT = 50;
 export const RUN_INSPECTOR_EVENT_FILTERS = [
   "all",
@@ -109,6 +116,22 @@ export function filterRunInspectorEvents(
     }
     return true;
   });
+}
+
+export function summarizeRunInspectorEvents(
+  events: RunInspectorEvent[],
+): RunInspectorEventSummary {
+  const ordered = [...events].sort((left, right) => left.id - right.id);
+  const failed = events.filter(
+    (event) => event.status === "failed" || event.type.endsWith(".failed"),
+  ).length;
+
+  return {
+    attention: filterRunInspectorEvents(events, "attention").length,
+    failed,
+    latest: ordered.length > 0 ? ordered[ordered.length - 1] : null,
+    total: events.length,
+  };
 }
 
 export function describeRunInspectorEventStream(
