@@ -1593,6 +1593,24 @@ tasks:
     status: completed
     risk: medium
 
+  - id: HMAMO-17
+    title: Smoke recovery gate workbench layout
+    description: Verify the recovery gate Run Inspector UI in a local dashboard browser smoke across desktop and narrow viewports.
+    depends_on:
+      - HMAMO-16
+    acceptance:
+      - Local dashboard /run-inspector loads Multi-Agent Memory with Recovery signal visible at desktop width.
+      - Local dashboard /run-inspector loads Recovery signal and detail rows at narrow width without missing content.
+      - Browser smoke confirms no secret-looking values or absolute user secret paths are visible in recovery gate UI.
+      - Smoke does not click mutation controls, dispatch tools, spawn agents, write memory, edit skills, edit config, or mutate tasks.
+    verify:
+      - Browser smoke at http://127.0.0.1:9136/run-inspector with 1280x720 viewport
+      - Browser smoke at http://127.0.0.1:9136/run-inspector with 390x844 viewport
+      - venv/Scripts/python.exe -c "import yaml; yaml.safe_load(open('.hermes/task.yaml', encoding='utf-8'))"
+      - git diff --check -- .hermes/task.yaml
+    status: completed
+    risk: low
+
 risk_flags:
   destructive_file_change:
     pause: true
@@ -2599,6 +2617,13 @@ progress_report:
       verification_result: "passed: venv/Scripts/python.exe -m pytest tests/web/test_run_inspector_status_policy.py -q -o addopts= (27 passed); passed: cd ui-tui; npm.cmd test -- createSlashHandler.test.ts (100 passed); passed: cd ui-tui; npm.cmd run type-check; passed: cd ui-tui; npm.cmd run build; passed: cd web; npm.cmd run build"
       blockers: []
       next_step: "Continue HERMES Multi-Agent Memory orchestration integration after reviewing recovery gate UI smoke needs."
+    - task_id: HMAMO-17
+      status: completed
+      changed_files:
+        - .hermes/task.yaml
+      verification_result: "passed: Browser smoke at http://127.0.0.1:9136/run-inspector for 1280x720 and 390x844 viewports; both showed Multi-Agent Memory, Recovery quiet, recovery detail rows, and no secret/path leak"
+      blockers: []
+      next_step: "Continue HERMES Multi-Agent Memory orchestration integration with the next durable run/event workbench slice."
 
 failure_review:
   enabled: true
