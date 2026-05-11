@@ -591,6 +591,15 @@ Review gates:
 - Redaction failures are blocker-class candidates. They must not expose the leaked value and must add or reference a regression before promotion.
 - Rollback notes are required for skills journal entries so an accepted learning can be removed or revised without rewriting history.
 
+Reviewed export boundary:
+
+- `failure_review_export` is a preview only. It summarizes eligible queue entries and names blocked effects.
+- `failure_review_export_handoff` is a review request only. It names required reviewer fields and allowed decisions.
+- `failure_review_export_application_gate` is a waiting gate only. It must keep `export_allowed: false` until a reviewed plan exists.
+- A reviewed export application plan may set `export_allowed: true`, but still does not write a file or mark queue entries applied.
+- A future file-writing export command must be a separate explicit slice with a reviewed plan input, path validation, rollback note, redaction tests, and failure-review coverage.
+- No UI or TUI diagnostic surface may turn any of these payloads into approve, apply, mark-applied, or write-file controls without that separate explicit slice.
+
 Run Inspector display policy:
 
 - Missing action ledger, checkpoint, queue, journal, or memory diagnostics surfaces as degraded or unavailable state, not as a dashboard crash.

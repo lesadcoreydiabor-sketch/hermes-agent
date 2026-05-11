@@ -2024,6 +2024,22 @@ tasks:
     status: completed
     risk: medium
 
+  - id: HMAMO-38
+    title: Document reviewed export boundary
+    description: Document the boundary between export preview, handoff, application gate, reviewed plan, and any future explicit file-writing export action.
+    depends_on:
+      - HMAMO-37
+    acceptance:
+      - PRD clearly separates failure_review_export preview, failure_review_export_handoff, failure_review_export_application_gate, reviewed export application plan, and future explicit file-writing export command responsibilities.
+      - PRD states diagnostics must not become approve, apply, mark-applied, write-file, memory-write, skill-edit, config-edit, task-mutation, tool-dispatch, or spawn controls without a separate explicit slice.
+      - PRD states a future file-writing export command requires reviewed plan input, path validation, rollback note, redaction tests, and failure-review coverage.
+      - No runtime code, UI controls, exports, JSONL appends, queue state changes, skill edits, memory writes, config writes, or task mutations are introduced by this slice beyond updating the execution contract.
+    verify:
+      - venv/Scripts/python.exe -c "import yaml; yaml.safe_load(open('.hermes/task.yaml', encoding='utf-8'))"
+      - git diff --check -- docs/plans/hermes-multi-agent-memory-prd.md .hermes/task.yaml
+    status: completed
+    risk: low
+
 risk_flags:
   destructive_file_change:
     pause: true
@@ -3267,6 +3283,14 @@ progress_report:
       verification_result: "passed: venv/Scripts/python.exe -m pytest tests/web/test_run_inspector_status_policy.py -q -o addopts= (27 passed); passed: cd ui-tui; npm.cmd test -- createSlashHandler.test.ts (100 passed); passed: cd ui-tui; npm.cmd run type-check; passed: cd web; npm.cmd run build; passed: Playwright smoke at http://127.0.0.1:9147/run-inspector for 1280x720 and 390x844 viewports showed Multi-Agent Memory Apply diagnostics, no horizontal overflow, and no approve/export-file/apply/mark-applied/write-memory/edit-skill buttons; passed: venv/Scripts/python.exe -c yaml.safe_load task.yaml; passed: git diff --check for HMAMO-37 files"
       blockers: []
       next_step: "Continue HERMES Multi-Agent Memory orchestration integration by documenting the explicit reviewed-export boundary before any file-writing action."
+    - task_id: HMAMO-38
+      status: completed
+      changed_files:
+        - docs/plans/hermes-multi-agent-memory-prd.md
+        - .hermes/task.yaml
+      verification_result: "passed: venv/Scripts/python.exe -c yaml.safe_load task.yaml; passed: git diff --check for HMAMO-38 files"
+      blockers: []
+      next_step: "Continue HERMES Multi-Agent Memory orchestration integration by designing the explicit reviewed export command as a separate gated slice."
 
 failure_review:
   enabled: true
