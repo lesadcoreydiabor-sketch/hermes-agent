@@ -1429,6 +1429,26 @@ describe('createSlashHandler', () => {
             degraded_reason: null,
             privacy_class: 'redacted_summary'
           },
+          failure_review_export: {
+            status: 'ready',
+            preview_id: 'failure-review-export-preview',
+            state: 'preview_only',
+            output_kind: 'failure_review_summary',
+            entry_count: 2,
+            category_counts: { missing_test: 1, skill_improvement: 1 },
+            state_counts: { candidate: 1, needs_evidence: 1 },
+            entries: [],
+            summary_lines: [
+              'missing_test/candidate: Cover regression',
+              'skill_improvement/needs_evidence: Promote PM skill checklist'
+            ],
+            blocked_effects: [
+              'write_export_file_without_review',
+              'mark_queue_entries_applied'
+            ],
+            degraded_reason: null,
+            privacy_class: 'redacted_summary'
+          },
           agent_assignments: {
             summary: {
               total_count: 3,
@@ -1512,6 +1532,7 @@ describe('createSlashHandler', () => {
               ['Handoff', '1 ready / 0 verify / 1 review'],
               ['Recovery', '1 completed / 1 blocked / 1 monitoring'],
               ['Review', '1 ready / 1 blocked'],
+              ['Export', '2 entries / ready'],
               ['Memory', 'available / 1 providers'],
               ['Persistence', 'disabled / 0 enabled'],
               ['Privacy', 'redacted_summary']
@@ -1567,6 +1588,16 @@ describe('createSlashHandler', () => {
               ['Effect', 'append_skills_journal_after_review']
             ]),
             title: 'Review'
+          }),
+          expect.objectContaining({
+            rows: expect.arrayContaining([
+              ['Status', 'ready / 2 entries'],
+              ['Categories', 'missing_test:1 / skill_improvement:1'],
+              ['States', 'candidate:1 / needs_evidence:1'],
+              ['Summary', 'missing_test/candidate: Cover regression'],
+              ['Blocked effects', 'write_export_file_without_review / mark_queue_entries_applied']
+            ]),
+            title: 'Export Preview'
           })
         ])
       )

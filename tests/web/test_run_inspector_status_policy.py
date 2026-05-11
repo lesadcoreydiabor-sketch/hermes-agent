@@ -1426,6 +1426,24 @@ def test_run_inspector_memory_workbench_describes_all_states() -> None:
                 degraded_reason: null,
                 privacy_class: "redacted_summary",
               },
+              failure_review_export: {
+                schema_version: 1,
+                preview_id: "failure-review-export-preview",
+                timestamp: "2026-05-11T00:00:00Z",
+                title: "Failure review summary preview",
+                state: "preview_only",
+                requires_review: true,
+                output_kind: "failure_review_summary",
+                entry_count: 0,
+                category_counts: {},
+                state_counts: {},
+                entries: [],
+                summary_lines: [],
+                blocked_effects: [],
+                status: "empty",
+                degraded_reason: null,
+                privacy_class: "redacted_summary",
+              },
               skills_journal: { entries: [], degraded_reason: null },
               degraded_reason: null,
               privacy_class: "redacted_summary",
@@ -1622,6 +1640,23 @@ def test_run_inspector_memory_workbench_describes_all_states() -> None:
                   blocked_count: 3,
                 },
               }).message,
+              exportQuiet: workbench.describeFailureReviewExportPreviewState(base).label,
+              exportReady: workbench.describeFailureReviewExportPreviewState({
+                ...base,
+                failure_review_export: {
+                  ...base.failure_review_export,
+                  status: "ready",
+                  entry_count: 2,
+                },
+              }).message,
+              exportDegraded: workbench.describeFailureReviewExportPreviewState({
+                ...base,
+                failure_review_export: {
+                  ...base.failure_review_export,
+                  degraded_reason: "long_term_queue_missing",
+                },
+              }).label,
+              exportMissing: workbench.describeFailureReviewExportPreviewState(null).tone,
               reviewMissing: workbench.describeLearningReviewState(null).tone,
               recoveryMissing: workbench.describeDelegateRecoveryGateState(null).tone,
               handoffMissing: workbench.describeHandoffProtocolState(null).tone,
@@ -1661,6 +1696,10 @@ def test_run_inspector_memory_workbench_describes_all_states() -> None:
     assert payload["reviewQuiet"] == "Review quiet"
     assert payload["reviewReady"] == "2 pending review"
     assert payload["reviewBlocked"] == "3 blocked / 1 ready"
+    assert payload["exportQuiet"] == "Export quiet"
+    assert payload["exportReady"] == "2 preview entries"
+    assert payload["exportDegraded"] == "Export degraded"
+    assert payload["exportMissing"] == "muted"
     assert payload["reviewMissing"] == "muted"
     assert payload["recoveryMissing"] == "muted"
     assert payload["handoffMissing"] == "muted"
@@ -1690,10 +1729,12 @@ def test_run_inspector_memory_workbench_uses_readonly_api() -> None:
     assert "describeParallelAssignmentPlanState" in page_source
     assert "describeDelegateRecoveryGateState" in page_source
     assert "describeLearningReviewState" in page_source
+    assert "describeFailureReviewExportPreviewState" in page_source
     assert 'label="Persistence"' in page_source
     assert 'label="Assignments"' in page_source
     assert 'label="Recovery"' in page_source
     assert 'label="Review"' in page_source
+    assert 'label="Export"' in page_source
     assert 'label="Sources"' in page_source
     assert 'label="Types"' in page_source
     assert 'label="Statuses"' in page_source
@@ -1734,6 +1775,9 @@ def test_run_inspector_memory_workbench_uses_readonly_api() -> None:
         ROOT / "web" / "src" / "pages" / "runInspectorMemoryWorkbench.ts"
     ).read_text(encoding="utf-8")
     assert "describeLearningReviewState" in (
+        ROOT / "web" / "src" / "pages" / "runInspectorMemoryWorkbench.ts"
+    ).read_text(encoding="utf-8")
+    assert "describeFailureReviewExportPreviewState" in (
         ROOT / "web" / "src" / "pages" / "runInspectorMemoryWorkbench.ts"
     ).read_text(encoding="utf-8")
     assert "/api/run-inspector/memory-workbench?limit=" in api_source

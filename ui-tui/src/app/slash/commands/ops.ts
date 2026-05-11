@@ -497,6 +497,7 @@ const renderRunInspectorMemoryWorkbenchSummary = (
   const handoff = assignments?.handoff_protocol
   const recovery = workbench?.action_ledger?.recovery_gates
   const review = workbench?.learning_review
+  const exportPreview = workbench?.failure_review_export
   const plannedTasks = plannedInspectorTaskCount(plan)
   const rows: [string, string][] = [
     [
@@ -549,6 +550,12 @@ const renderRunInspectorMemoryWorkbenchSummary = (
         : 'unknown'
     ],
     [
+      'Export',
+      exportPreview
+        ? `${exportPreview.entry_count ?? 0} entries / ${clipInspectorText(exportPreview.status, 'unknown', 48)}`
+        : 'unknown'
+    ],
+    [
       'Memory',
       `${workbench?.memory?.status ?? 'unknown'} / ${workbench?.memory?.provider_count ?? 0} providers`
     ],
@@ -566,6 +573,7 @@ const renderRunInspectorMemoryWorkbenchSummary = (
     handoff?.degraded_reason ||
     recovery?.degraded_reason ||
     review?.degraded_reason ||
+    exportPreview?.degraded_reason ||
     workbench?.memory?.degraded_reason ||
     workbench?.runtime_persistence?.degraded_reason
   if (degraded) {
@@ -573,6 +581,33 @@ const renderRunInspectorMemoryWorkbenchSummary = (
   }
   if (workbench?.privacy_class) {
     rows.push(['Privacy', clipInspectorText(workbench.privacy_class, '', 48)])
+  }
+  return rows
+}
+
+const renderRunInspectorFailureReviewExportRows = (
+  workbench?: null | RunInspectorMemoryWorkbench
+): [string, string][] => {
+  const preview = workbench?.failure_review_export
+  if (!preview) {
+    return [['Export', 'none']]
+  }
+
+  const blockedEffects = preview.blocked_effects?.length
+    ? preview.blocked_effects.slice(0, 3).join(' / ')
+    : 'none'
+  const rows: [string, string][] = [
+    [
+      'Status',
+      `${clipInspectorText(preview.status, 'unknown', 48)} / ${preview.entry_count ?? 0} entries`
+    ],
+    ['Categories', renderInspectorCountMap(preview.category_counts)],
+    ['States', renderInspectorCountMap(preview.state_counts)],
+    ['Summary', clipInspectorText(preview.summary_lines?.[0], 'none', 120)],
+    ['Blocked effects', clipInspectorText(blockedEffects, 'none', 120)]
+  ]
+  if (preview.degraded_reason) {
+    rows.push(['Export degraded', clipInspectorText(preview.degraded_reason)])
   }
   return rows
 }
@@ -1166,7 +1201,11 @@ export const opsCommands: SlashCommand[] = [
                 title: 'Review'
               },
               {
-                text: 'read-only memory workbench; no review action, agent spawn, tool dispatch, memory write, skill edit, config edit, or task mutation'
+                rows: renderRunInspectorFailureReviewExportRows(r?.workbench),
+                title: 'Export Preview'
+              },
+              {
+                text: 'read-only memory workbench; no review action, export file, agent spawn, tool dispatch, memory write, skill edit, config edit, or task mutation'
               }
             ])
           })

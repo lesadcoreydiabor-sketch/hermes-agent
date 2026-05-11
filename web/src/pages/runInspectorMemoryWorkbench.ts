@@ -361,3 +361,42 @@ export function describeLearningReviewState(
     tone: "muted",
   };
 }
+
+export function describeFailureReviewExportPreviewState(
+  workbench: RunInspectorMemoryWorkbench | null,
+): MemoryWorkbenchDisplay {
+  const preview = workbench?.failure_review_export ?? null;
+  if (!preview) {
+    return {
+      label: "Export unknown",
+      message: "No failure review export preview",
+      tone: "muted",
+    };
+  }
+  if (preview.degraded_reason) {
+    return {
+      label: "Export degraded",
+      message: preview.degraded_reason,
+      tone: "warning",
+    };
+  }
+  if (preview.entry_count > 0) {
+    return {
+      label: "Export ready",
+      message: `${preview.entry_count} preview entries`,
+      tone: "primary",
+    };
+  }
+  if (preview.status === "unavailable") {
+    return {
+      label: "Export unavailable",
+      message: "Failure review export preview unavailable",
+      tone: "warning",
+    };
+  }
+  return {
+    label: "Export quiet",
+    message: "No failure review export entries",
+    tone: "muted",
+  };
+}
