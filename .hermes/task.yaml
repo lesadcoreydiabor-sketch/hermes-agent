@@ -1164,6 +1164,24 @@ tasks:
     status: completed
     risk: low
 
+  - id: HMAMR-07
+    title: Document delegate runtime persistence opt-ins
+    description: Update the Multi-Agent Memory PRD with the explicit environment flags and review boundaries for delegate runtime persistence.
+    depends_on:
+      - HMAMR-01
+      - HMAMR-03
+      - HMAMR-05
+    acceptance:
+      - PRD lists HERMES_DELEGATE_ACTION_LEDGER, HERMES_DELEGATE_WORKING_CHECKPOINT, and HERMES_DELEGATE_FAILURE_QUEUE.
+      - PRD states all three flags default off and are independent.
+      - PRD states write failures must not change delegate_task behavior.
+      - PRD reinforces that opt-in persistence does not auto-apply memory, skills, config, or review decisions.
+    verify:
+      - git diff --check -- docs/plans/hermes-multi-agent-memory-prd.md .hermes/task.yaml
+      - venv/Scripts/python.exe -c "import yaml; yaml.safe_load(open('.hermes/task.yaml', encoding='utf-8'))"
+    status: completed
+    risk: low
+
 risk_flags:
   destructive_file_change:
     pause: true
@@ -1950,6 +1968,14 @@ progress_report:
       verification_result: "passed: venv/Scripts/python.exe -m pytest tests/runtime/test_multi_agent_memory_workbench.py tests/runtime/test_working_checkpoint.py tests/runtime/test_action_ledger.py tests/runtime/test_failure_review_candidates.py -q -o addopts= (32 passed); passed: venv/Scripts/python.exe -c yaml.safe_load task.yaml"
       blockers: []
       next_step: "Review whether UI needs a small opt-in status hint for runtime persistence controls without adding mutation controls."
+    - task_id: HMAMR-07
+      status: completed
+      changed_files:
+        - docs/plans/hermes-multi-agent-memory-prd.md
+        - .hermes/task.yaml
+      verification_result: "passed: git diff --check -- docs/plans/hermes-multi-agent-memory-prd.md .hermes/task.yaml; passed: venv/Scripts/python.exe -c yaml.safe_load task.yaml"
+      blockers: []
+      next_step: "Review next UI or operator-facing status hint only after checking existing Run Inspector dirty files."
 
 failure_review:
   enabled: true

@@ -312,6 +312,16 @@ The first implementation should provide pure schema helpers and tests before run
 
 Runtime writes should be opt-in or explicitly wired by a later slice. Pure helpers come first so redaction and truncation can be tested independently.
 
+Current delegate runtime opt-ins:
+
+| Flag | Default | Writes | Behavior |
+| --- | --- | --- | --- |
+| `HERMES_DELEGATE_ACTION_LEDGER` | off | `.hermes/action_ledger.jsonl` | Mirrors redacted delegate child lifecycle events into the local action ledger. |
+| `HERMES_DELEGATE_WORKING_CHECKPOINT` | off | `.hermes/working_checkpoint.json` | Refreshes the generated working checkpoint from safe task and ledger summaries. |
+| `HERMES_DELEGATE_FAILURE_QUEUE` | off | `.hermes/long_term_queue.jsonl` | Captures failed or timed-out delegate children as reviewable recurring-failure candidates. |
+
+These flags are intentionally separate. Enabling the action ledger alone must not create a checkpoint or queue candidate. Enabling checkpoint or failure queue writes must remain best-effort: write failures are logged at debug level and must not change delegate return values, child interruption behavior, depth limits, concurrency limits, or cost rollup.
+
 ### Phase 4: Run Inspector Workbench
 
 Add a Run Inspector section for:
@@ -545,6 +555,7 @@ Migration limits:
 - The first implementation is local and process-aware, not a cross-process database. Gateway, dashboard, CLI, and delegated child processes may have separate in-memory event ledgers.
 - Cross-process ledger merging needs an explicit bridge or persistent store design before it can be treated as complete.
 - JSONL helpers are append-by-explicit-call only. Automatic runtime writes should stay behind dedicated slices with redaction tests and failure-review coverage.
+- Delegate runtime persistence is opt-in per file class. Operators must enable the ledger, checkpoint, and failure queue flags independently so observation does not silently become long-term learning.
 - Source bundles are read-only research artifacts. GitHub Issues, PRs, and Discussions evidence can be missing because of credentials, network, or rate limits; those gaps must be recorded instead of inferred.
 
 ## Evaluation
