@@ -621,6 +621,24 @@ tasks:
     status: completed
     risk: low
 
+  - id: HRIDS-02
+    title: Add local dashboard shell command
+    description: Add a minimal hermes desktop command that wraps the existing dashboard lifecycle and opens the Run Inspector route.
+    depends_on:
+      - HRIDS-01
+    acceptance:
+      - hermes desktop starts a loopback-only dashboard and opens /run-inspector by default.
+      - hermes desktop reuses an existing compatible dashboard instead of starting a duplicate process.
+      - hermes desktop supports --port, --no-open, and --status.
+      - Busy non-Hermes ports produce a degraded message and do not build or start the dashboard.
+      - The command does not write .env, config.yaml, provider profiles, or gateway config.
+      - Desktop process discovery includes hermes desktop without matching unrelated processes.
+    verify:
+      - venv/Scripts/python.exe -m pytest tests/hermes_cli/test_desktop_shell.py tests/hermes_cli/test_dashboard_lifecycle_flags.py tests/hermes_cli/test_update_stale_dashboard.py -q -o addopts=
+      - git diff --check -- hermes_cli/main.py tests/hermes_cli/test_desktop_shell.py tests/hermes_cli/test_update_stale_dashboard.py .hermes/task.yaml
+    status: completed
+    risk: medium
+
 risk_flags:
   destructive_file_change:
     pause: true
@@ -1081,6 +1099,16 @@ progress_report:
       verification_result: "passed: git diff --check -- docs/plans/hermes-run-inspector-desktop-shell-prd.md .hermes/task.yaml; passed: venv/Scripts/python.exe -c yaml.safe_load task.yaml"
       blockers: []
       next_step: "Desktop shell decision contract complete; implement HRIDS-02 local dashboard shell command or review packaging runtime decision first."
+    - task_id: HRIDS-02
+      status: completed
+      changed_files:
+        - hermes_cli/main.py
+        - tests/hermes_cli/test_desktop_shell.py
+        - tests/hermes_cli/test_update_stale_dashboard.py
+        - .hermes/task.yaml
+      verification_result: "passed: venv/Scripts/python.exe -m pytest tests/hermes_cli/test_desktop_shell.py tests/hermes_cli/test_dashboard_lifecycle_flags.py tests/hermes_cli/test_update_stale_dashboard.py -q -o addopts= (33 passed, 5 skipped); passed: venv/Scripts/python.exe -c yaml.safe_load task.yaml; passed: git diff --check for HRIDS-02 files; smoke passed: venv/Scripts/python.exe -m hermes_cli.main desktop --status; GitNexus impact for _find_stale_dashboard_pids and _report_dashboard_status LOW"
+      blockers: []
+      next_step: "HRIDS-02 local dashboard shell command complete; stage/commit/push, then decide whether HRIDS-03 status/stop needs a shell-owned runtime file."
 
 failure_review:
   enabled: true
@@ -1185,4 +1213,12 @@ failure_review:
       what_changed: "Reworded the acceptance bullet to avoid leading backticks while preserving the requirement."
       how_it_was_verified: "Re-ran venv/Scripts/python.exe -c yaml.safe_load task.yaml and git diff --check; both passed."
       added_eval_or_badcase: "HRIDS-01 task.yaml parse check"
+      blocker: false
+    - trigger: failed_verification
+      task_id: HRIDS-02
+      what_happened: "Initial HRIDS-02 test run failed in stale-dashboard process scan tests on native Windows because ps-style mocked output was routed through the wmic branch."
+      why_it_failed: "The existing POSIX process-scan tests did not force a POSIX platform branch, so Windows execution used the wrong mock output format."
+      what_changed: "Forced the POSIX branch for ps-output tests, added POSIX and Windows desktop process-scan coverage, and kept desktop status/start tests isolated from real dashboard dependencies."
+      how_it_was_verified: "Re-ran venv/Scripts/python.exe -m pytest tests/hermes_cli/test_desktop_shell.py tests/hermes_cli/test_dashboard_lifecycle_flags.py tests/hermes_cli/test_update_stale_dashboard.py -q -o addopts= and got 33 passed, 5 skipped."
+      added_eval_or_badcase: "tests/hermes_cli/test_desktop_shell.py::test_windows_process_scan_includes_hermes_desktop"
       blocker: false

@@ -5611,7 +5611,7 @@ def _build_web_ui(web_dir: Path, *, fatal: bool = False) -> bool:
 
 
 def _find_stale_dashboard_pids() -> list[int]:
-    """Return PIDs of ``hermes dashboard`` processes other than ourselves.
+    """Return PIDs of dashboard-serving processes other than ourselves.
 
     ``hermes dashboard`` is a long-lived server process commonly started and
     forgotten.  When ``hermes update`` replaces files on disk, the running
@@ -5631,6 +5631,9 @@ def _find_stale_dashboard_pids() -> list[int]:
         "hermes dashboard",
         "hermes_cli.main dashboard",
         "hermes_cli/main.py dashboard",
+        "hermes desktop",
+        "hermes_cli.main desktop",
+        "hermes_cli/main.py desktop",
     ]
     self_pid = os.getpid()
     dashboard_pids: list[int] = []
@@ -8896,8 +8899,8 @@ def _render_distribution_plan(plan) -> None:
         )
 
 
-def _report_dashboard_status() -> int:
-    """Print ``hermes dashboard`` PIDs and return the count.
+def _report_dashboard_status(process_label: str = "hermes dashboard") -> int:
+    """Print dashboard-serving PIDs and return the count.
 
     Uses the same detection logic as ``_find_stale_dashboard_pids`` (the
     current process is excluded, but since ``hermes dashboard --status``
@@ -8906,10 +8909,10 @@ def _report_dashboard_status() -> int:
     """
     pids = _find_stale_dashboard_pids()
     if not pids:
-        print("No hermes dashboard processes running.")
+        print(f"No {process_label} processes running.")
         return 0
 
-    print(f"{len(pids)} hermes dashboard process(es) running:")
+    print(f"{len(pids)} {process_label} process(es) running:")
     for pid in pids:
         # Best-effort: show the full cmdline so users can tell profiles apart.
         cmdline = ""
@@ -8931,6 +8934,77 @@ def _report_dashboard_status() -> int:
         else:
             print(f"    PID {pid}")
     return len(pids)
+
+
+_DESKTOP_DEFAULT_PATH = "/run-inspector"
+
+
+def _desktop_dashboard_url(
+    host: str,
+    port: int,
+    path: str = _DESKTOP_DEFAULT_PATH,
+) -> str:
+    """Build the local dashboard URL opened by ``hermes desktop``."""
+    safe_path = path if path.startswith("/") else f"/{path}"
+    return f"http://{host}:{port}{safe_path}"
+
+
+def _probe_dashboard_status(
+    host: str,
+    port: int,
+    *,
+    timeout: float = 0.75,
+) -> tuple[bool, str]:
+    """Return whether a local port is serving the Hermes dashboard status API."""
+    from urllib.error import HTTPError, URLError
+    from urllib.request import Request, urlopen
+
+    url = _desktop_dashboard_url(host, port, "/api/status")
+    try:
+        request = Request(url, headers={"Accept": "application/json"})
+        with urlopen(request, timeout=timeout) as response:
+            body = response.read(4096)
+    except HTTPError as exc:
+        return False, f"http_{exc.code}"
+    except (OSError, TimeoutError, URLError) as exc:
+        return False, exc.__class__.__name__
+
+    try:
+        payload = json.loads(body.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError):
+        return False, "invalid_status_payload"
+
+    if isinstance(payload, dict) and "version" in payload and "hermes_home" in payload:
+        return True, "ok"
+    return False, "non_hermes_status_payload"
+
+
+def _port_accepts_connections(
+    host: str,
+    port: int,
+    *,
+    timeout: float = 0.35,
+) -> bool:
+    """Best-effort check for an occupied local TCP port."""
+    import socket
+
+    try:
+        with socket.create_connection((host, port), timeout=timeout):
+            return True
+    except OSError:
+        return False
+
+
+def _open_browser_url(url: str, *, delay: float = 1.0) -> None:
+    """Open a browser URL in a short-lived daemon thread."""
+    import webbrowser
+
+    def _open() -> None:
+        if delay > 0:
+            _time.sleep(delay)
+        webbrowser.open(url)
+
+    threading.Thread(target=_open, daemon=True).start()
 
 
 def cmd_dashboard(args):
@@ -8980,6 +9054,69 @@ def cmd_dashboard(args):
         open_browser=not args.no_open,
         allow_public=getattr(args, "insecure", False),
         embedded_chat=embedded_chat,
+    )
+
+
+def cmd_desktop(args):
+    """Start or reuse the local dashboard as the first desktop shell surface."""
+    host = "127.0.0.1"
+    route_url = _desktop_dashboard_url(host, args.port)
+
+    if getattr(args, "status", False):
+        _report_dashboard_status("Hermes dashboard/desktop")
+        reachable, reason = _probe_dashboard_status(host, args.port)
+        if reachable:
+            print(f"Hermes desktop route: {route_url}")
+        else:
+            print(f"Hermes desktop route unavailable: {route_url} ({reason})")
+        sys.exit(0)
+
+    reachable, _reason = _probe_dashboard_status(host, args.port)
+    if reachable:
+        print(f"Hermes desktop reusing dashboard: {route_url}")
+        if not args.no_open:
+            _open_browser_url(route_url, delay=0)
+        sys.exit(0)
+
+    if _port_accepts_connections(host, args.port):
+        print(
+            f"Port {args.port} is already in use, but it does not look like "
+            "a Hermes dashboard."
+        )
+        print(f"Try: hermes desktop --port <free-port>")
+        print(f"Or inspect running dashboards: hermes dashboard --status")
+        sys.exit(1)
+
+    try:
+        import fastapi  # noqa: F401
+        import uvicorn  # noqa: F401
+    except ImportError as e:
+        print("Web UI dependencies not installed (need fastapi + uvicorn).")
+        print(
+            f"Re-install the package into this interpreter so metadata updates apply:\n"
+            f"  cd {PROJECT_ROOT}\n"
+            f"  {sys.executable} -m pip install -e .\n"
+            "If `pip` is missing in this venv, use:  uv pip install -e ."
+        )
+        print(f"Import error: {e}")
+        sys.exit(1)
+
+    if "HERMES_WEB_DIST" not in os.environ:
+        if not _build_web_ui(PROJECT_ROOT / "web", fatal=True):
+            sys.exit(1)
+
+    from hermes_cli.web_server import start_server
+
+    if not args.no_open:
+        _open_browser_url(route_url)
+
+    print(f"  Hermes Desktop -> {route_url}")
+    start_server(
+        host=host,
+        port=args.port,
+        open_browser=False,
+        allow_public=False,
+        embedded_chat=False,
     )
 
 
@@ -11460,6 +11597,30 @@ Examples:
         help="List running hermes dashboard processes and exit",
     )
     dashboard_parser.set_defaults(func=cmd_dashboard)
+
+    # =========================================================================
+    # desktop command
+    # =========================================================================
+    desktop_parser = subparsers.add_parser(
+        "desktop",
+        help="Open the local Run Inspector desktop shell",
+        description=(
+            "Start or reuse a loopback-only dashboard and open Run Inspector "
+            "as the first desktop shell surface"
+        ),
+    )
+    desktop_parser.add_argument(
+        "--port", type=int, default=9119, help="Port (default 9119)"
+    )
+    desktop_parser.add_argument(
+        "--no-open", action="store_true", help="Don't open browser automatically"
+    )
+    desktop_parser.add_argument(
+        "--status",
+        action="store_true",
+        help="Show local dashboard process and desktop route status",
+    )
+    desktop_parser.set_defaults(func=cmd_desktop)
 
     # =========================================================================
     # logs command

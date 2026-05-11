@@ -83,6 +83,11 @@ def _ps_runner(stdout: str):
 class TestFindStaleDashboardPids:
     """Unit tests for the ps/wmic-based detection step."""
 
+    @pytest.fixture(autouse=True)
+    def _force_posix_scan(self, monkeypatch):
+        """These fixtures feed ps-style output, so force the POSIX branch."""
+        monkeypatch.setattr(sys, "platform", "linux")
+
     def test_no_matches_returns_empty(self):
         with patch("subprocess.run") as mock_run:
             mock_run.return_value = MagicMock(
