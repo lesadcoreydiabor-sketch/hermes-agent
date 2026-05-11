@@ -57,6 +57,30 @@ TARGET_TYPES = frozenset(
     }
 )
 TARGET_REQUIRED_STATES = frozenset({"accepted", "applied"})
+REVIEW_ACTIONS = frozenset(
+    {
+        "promote_queue_to_skills_journal",
+        "mark_badcase_covered",
+        "export_failure_review_summary",
+    }
+)
+REVIEW_ACTION_TARGET_TYPES = {
+    "promote_queue_to_skills_journal": "skill_update",
+    "mark_badcase_covered": "regression_test",
+    "export_failure_review_summary": "documentation_update",
+}
+REVIEW_ACTION_EFFECTS = {
+    "promote_queue_to_skills_journal": "append_skills_journal_after_review",
+    "mark_badcase_covered": "record_badcase_coverage_after_review",
+    "export_failure_review_summary": "export_safe_summary_after_review",
+}
+REVIEW_BLOCKED_EFFECTS = (
+    "edit_skill_files",
+    "write_memory_provider_data",
+    "mutate_config",
+    "mutate_task_yaml",
+    "dispatch_tools_without_review",
+)
 
 _SECRET_RE = re.compile(
     r"\b(?:api[_-]?key|token|secret|password|credential)\s*[:=]\s*[^,\s;]+"
@@ -255,6 +279,89 @@ def append_skills_journal_entry(
     return normalized
 
 
+def build_learning_review_request(
+    action: Any,
+    *,
+    request_id: Any = None,
+    timestamp: Optional[str] = None,
+    source_queue_id: Any = None,
+    source_candidate_id: Any = None,
+    reviewer: Any = None,
+    target_type: Any = None,
+    target_ref: Any = None,
+    proposed_change: Any = None,
+    evidence: Optional[Iterable[Any]] = None,
+    verification: Any = None,
+    rollback_note: Any = None,
+    privacy_class: Any = LEARNING_PRIVACY_CLASS,
+) -> Dict[str, Any]:
+    """Build a safe manual-review request without applying the requested action."""
+
+    safe_action = _safe_review_action(action)
+    if not safe_action:
+        raise ValueError("supported review action is required")
+
+    safe_source_queue_id = _safe_identifier(source_queue_id)
+    safe_source_candidate_id = _safe_identifier(source_candidate_id)
+    if not safe_source_queue_id and not safe_source_candidate_id:
+        raise ValueError("source_queue_id or source_candidate_id is required")
+
+    expected_target_type = REVIEW_ACTION_TARGET_TYPES[safe_action]
+    provided_target_type = _safe_status(target_type)
+    if provided_target_type and provided_target_type not in TARGET_TYPES:
+        raise ValueError("unsupported target_type")
+    safe_target_type = provided_target_type or expected_target_type
+    if safe_target_type != expected_target_type:
+        raise ValueError(f"{safe_action} requires target_type {expected_target_type}")
+
+    safe_target_ref = _safe_summary(target_ref, fallback=None)
+    if not safe_target_ref:
+        raise ValueError("target_ref is required")
+
+    safe_evidence = _safe_list(evidence or [])
+    if not safe_evidence:
+        raise ValueError("evidence is required")
+
+    safe_proposed_change = _safe_summary(proposed_change, fallback=None)
+    if safe_action in {
+        "promote_queue_to_skills_journal",
+        "export_failure_review_summary",
+    } and not safe_proposed_change:
+        raise ValueError("proposed_change is required")
+
+    safe_verification = _safe_summary(verification, fallback=None)
+    if safe_action in {
+        "promote_queue_to_skills_journal",
+        "mark_badcase_covered",
+    } and not safe_verification:
+        raise ValueError("verification is required")
+
+    safe_rollback_note = _safe_summary(rollback_note, fallback=None)
+    if safe_action == "promote_queue_to_skills_journal" and not safe_rollback_note:
+        raise ValueError("rollback_note is required")
+
+    return {
+        "schema_version": LEARNING_SCHEMA_VERSION,
+        "request_id": _safe_identifier(request_id) or _new_entry_id("review"),
+        "timestamp": _safe_timestamp(timestamp) or _utc_now_iso(),
+        "action": safe_action,
+        "state": "pending_review",
+        "requires_review": True,
+        "source_queue_id": safe_source_queue_id,
+        "source_candidate_id": safe_source_candidate_id,
+        "reviewer": _safe_identifier(reviewer),
+        "target_type": safe_target_type,
+        "target_ref": safe_target_ref,
+        "proposed_change": safe_proposed_change,
+        "evidence": safe_evidence,
+        "verification": safe_verification,
+        "rollback_note": safe_rollback_note,
+        "requested_effect": REVIEW_ACTION_EFFECTS[safe_action],
+        "blocked_effects": list(REVIEW_BLOCKED_EFFECTS),
+        "privacy_class": _safe_privacy_class(privacy_class),
+    }
+
+
 def _atomic_append_jsonl(path: Path, entry: Dict[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     existing = ""
@@ -313,6 +420,13 @@ def _safe_target_type(value: Any) -> Optional[str]:
     target_type = _safe_status(value)
     if target_type in TARGET_TYPES:
         return target_type
+    return None
+
+
+def _safe_review_action(value: Any) -> Optional[str]:
+    action = _safe_status(value)
+    if action in REVIEW_ACTIONS:
+        return action
     return None
 
 

@@ -1773,6 +1773,26 @@ tasks:
     status: completed
     risk: low
 
+  - id: HMAMO-26
+    title: Add review-gated learning action requests
+    description: Add a pure helper that builds redacted pending-review requests for memory learning operator actions without applying them.
+    depends_on:
+      - HMAM-07
+      - HMAMO-25
+    acceptance:
+      - Helper supports promote_queue_to_skills_journal, mark_badcase_covered, and export_failure_review_summary pending-review requests.
+      - Requests include source queue or candidate id, target type/ref, evidence, verification where required, rollback note where required, requested effect, blocked effects, and privacy class.
+      - Helper validates action-specific required fields and rejects unsupported target/action combinations.
+      - Helper redacts secrets, absolute paths, diffs, and secret-looking ids while bounding evidence lists.
+      - Helper is pure and does not append JSONL, edit skills, write provider memory, mutate config, mutate task.yaml, dispatch tools, spawn agents, or export files.
+      - PRD documents review request preview semantics and non-mutation boundaries.
+    verify:
+      - venv/Scripts/python.exe -m pytest tests/runtime/test_learning_journal.py -q -o addopts=
+      - venv/Scripts/python.exe -c "import yaml; yaml.safe_load(open('.hermes/task.yaml', encoding='utf-8'))"
+      - git diff --check -- hermes_cli/learning_journal.py tests/runtime/test_learning_journal.py docs/plans/hermes-multi-agent-memory-prd.md .hermes/task.yaml
+    status: completed
+    risk: low
+
 risk_flags:
   destructive_file_change:
     pause: true
@@ -2872,6 +2892,16 @@ progress_report:
       verification_result: "passed: venv/Scripts/python.exe -c yaml.safe_load task.yaml; passed: git diff --check for HMAMO-25 files"
       blockers: []
       next_step: "Continue HERMES Multi-Agent Memory orchestration integration with review-gated controls or broader operator diagnostics."
+    - task_id: HMAMO-26
+      status: completed
+      changed_files:
+        - hermes_cli/learning_journal.py
+        - tests/runtime/test_learning_journal.py
+        - docs/plans/hermes-multi-agent-memory-prd.md
+        - .hermes/task.yaml
+      verification_result: "passed: venv/Scripts/python.exe -m pytest tests/runtime/test_learning_journal.py tests/runtime/test_failure_review_candidates.py tests/runtime/test_multi_agent_memory_workbench.py -q -o addopts= (35 passed); passed: venv/Scripts/python.exe -c yaml.safe_load task.yaml; passed: git diff --check for HMAMO-26 files"
+      blockers: []
+      next_step: "Continue HERMES Multi-Agent Memory orchestration integration by surfacing review requests in read-only diagnostics."
 
 failure_review:
   enabled: true

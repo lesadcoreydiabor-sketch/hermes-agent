@@ -373,6 +373,13 @@ Add explicit commands or UI actions for:
 
 No automatic mutation of skills or configuration.
 
+The first implementation step is a review request preview. It normalizes a
+manual operator intent into a redacted `pending_review` payload with source
+queue or candidate id, target type, target reference, evidence, verification,
+rollback note, requested effect, and blocked effects. Building this payload must
+not append the skills journal, mark a badcase covered, export a file, edit
+skills, write provider memory, mutate config, or mutate `.hermes/task.yaml`.
+
 ### Phase 6: Agent-Ready Work Distribution
 
 Use `.hermes/task.yaml` plus Kanban task context to define:

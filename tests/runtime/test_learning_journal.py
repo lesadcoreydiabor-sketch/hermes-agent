@@ -6,6 +6,7 @@ import hermes_cli.learning_journal as learning_journal
 from hermes_cli.learning_journal import (
     append_long_term_queue_entry,
     append_skills_journal_entry,
+    build_learning_review_request,
     build_long_term_queue_entry,
     build_skills_journal_entry,
     default_long_term_queue_path,
@@ -233,6 +234,136 @@ def test_append_skills_journal_entry_writes_jsonl_without_editing_skills(
 
     assert json.loads(journal_path.read_text(encoding="utf-8").splitlines()[0]) == appended
     assert skill_path.read_text(encoding="utf-8") == "original skill body"
+
+
+def test_learning_review_request_previews_queue_promotion_without_applying() -> None:
+    request = build_learning_review_request(
+        "promote_queue_to_skills_journal",
+        request_id="review-1",
+        timestamp="2026-05-11T00:00:00Z",
+        source_queue_id="queue-1",
+        reviewer="human-reviewer",
+        target_ref="product-manager",
+        proposed_change="Add agent-ready verification checklist",
+        evidence=["queue accepted by reviewer"],
+        verification="pytest tests/runtime/test_learning_journal.py",
+        rollback_note="Remove the journal entry before editing SKILL.md",
+    )
+
+    assert request == {
+        "action": "promote_queue_to_skills_journal",
+        "blocked_effects": [
+            "edit_skill_files",
+            "write_memory_provider_data",
+            "mutate_config",
+            "mutate_task_yaml",
+            "dispatch_tools_without_review",
+        ],
+        "evidence": ["queue accepted by reviewer"],
+        "privacy_class": "redacted_summary",
+        "proposed_change": "Add agent-ready verification checklist",
+        "requested_effect": "append_skills_journal_after_review",
+        "request_id": "review-1",
+        "requires_review": True,
+        "reviewer": "human-reviewer",
+        "rollback_note": "Remove the journal entry before editing SKILL.md",
+        "schema_version": 1,
+        "source_candidate_id": None,
+        "source_queue_id": "queue-1",
+        "state": "pending_review",
+        "target_ref": "product-manager",
+        "target_type": "skill_update",
+        "timestamp": "2026-05-11T00:00:00Z",
+        "verification": "pytest tests/runtime/test_learning_journal.py",
+    }
+
+
+def test_learning_review_request_validates_review_gate_fields() -> None:
+    with pytest.raises(ValueError, match="supported review action is required"):
+        build_learning_review_request("apply_now")
+    with pytest.raises(ValueError, match="source_queue_id or source_candidate_id"):
+        build_learning_review_request(
+            "mark_badcase_covered",
+            target_ref="tests/runtime/test_case.py",
+            evidence=["reviewed"],
+            verification="pytest",
+        )
+    with pytest.raises(ValueError, match="rollback_note is required"):
+        build_learning_review_request(
+            "promote_queue_to_skills_journal",
+            source_queue_id="queue-1",
+            target_ref="product-manager",
+            proposed_change="Add checklist",
+            evidence=["reviewed"],
+            verification="pytest",
+        )
+    with pytest.raises(ValueError, match="requires target_type skill_update"):
+        build_learning_review_request(
+            "promote_queue_to_skills_journal",
+            source_queue_id="queue-1",
+            target_type="regression_test",
+            target_ref="product-manager",
+            proposed_change="Add checklist",
+            evidence=["reviewed"],
+            verification="pytest",
+            rollback_note="rollback",
+        )
+    with pytest.raises(ValueError, match="unsupported target_type"):
+        build_learning_review_request(
+            "mark_badcase_covered",
+            source_queue_id="queue-1",
+            target_type="config_mutation",
+            target_ref="tests/runtime/test_case.py",
+            evidence=["reviewed"],
+            verification="pytest",
+        )
+
+
+def test_learning_review_request_redacts_sensitive_values_and_bounds_evidence() -> None:
+    request = build_learning_review_request(
+        "export_failure_review_summary",
+        request_id="review-ghp_1234567890",
+        source_candidate_id="candidate-token=secret",
+        target_ref="C:\\Users\\XQQ\\secret\\summary.md",
+        proposed_change="diff --git a/secret b/secret\n+sk-secret123456",
+        evidence=[
+            "api_key=hidden",
+            "safe evidence",
+            *[f"extra-{index}" for index in range(10)],
+        ],
+    )
+
+    rendered = json.dumps(request, sort_keys=True)
+    assert "ghp_1234567890" not in rendered
+    assert "token=secret" not in rendered
+    assert "C:\\Users" not in rendered
+    assert "diff --git" not in rendered
+    assert "sk-secret123456" not in rendered
+    assert "api_key=hidden" not in rendered
+    assert request["request_id"] == "Redacted"
+    assert request["source_candidate_id"] == "Redacted"
+    assert request["target_ref"] == "Redacted"
+    assert request["proposed_change"] == "Redacted"
+    assert len(request["evidence"]) == 8
+    assert "safe evidence" in request["evidence"]
+
+
+def test_learning_review_request_build_only_does_not_write_files(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+
+    build_learning_review_request(
+        "mark_badcase_covered",
+        source_candidate_id="failure-1",
+        target_ref="tests/runtime/test_learning_journal.py",
+        evidence=["badcase covered by regression"],
+        verification="pytest tests/runtime/test_learning_journal.py",
+    )
+
+    assert not (tmp_path / ".hermes").exists()
+    assert not (tmp_path / "skills").exists()
 
 
 def test_learning_journal_default_paths_are_workspace_local() -> None:
