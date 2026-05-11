@@ -15,6 +15,28 @@ export interface DesktopShellDisplay {
   tone: Tone;
 }
 
+export function describeDesktopShellSource(status: RunInspectorDesktopStatus | null): string {
+  if (!status) {
+    return "Unknown";
+  }
+  if (status.record_present) {
+    if (status.pid_status === "running") {
+      return "Desktop runtime record";
+    }
+    if (status.pid_status === "stale") {
+      return "Stale desktop runtime record";
+    }
+    return "Desktop runtime record present";
+  }
+  if (status.compatible_dashboard) {
+    return "Reusable dashboard";
+  }
+  if (status.runtime_record_cleared) {
+    return "Runtime record cleared";
+  }
+  return "No desktop runtime record";
+}
+
 export function describeDesktopShellStatus(
   state: RunInspectorDesktopStatusState,
   status: RunInspectorDesktopStatus | null,

@@ -81,6 +81,7 @@ import {
 } from "@/pages/runInspectorAttention";
 import {
   describeDesktopShellHeaderSignal,
+  describeDesktopShellSource,
   describeDesktopShellStatus,
   type RunInspectorDesktopStatusState,
 } from "@/pages/runInspectorDesktopStatus";
@@ -1050,10 +1051,15 @@ function DesktopShellStatusCard({
           </span>
         </div>
         <div className="flex min-w-0 flex-col divide-y divide-border/70 border border-border">
+          <DetailRow label="Source" value={describeDesktopShellSource(status)} />
           <DetailRow label="Health" value={formatDisplayValue(status?.health)} />
           <DetailRow label="PID" value={formatDisplayValue(status?.pid ? String(status.pid) : null, "None")} />
           <DetailRow label="PID Status" value={formatDisplayValue(status?.pid_status)} />
+          <DetailRow label="Started" value={formatDisplayValue(status?.started_at ? formatDateTime(status.started_at) : null, "Unknown")} />
+          <DetailRow label="Host" value={formatDisplayValue(status?.host)} />
+          <DetailRow label="Route" value={formatDisplayValue(status?.route)} />
           <DetailRow label="URL" value={formatDisplayValue(status?.url)} />
+          <DetailRow label="Manual URL" value={formatDisplayValue(status?.manual_url, "None")} />
           <DetailRow label="Reuse" value={formatDisplayValue(status?.reuse_command, "None")} />
           <DetailRow label="Stop" value={formatDisplayValue(status?.stop_command, "None")} />
         </div>
