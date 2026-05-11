@@ -590,6 +590,17 @@ def test_run_inspector_event_timeline_describes_event_and_stream_states():
               status: "running",
               message: null,
             });
+            const unknownType = timeline.describeRunInspectorEvent({
+              id: 22,
+              type: "approval.responded",
+              source: "gateway_run",
+              timestamp: "2026-05-11T00:00:00Z",
+              run_id: "run_1",
+              session_id: null,
+              tool: null,
+              status: "running",
+              message: null,
+            });
             const context = timeline.describeRunInspectorEventContext({
               id: 3,
               type: "approval.request",
@@ -643,7 +654,7 @@ def test_run_inspector_event_timeline_describes_event_and_stream_states():
               attention: timeline.runInspectorEventFilterLabel("attention"),
               terminal: timeline.runInspectorEventFilterLabel("terminal"),
             };
-            console.log(JSON.stringify({ failed, connected, auth, forwarder, context, emptyContext, filters, summary, emptyStates, labels }));
+            console.log(JSON.stringify({ failed, connected, auth, forwarder, unknownType, context, emptyContext, filters, summary, emptyStates, labels }));
             """
         )
     )
@@ -657,6 +668,11 @@ def test_run_inspector_event_timeline_describes_event_and_stream_states():
     assert payload["auth"]["tone"] == "destructive"
     assert payload["forwarder"] == {
         "label": "Gateway forwarder started",
+        "tone": "primary",
+        "message": "running",
+    }
+    assert payload["unknownType"] == {
+        "label": "Approval responded",
         "tone": "primary",
         "message": "running",
     }

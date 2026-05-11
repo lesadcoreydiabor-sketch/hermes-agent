@@ -92,7 +92,7 @@ export function mergeRunInspectorEvents(
 export function describeRunInspectorEvent(
   event: RunInspectorEvent,
 ): RunInspectorEventDisplay {
-  const label = EVENT_LABELS[event.type] ?? event.type;
+  const label = EVENT_LABELS[event.type] ?? formatRunInspectorEventType(event.type);
   const tone = eventTone(event);
   const message =
     event.message ??
@@ -194,6 +194,14 @@ export function describeRunInspectorEventEmptyState(
 
 export function runInspectorEventFilterLabel(filter: RunInspectorEventFilter): string {
   return FILTER_LABELS[filter];
+}
+
+function formatRunInspectorEventType(type: string): string {
+  const normalized = type.replace(/[._-]+/g, " ").trim();
+  if (!normalized) {
+    return "Event";
+  }
+  return normalized.charAt(0).toUpperCase() + normalized.slice(1);
 }
 
 export function describeRunInspectorEventStream(
