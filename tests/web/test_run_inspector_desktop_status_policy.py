@@ -183,6 +183,8 @@ def test_run_inspector_desktop_card_renders_next_action_row() -> None:
     assert 'label="Attention"' in page_source
     assert 'label="PID reason"' in page_source
     assert 'formatDisplayValue(status?.pid_reason, "Unknown")' in page_source
+    assert 'ariaLabel="Open desktop URL"' in page_source
+    assert 'window.open(url, "_blank", "noopener,noreferrer")' in page_source
     assert 'ariaLabel="Copy desktop URL"' in page_source
     assert 'ariaLabel="Copy desktop reuse command"' in page_source
     assert 'ariaLabel="Copy desktop stop command"' in page_source

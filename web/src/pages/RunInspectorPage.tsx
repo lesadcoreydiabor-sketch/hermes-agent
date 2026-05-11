@@ -1290,9 +1290,14 @@ function DesktopShellStatusCard({
             value={formatDisplayValue(desktopUrl)}
             action={
               desktopUrl ? (
-                <CopyDetailButton ariaLabel="Copy desktop URL" value={desktopUrl}>
-                  Copy URL
-                </CopyDetailButton>
+                <div className="flex flex-wrap items-center gap-2">
+                  <OpenDetailButton ariaLabel="Open desktop URL" url={desktopUrl}>
+                    Open
+                  </OpenDetailButton>
+                  <CopyDetailButton ariaLabel="Copy desktop URL" value={desktopUrl}>
+                    Copy URL
+                  </CopyDetailButton>
+                </div>
               ) : null
             }
           />
@@ -2159,6 +2164,33 @@ function CopyDetailButton({
         : copyState === "failed"
           ? "Copy failed"
           : children}
+    </Button>
+  );
+}
+
+function OpenDetailButton({
+  ariaLabel,
+  children,
+  url,
+}: {
+  ariaLabel: string;
+  children: string;
+  url: string;
+}) {
+  const handleOpen = useCallback(() => {
+    window.open(url, "_blank", "noopener,noreferrer");
+  }, [url]);
+
+  return (
+    <Button
+      type="button"
+      size="sm"
+      outlined
+      aria-label={ariaLabel}
+      onClick={handleOpen}
+      prefix={<Link className="h-3 w-3" />}
+    >
+      {children}
     </Button>
   );
 }
