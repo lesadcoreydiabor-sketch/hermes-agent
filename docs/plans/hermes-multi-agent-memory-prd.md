@@ -347,6 +347,22 @@ The workbench must keep these sources distinguishable with bounded
 memory; they must not imply that `.hermes/action_ledger.jsonl` exists or that a
 checkpoint can be reconstructed after process restart.
 
+Recovery diagnostics also expose bounded lifecycle classification fields:
+
+- `latest_event_type`, `latest_status`, `latest_timestamp`, and `latest_source`
+  identify the newest visible delegate recovery state after the per-child or
+  per-work latest-state collapse.
+- `event_type_counts` groups the visible latest states by safe lifecycle event
+  labels such as completed, failed, interrupted, timeout, or running.
+- `status_counts` groups the same visible latest states by operator-facing
+  status buckets such as completed, blocked, or monitoring.
+
+These fields are diagnosis aids only. They must never expose raw delegate
+goals, summaries, prompts, logs, tool arguments, diffs, file contents, absolute
+paths, provider memory payloads, or secret-looking values. Empty workbench
+payloads should return empty count maps and null latest markers so dashboard and
+TUI renderers can distinguish quiet state from missing data without guessing.
+
 ### Phase 5: Review Gates
 
 Add explicit commands or UI actions for:

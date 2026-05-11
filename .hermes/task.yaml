@@ -1755,6 +1755,24 @@ tasks:
     status: completed
     risk: low
 
+  - id: HMAMO-25
+    title: Document recovery lifecycle diagnostics
+    description: Update the Multi-Agent Memory PRD to define latest lifecycle markers plus recovery event/status count semantics.
+    depends_on:
+      - HMAMO-21
+      - HMAMO-22
+      - HMAMO-23
+    acceptance:
+      - PRD explains latest_event_type, latest_status, latest_timestamp, and latest_source semantics after latest-state collapse.
+      - PRD explains event_type_counts and status_counts as bounded diagnostic maps over visible latest recovery states.
+      - PRD states these fields are diagnosis aids only and must not expose raw delegate goals, summaries, prompts, logs, tool arguments, diffs, file contents, absolute paths, provider memory payloads, or secret-looking values.
+      - Empty workbench payload behavior is documented as empty count maps and null latest markers.
+    verify:
+      - venv/Scripts/python.exe -c "import yaml; yaml.safe_load(open('.hermes/task.yaml', encoding='utf-8'))"
+      - git diff --check -- docs/plans/hermes-multi-agent-memory-prd.md .hermes/task.yaml
+    status: completed
+    risk: low
+
 risk_flags:
   destructive_file_change:
     pause: true
@@ -2846,6 +2864,14 @@ progress_report:
       verification_result: "passed: Browser smoke at http://127.0.0.1:9136/run-inspector for 1280x720 and 390x844 viewports; both showed Multi-Agent Memory, Recovery, Sources, Types, Statuses, Latest, and no secret/path leak"
       blockers: []
       next_step: "Continue HERMES Multi-Agent Memory orchestration integration with review-gated controls or documentation updates."
+    - task_id: HMAMO-25
+      status: completed
+      changed_files:
+        - docs/plans/hermes-multi-agent-memory-prd.md
+        - .hermes/task.yaml
+      verification_result: "passed: venv/Scripts/python.exe -c yaml.safe_load task.yaml; passed: git diff --check for HMAMO-25 files"
+      blockers: []
+      next_step: "Continue HERMES Multi-Agent Memory orchestration integration with review-gated controls or broader operator diagnostics."
 
 failure_review:
   enabled: true
