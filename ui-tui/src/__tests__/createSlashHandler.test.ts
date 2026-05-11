@@ -570,15 +570,20 @@ describe('createSlashHandler', () => {
       Promise.resolve({
         desktop: {
           compatible_dashboard: false,
+          host: '127.0.0.1',
           health: 'attention',
           health_reason: 'pid_missing',
           manual_url: 'http://127.0.0.1:9222/run-inspector',
           ok: true,
           pid: 1234,
+          pid_reason: 'process exited',
           pid_status: 'stale',
           port: 9222,
           record_present: true,
           reuse_command: 'hermes desktop --port 9222',
+          route: '/run-inspector',
+          runtime_record_cleared: true,
+          started_at: '2026-05-11T04:00:00Z',
           stop_command: 'hermes dashboard --stop',
           url: 'http://127.0.0.1:9222/run-inspector'
         },
@@ -598,9 +603,15 @@ describe('createSlashHandler', () => {
           expect.objectContaining({
             rows: expect.arrayContaining([
               ['Desktop', 'recorded (stale / attention)'],
+              ['Source', 'stale desktop runtime record'],
               ['Run Inspector', 'http://127.0.0.1:9222/run-inspector'],
               ['Health', 'attention / pid_missing'],
               ['PID', '1234 (stale)'],
+              ['PID reason', 'process exited'],
+              ['Started', '2026-05-11T04:00:00Z'],
+              ['Host', '127.0.0.1'],
+              ['Route', '/run-inspector'],
+              ['Record', 'cleared stale runtime record'],
               ['Reuse', 'hermes desktop --port 9222'],
               ['Stop guidance', 'hermes dashboard --stop']
             ]),

@@ -143,6 +143,25 @@ const desktopSummary = (r: DesktopStatusResponse): string => {
   return `not recorded (${r.health || 'unavailable'})`
 }
 
+const desktopSourceSummary = (r: DesktopStatusResponse): string => {
+  if (r.record_present) {
+    if (r.pid_status === 'running') {
+      return 'desktop runtime record'
+    }
+    if (r.pid_status === 'stale') {
+      return 'stale desktop runtime record'
+    }
+    return 'desktop runtime record present'
+  }
+  if (r.compatible_dashboard) {
+    return 'reusable dashboard'
+  }
+  if (r.runtime_record_cleared) {
+    return 'runtime record cleared'
+  }
+  return 'no desktop runtime record'
+}
+
 const clipInspectorText = (value: unknown, fallback = 'unknown', limit = INSPECTOR_TEXT_LIMIT): string => {
   if (value === null || value === undefined) {
     return fallback
@@ -390,13 +409,26 @@ const filterRunInspectorEvents = (
 const renderInspectorStatus = (r: DesktopStatusResponse) => {
   const rows: [string, string][] = [
     ['Desktop', desktopSummary(r)],
+    ['Source', desktopSourceSummary(r)],
     ['Run Inspector', r.url || `http://127.0.0.1:${r.port || INSPECTOR_DEFAULT_PORT}/run-inspector`],
     ['Health', [r.health || 'unknown', r.health_reason].filter(Boolean).join(' / ')],
     ['PID', r.pid ? `${r.pid} (${r.pid_status || 'unknown'})` : r.pid_status || 'none']
   ]
 
+  if (r.pid_reason) {
+    rows.push(['PID reason', r.pid_reason])
+  }
   if (r.started_at) {
     rows.push(['Started', r.started_at])
+  }
+  if (r.host) {
+    rows.push(['Host', r.host])
+  }
+  if (r.route) {
+    rows.push(['Route', r.route])
+  }
+  if (r.runtime_record_cleared) {
+    rows.push(['Record', 'cleared stale runtime record'])
   }
   if (r.reuse_command) {
     rows.push(['Reuse', r.reuse_command])
