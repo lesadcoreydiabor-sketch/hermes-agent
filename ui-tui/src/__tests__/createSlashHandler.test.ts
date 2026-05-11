@@ -352,8 +352,8 @@ describe('createSlashHandler', () => {
   it.each([
     ['/browser status', 'browser.manage', { action: 'status', session_id: null }],
     ['/browser connect', 'browser.manage', { action: 'connect', session_id: null, url: 'http://127.0.0.1:9222' }],
-    ['/inspector', 'desktop.status', { port: 9119 }],
-    ['/run-inspector 9222', 'desktop.status', { port: 9222 }],
+    ['/inspector', 'run_inspector.status', { port: 9119 }],
+    ['/run-inspector 9222', 'run_inspector.status', { port: 9222 }],
     ['/reload-mcp', 'reload.mcp', { session_id: null }],
     ['/reload', 'reload.env', {}],
     ['/stop', 'process.stop', {}],
@@ -400,25 +400,46 @@ describe('createSlashHandler', () => {
   it('/inspector renders read-only desktop status without slash worker fallback', async () => {
     const rpc = vi.fn(() =>
       Promise.resolve({
-        compatible_dashboard: true,
-        health: 'ok',
-        health_reason: 'ok',
-        manual_url: 'http://127.0.0.1:9222/run-inspector',
         ok: true,
-        pid: null,
-        pid_status: 'none',
-        port: 9222,
-        record_present: false,
-        reuse_command: 'hermes desktop --port 9222',
-        stop_command: 'hermes dashboard --stop',
-        url: 'http://127.0.0.1:9222/run-inspector'
+        snapshot: {
+          active_tool: {
+            args_summary: { command: 'status' },
+            name: 'terminal',
+            status: 'running'
+          },
+          degraded_reason: 'mcp_degraded',
+          mcp_health: [
+            { name: 'gitnexus', status: 'connected' },
+            { last_error_class: 'TimeoutError', name: 'slow-mcp', status: 'degraded' }
+          ],
+          privacy_flags: ['safe', 'redacted', 'local_only'],
+          run_id: 'run_abc',
+          session_id: 'sid_123',
+          source: 'gateway',
+          status: 'waiting_approval',
+          tool_health: [{ name: 'terminal', status: 'running' }]
+        },
+        desktop: {
+          compatible_dashboard: true,
+          health: 'ok',
+          health_reason: 'ok',
+          manual_url: 'http://127.0.0.1:9222/run-inspector',
+          ok: true,
+          pid: null,
+          pid_status: 'none',
+          port: 9222,
+          record_present: false,
+          reuse_command: 'hermes desktop --port 9222',
+          stop_command: 'hermes dashboard --stop',
+          url: 'http://127.0.0.1:9222/run-inspector'
+        }
       })
     )
     const ctx = buildCtx({ gateway: { ...buildGateway(), rpc } })
 
     expect(createSlashHandler(ctx)('/inspector 9222')).toBe(true)
 
-    expect(rpc).toHaveBeenCalledWith('desktop.status', { port: 9222 })
+    expect(rpc).toHaveBeenCalledWith('run_inspector.status', { port: 9222 })
     expect(ctx.gateway.gw.request).not.toHaveBeenCalled()
     await vi.waitFor(() => {
       expect(ctx.transcript.panel).toHaveBeenCalledWith(
@@ -426,10 +447,23 @@ describe('createSlashHandler', () => {
         expect.arrayContaining([
           expect.objectContaining({
             rows: expect.arrayContaining([
+              ['Run', 'waiting_approval / gateway'],
+              ['Run ID', 'run_abc'],
+              ['Session', 'sid_123'],
+              ['Active tool', 'terminal (running) - {"command":"status"}'],
+              ['MCP', '1/2 ok, 1 attention'],
+              ['Degraded', 'mcp_degraded'],
+              ['Privacy', 'safe, redacted, local_only']
+            ]),
+            title: 'Run Snapshot'
+          }),
+          expect.objectContaining({
+            rows: expect.arrayContaining([
               ['Desktop', 'compatible dashboard'],
               ['Run Inspector', 'http://127.0.0.1:9222/run-inspector'],
               ['Reuse', 'hermes desktop --port 9222']
-            ])
+            ]),
+            title: 'Desktop Shell'
           })
         ])
       )

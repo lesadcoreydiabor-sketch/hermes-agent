@@ -372,6 +372,46 @@ export interface DesktopStatusResponse {
   url?: string
 }
 
+export interface RunInspectorActiveToolSummary {
+  args_summary?: null | Record<string, unknown>
+  call_id?: null | string
+  duration_ms?: null | number
+  name?: null | string
+  status?: null | string
+  summary?: null | string
+}
+
+export interface RunInspectorHealthSummary {
+  affected_tools?: string[]
+  last_error_class?: null | string
+  name?: null | string
+  reason?: null | string
+  status?: string
+  toolset?: null | string
+}
+
+export interface RunInspectorSnapshotSummary {
+  active_tool?: null | RunInspectorActiveToolSummary
+  degraded_reason?: null | string
+  last_activity_at?: null | string
+  mcp_health?: RunInspectorHealthSummary[]
+  privacy_flags?: string[]
+  reason?: null | string
+  recovery_hint?: null | string
+  run_id?: null | string
+  session_id?: null | string
+  source?: string
+  status?: string
+  tool_health?: RunInspectorHealthSummary[]
+  workspace?: null | string
+}
+
+export interface RunInspectorStatusResponse {
+  desktop?: DesktopStatusResponse
+  ok?: boolean
+  snapshot?: RunInspectorSnapshotSummary
+}
+
 export interface RollbackCheckpoint {
   hash: string
   message?: string

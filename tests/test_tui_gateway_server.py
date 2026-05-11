@@ -3860,6 +3860,124 @@ def test_desktop_status_degrades_when_payload_builder_fails(monkeypatch):
     assert "token=secret" not in json.dumps(payload)
 
 
+def test_run_inspector_status_combines_snapshot_and_desktop(monkeypatch):
+    calls = []
+
+    def fake_build(**kwargs):
+        calls.append(kwargs)
+        return {
+            "ok": True,
+            "record_present": False,
+            "runtime_record_cleared": True,
+            "pid": None,
+            "pid_status": "none",
+            "pid_reason": "no_record",
+            "host": "127.0.0.1",
+            "port": 9222,
+            "route": "/run-inspector",
+            "url": "http://127.0.0.1:9222/run-inspector",
+            "started_at": None,
+            "health": "ok",
+            "health_reason": "ok",
+            "compatible_dashboard": True,
+            "reuse_command": "hermes desktop --port 9222",
+            "manual_url": "http://127.0.0.1:9222/run-inspector",
+            "stop_command": "hermes dashboard --stop",
+        }
+
+    monkeypatch.setattr(
+        "hermes_cli.status.get_run_inspector_status_payload",
+        lambda: {
+            "version": 1,
+            "run_id": "run-1",
+            "source": "gateway",
+            "status": "waiting_approval",
+            "session_id": "sid-1",
+            "active_tool": {
+                "name": "terminal",
+                "call_id": "call-1",
+                "duration_ms": 123,
+                "args_summary": {"command": "status"},
+            },
+            "tool_health": [],
+            "mcp_health": [],
+            "privacy_flags": ["safe", "redacted", "local_only"],
+            "degraded_reason": None,
+        },
+    )
+    monkeypatch.setattr(
+        "hermes_cli.desktop_shell_status.build_desktop_status_payload",
+        fake_build,
+    )
+
+    resp = server.handle_request(
+        {"id": "1", "method": "run_inspector.status", "params": {"port": 9222}}
+    )
+
+    assert calls == [{"clear_stale_record": False, "port": 9222}]
+    payload = resp["result"]
+    assert payload["ok"] is True
+    assert payload["snapshot"]["status"] == "waiting_approval"
+    assert payload["snapshot"]["active_tool"]["name"] == "terminal"
+    assert payload["desktop"]["runtime_record_cleared"] is False
+    assert payload["desktop"]["url"] == "http://127.0.0.1:9222/run-inspector"
+
+
+def test_run_inspector_status_rejects_invalid_port():
+    resp = server.handle_request(
+        {"id": "1", "method": "run_inspector.status", "params": {"port": 70000}}
+    )
+
+    assert resp["error"]["code"] == 4016
+
+
+def test_run_inspector_status_degrades_when_snapshot_builder_fails(monkeypatch):
+    def fake_snapshot():
+        raise RuntimeError("token=secret")
+
+    monkeypatch.setattr(
+        "hermes_cli.status.get_run_inspector_status_payload",
+        fake_snapshot,
+    )
+    monkeypatch.setattr(
+        "hermes_cli.desktop_shell_status.build_desktop_status_payload",
+        lambda **_kwargs: {
+            "ok": True,
+            "record_present": False,
+            "runtime_record_cleared": True,
+            "pid": None,
+            "pid_status": "none",
+            "pid_reason": "no_record",
+            "host": "127.0.0.1",
+            "port": 9222,
+            "route": "/run-inspector",
+            "url": "http://127.0.0.1:9222/run-inspector",
+            "started_at": None,
+            "health": "ok",
+            "health_reason": "ok",
+            "compatible_dashboard": True,
+            "reuse_command": None,
+            "manual_url": None,
+            "stop_command": None,
+        },
+    )
+
+    resp = server.handle_request(
+        {"id": "1", "method": "run_inspector.status", "params": {"port": 9222}}
+    )
+
+    payload = resp["result"]
+    assert payload["ok"] is True
+    assert payload["snapshot"]["status"] == "unknown"
+    assert (
+        payload["snapshot"]["degraded_reason"]
+        == "run_inspector_status_unavailable:RuntimeError"
+    )
+    assert payload["snapshot"]["privacy_flags"] == ["safe"]
+    assert payload["desktop"]["runtime_record_cleared"] is False
+    assert "token=secret" not in json.dumps(payload)
+
+
 def _stub_urlopen(monkeypatch, *, ok: bool):
     """Patch urllib.request.urlopen used by browser.manage to short-circuit probes."""
 

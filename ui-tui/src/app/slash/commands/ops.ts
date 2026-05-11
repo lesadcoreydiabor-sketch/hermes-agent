@@ -9,6 +9,8 @@ import type {
   RollbackDiffResponse,
   RollbackListResponse,
   RollbackRestoreResponse,
+  RunInspectorSnapshotSummary,
+  RunInspectorStatusResponse,
   SlashExecResponse,
   SpawnTreeListResponse,
   SpawnTreeLoadResponse,
@@ -63,6 +65,7 @@ interface SkillsReloadResponse {
 }
 
 const INSPECTOR_DEFAULT_PORT = 9119
+const INSPECTOR_TEXT_LIMIT = 140
 
 const parseInspectorPort = (arg: string): null | number => {
   const text = arg.trim()
@@ -90,6 +93,97 @@ const desktopSummary = (r: DesktopStatusResponse): string => {
     return 'status unavailable'
   }
   return `not recorded (${r.health || 'unavailable'})`
+}
+
+const clipInspectorText = (value: unknown, fallback = 'unknown', limit = INSPECTOR_TEXT_LIMIT): string => {
+  if (value === null || value === undefined) {
+    return fallback
+  }
+
+  let text = ''
+  if (typeof value === 'string') {
+    text = value
+  } else {
+    try {
+      text = JSON.stringify(value) ?? ''
+    } catch {
+      text = String(value)
+    }
+  }
+
+  text = text.replace(/\s+/g, ' ').trim()
+  if (!text) {
+    return fallback
+  }
+  return text.length > limit ? `${text.slice(0, Math.max(1, limit - 3))}...` : text
+}
+
+const activeToolSummary = (snapshot?: null | RunInspectorSnapshotSummary): null | string => {
+  const tool = snapshot?.active_tool
+  const name = clipInspectorText(tool?.name, '', 64)
+  if (!name) {
+    return null
+  }
+
+  const status = clipInspectorText(tool?.status, '', 48)
+  const base = status ? `${name} (${status})` : name
+  const summary = tool?.summary ?? tool?.args_summary
+  const detail = summary ? clipInspectorText(summary, '', 96) : ''
+  return detail ? `${base} - ${detail}` : base
+}
+
+const healthSummary = (
+  items: RunInspectorSnapshotSummary['mcp_health'],
+  okStatuses: string[]
+): null | string => {
+  if (!items?.length) {
+    return null
+  }
+
+  const ok = items.filter(item => okStatuses.includes(String(item.status || '').toLowerCase())).length
+  const attention = items.length - ok
+  return attention > 0 ? `${ok}/${items.length} ok, ${attention} attention` : `${ok}/${items.length} ok`
+}
+
+const renderRunInspectorSnapshot = (snapshot?: null | RunInspectorSnapshotSummary) => {
+  const status = clipInspectorText(snapshot?.status, 'unknown', 64)
+  const source = clipInspectorText(snapshot?.source, 'unknown', 64)
+  const rows: [string, string][] = [['Run', `${status} / ${source}`]]
+
+  if (snapshot?.run_id && snapshot.run_id !== 'unknown') {
+    rows.push(['Run ID', clipInspectorText(snapshot.run_id, '', 96)])
+  }
+  if (snapshot?.session_id) {
+    rows.push(['Session', clipInspectorText(snapshot.session_id, '', 96)])
+  }
+  if (snapshot?.last_activity_at) {
+    rows.push(['Last activity', clipInspectorText(snapshot.last_activity_at, '', 96)])
+  }
+
+  const tool = activeToolSummary(snapshot)
+  if (tool) {
+    rows.push(['Active tool', tool])
+  }
+
+  const tools = healthSummary(snapshot?.tool_health, ['available', 'running'])
+  if (tools) {
+    rows.push(['Tools', tools])
+  }
+  const mcp = healthSummary(snapshot?.mcp_health, ['connected'])
+  if (mcp) {
+    rows.push(['MCP', mcp])
+  }
+  if (snapshot?.degraded_reason) {
+    rows.push(['Degraded', clipInspectorText(snapshot.degraded_reason)])
+  }
+  if (snapshot?.recovery_hint) {
+    rows.push(['Recovery', clipInspectorText(snapshot.recovery_hint)])
+  }
+  if (snapshot?.privacy_flags?.length) {
+    rows.push(['Privacy', snapshot.privacy_flags.map(flag => clipInspectorText(flag, '', 32)).filter(Boolean).join(', ')])
+  }
+
+  return rows
 }
 
 const renderInspectorStatus = (r: DesktopStatusResponse) => {
@@ -260,12 +354,17 @@ export const opsCommands: SlashCommand[] = [
       }
 
       ctx.gateway
-        .rpc<DesktopStatusResponse>('desktop.status', { port })
+        .rpc<RunInspectorStatusResponse>('run_inspector.status', { port })
         .then(
-          ctx.guarded<DesktopStatusResponse>(r => {
+          ctx.guarded<RunInspectorStatusResponse>(r => {
             ctx.transcript.panel('Run Inspector', [
               {
-                rows: renderInspectorStatus(r || {})
+                rows: renderRunInspectorSnapshot(r?.snapshot),
+                title: 'Run Snapshot'
+              },
+              {
+                rows: renderInspectorStatus(r?.desktop || {}),
+                title: 'Desktop Shell'
               },
               {
                 text: 'read-only status; use hermes desktop to start, stop, or reuse the dashboard'

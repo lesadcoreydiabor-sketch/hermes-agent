@@ -6030,22 +6030,26 @@ def _(rid, params: dict) -> dict:
     return _browser_connect(rid, params)
 
 
-@method("desktop.status")
-def _(rid, params: dict) -> dict:
+def _desktop_status_port(params: dict) -> tuple[int | None, str | None]:
     raw_port = params.get("port", 9119)
     try:
         port = int(raw_port)
     except (TypeError, ValueError):
-        return _err(rid, 4016, "desktop status port must be an integer")
+        return None, "desktop status port must be an integer"
     if port < 1 or port > 65535:
-        return _err(rid, 4016, "desktop status port must be between 1 and 65535")
+        return None, "desktop status port must be between 1 and 65535"
+    return port, None
 
+
+def _desktop_status_payload_for_tui(port: int) -> dict:
     try:
         from hermes_cli.desktop_shell_status import build_desktop_status_payload
 
-        payload = build_desktop_status_payload(
-            clear_stale_record=False,
-            port=port,
+        payload = dict(
+            build_desktop_status_payload(
+                clear_stale_record=False,
+                port=port,
+            )
         )
     except Exception:
         payload = {
@@ -6070,7 +6074,41 @@ def _(rid, params: dict) -> dict:
         }
 
     payload["runtime_record_cleared"] = False
+    return payload
+
+
+@method("desktop.status")
+def _(rid, params: dict) -> dict:
+    port, error = _desktop_status_port(params)
+    if error:
+        return _err(rid, 4016, error)
+    payload = _desktop_status_payload_for_tui(port or 9119)
     return _ok(rid, payload)
+
+
+@method("run_inspector.status")
+def _(rid, params: dict) -> dict:
+    port, error = _desktop_status_port(params)
+    if error:
+        return _err(rid, 4016, error)
+    try:
+        from hermes_cli.status import get_run_inspector_status_payload
+
+        snapshot = get_run_inspector_status_payload()
+    except Exception as exc:
+        from hermes_cli.run_inspector import empty_run_snapshot
+
+        snapshot = empty_run_snapshot(
+            degraded_reason=f"run_inspector_status_unavailable:{type(exc).__name__}",
+        ).to_dict()
+    return _ok(
+        rid,
+        {
+            "ok": True,
+            "snapshot": snapshot,
+            "desktop": _desktop_status_payload_for_tui(port or 9119),
+        },
+    )
 
 
 def _browser_connect(rid, params: dict) -> dict:
