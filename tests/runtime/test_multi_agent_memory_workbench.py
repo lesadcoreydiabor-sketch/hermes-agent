@@ -113,6 +113,8 @@ def test_multi_agent_memory_workbench_summarizes_safe_sources(tmp_path) -> None:
     assert workbench["active_work"][0]["work_id"] == "work-1"
     assert workbench["memory"]["status"] == "available"
     assert workbench["memory"]["registered_tools"] == ["builtin_recall"]
+    assert workbench["agent_assignments"]["summary"]["ready_task_ids"] == ["HMAM-08"]
+    assert workbench["agent_assignments"]["summary"]["completed_count"] == 1
     assert workbench["checkpoint"]["current_task_id"] == "HMAM-08"
     assert workbench["action_ledger"]["entries"][0]["task_id"] == "HMAM-08"
     assert workbench["long_term_queue"]["unresolved_count"] == 1
@@ -224,6 +226,103 @@ def test_multi_agent_memory_workbench_reports_runtime_persistence_flags(
     assert flags["failure_queue"]["exists"] is False
     rendered = json.dumps(runtime, sort_keys=True)
     assert "token=secret" not in rendered
+
+
+def test_multi_agent_memory_workbench_summarizes_agent_assignments(tmp_path) -> None:
+    hermes_dir = tmp_path / ".hermes"
+    hermes_dir.mkdir()
+    (hermes_dir / "task.yaml").write_text(
+        yaml.safe_dump(
+            {
+                "capability": "hermes-multi-agent-memory",
+                "tasks": [
+                    {
+                        "id": "HMAMO-01",
+                        "title": "Schema helper",
+                        "status": "completed",
+                        "agent_role": "planner",
+                    },
+                    {
+                        "id": "HMAMO-02",
+                        "title": "Summary helper",
+                        "status": "pending",
+                        "depends_on": ["HMAMO-01"],
+                        "write_scope": {
+                            "files": ["hermes_cli/agent_task_assignment.py"]
+                        },
+                        "verify": ["pytest assignment summary"],
+                    },
+                    {
+                        "id": "HMAMO-03",
+                        "title": "Conflicting helper",
+                        "status": "running",
+                        "write_scope": {"directories": ["hermes_cli"]},
+                    },
+                ],
+            },
+            sort_keys=False,
+        ),
+        encoding="utf-8",
+    )
+    (hermes_dir / "action_ledger.jsonl").write_text("", encoding="utf-8")
+    (hermes_dir / "long_term_queue.jsonl").write_text("", encoding="utf-8")
+    (hermes_dir / "skills_journal.jsonl").write_text("", encoding="utf-8")
+
+    workbench = build_multi_agent_memory_workbench(
+        tmp_path,
+        events=[],
+        memory_diagnostics={"providers": [], "degraded_reason": None},
+        generated_at="2026-05-11T00:01:00Z",
+    )
+
+    assignments = workbench["agent_assignments"]
+    summary = assignments["summary"]
+    assert summary["status"] == "conflict"
+    assert summary["total_count"] == 3
+    assert summary["ready_task_ids"] == ["HMAMO-02"]
+    assert summary["conflicts"][0]["task_ids"] == ["HMAMO-02", "HMAMO-03"]
+    assert assignments["assignments"][1]["verification"]["command"] == (
+        "pytest assignment summary"
+    )
+    assert assignments["privacy_class"] == "redacted_summary"
+
+
+def test_multi_agent_memory_workbench_redacts_agent_assignment_payloads(tmp_path) -> None:
+    hermes_dir = tmp_path / ".hermes"
+    hermes_dir.mkdir()
+    (hermes_dir / "task.yaml").write_text(
+        yaml.safe_dump(
+            {
+                "capability": "hermes-multi-agent-memory",
+                "tasks": [
+                    {
+                        "id": "task-ghp_1234567890",
+                        "title": "C:\\Users\\XQQ\\secret\\file.txt",
+                        "status": "in_progress",
+                        "write_scope": {"files": ["C:\\Users\\XQQ\\secret\\file.txt"]},
+                        "verify": ["diff --git a/secret b/secret\n+token=secret"],
+                        "next_step": "api_key=hidden",
+                    }
+                ],
+            },
+            sort_keys=False,
+        ),
+        encoding="utf-8",
+    )
+
+    workbench = build_multi_agent_memory_workbench(
+        tmp_path,
+        events=[],
+        memory_diagnostics={"providers": [], "degraded_reason": None},
+        generated_at="2026-05-11T00:01:00Z",
+    )
+
+    rendered = json.dumps(workbench["agent_assignments"], sort_keys=True)
+    assert "ghp_1234567890" not in rendered
+    assert "C:\\Users" not in rendered
+    assert "diff --git" not in rendered
+    assert "token=secret" not in rendered
+    assert "api_key=hidden" not in rendered
 
 
 def test_multi_agent_memory_workbench_degrades_when_sources_are_missing(tmp_path) -> None:

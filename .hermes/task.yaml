@@ -1329,6 +1329,25 @@ tasks:
     status: completed
     risk: low
 
+  - id: HMAMO-04
+    title: Expose assignment summary in memory workbench
+    description: Add read-only task-contract assignment summaries to the Multi-Agent Memory workbench backend payload.
+    depends_on:
+      - HMAMO-02
+      - HMAMO-03
+    acceptance:
+      - Workbench payload includes agent_assignments summary and bounded assignment payloads derived from .hermes/task.yaml.
+      - Summary includes ready, dependency-waiting, blocked, role-count, status-count, and conflict information.
+      - API fallback payload includes a safe empty agent_assignments object when workbench building fails.
+      - Sensitive ids, absolute paths, diffs, verify commands, next steps, raw logs, tool args, and env values remain redacted.
+      - Workbench integration is read-only and does not spawn agents, dispatch tools, write ledgers, mutate memory, edit skills, or mutate task.yaml.
+    verify:
+      - venv/Scripts/python.exe -m pytest tests/runtime/test_multi_agent_memory_workbench.py tests/runtime/test_agent_task_assignment.py tests/hermes_cli/test_run_inspector_api.py -q -o addopts=
+      - venv/Scripts/python.exe -c "import yaml; yaml.safe_load(open('.hermes/task.yaml', encoding='utf-8'))"
+      - git diff --check -- hermes_cli/multi_agent_memory_workbench.py hermes_cli/agent_task_assignment.py tests/runtime/test_multi_agent_memory_workbench.py tests/runtime/test_agent_task_assignment.py tests/hermes_cli/test_run_inspector_api.py .hermes/task.yaml
+    status: completed
+    risk: medium
+
 risk_flags:
   destructive_file_change:
     pause: true
@@ -2194,6 +2213,16 @@ progress_report:
       verification_result: "passed: venv/Scripts/python.exe -m pytest tests/runtime/test_agent_task_assignment.py -q -o addopts= (9 passed); passed: venv/Scripts/python.exe -c yaml.safe_load task.yaml; passed: git diff --check for HMAMO-03 files"
       blockers: []
       next_step: "Expose task-contract assignment summaries through the read-only Multi-Agent Memory workbench."
+    - task_id: HMAMO-04
+      status: completed
+      changed_files:
+        - hermes_cli/multi_agent_memory_workbench.py
+        - tests/runtime/test_multi_agent_memory_workbench.py
+        - tests/hermes_cli/test_run_inspector_api.py
+        - .hermes/task.yaml
+      verification_result: "passed: venv/Scripts/python.exe -m pytest tests/runtime/test_multi_agent_memory_workbench.py tests/runtime/test_agent_task_assignment.py tests/hermes_cli/test_run_inspector_api.py -q -o addopts= (29 passed); passed: venv/Scripts/python.exe -c yaml.safe_load task.yaml; passed: git diff --check for HMAMO-04 files"
+      blockers: []
+      next_step: "Add frontend API typing and view-model helpers for agent assignment summaries before rendering UI."
 
 failure_review:
   enabled: true

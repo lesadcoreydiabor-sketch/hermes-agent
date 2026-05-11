@@ -336,6 +336,91 @@ def test_run_inspector_memory_workbench_api_returns_safe_readonly_summary(
                 "degraded_reason": None,
                 "privacy_class": "redacted_summary",
             },
+            "agent_assignments": {
+                "summary": {
+                    "schema_version": 1,
+                    "status": "active",
+                    "total_count": 1,
+                    "active_count": 1,
+                    "completed_count": 0,
+                    "failed_count": 0,
+                    "blocked_count": 0,
+                    "ready_task_ids": ["HMAM-08"],
+                    "dependency_waiting_task_ids": [],
+                    "blocked_task_ids": [],
+                    "role_counts": {
+                        "observer": 0,
+                        "orchestrator": 0,
+                        "planner": 0,
+                        "reviewer": 0,
+                        "worker": 1,
+                    },
+                    "status_counts": {
+                        "blocked": 0,
+                        "completed": 0,
+                        "failed": 0,
+                        "planned": 1,
+                        "queued": 0,
+                        "review": 0,
+                        "running": 0,
+                    },
+                    "conflicts": [],
+                    "degraded_reason": None,
+                    "privacy_class": "redacted_summary",
+                },
+                "assignments": [
+                    {
+                        "schema_version": 1,
+                        "task_id": "HMAM-08",
+                        "title": "Workbench",
+                        "role": "worker",
+                        "status": "planned",
+                        "owner": {
+                            "agent_id": None,
+                            "parent_agent_id": None,
+                            "human_owner": None,
+                        },
+                        "dependencies": {"task_ids": [], "required_artifacts": []},
+                        "write_scope": {
+                            "files": [],
+                            "directories": [],
+                            "forbidden_paths": [],
+                            "shared_contracts": [],
+                        },
+                        "allowed_tools": {
+                            "toolsets": [],
+                            "commands": [],
+                            "disallowed": [],
+                        },
+                        "delegate_limits": {
+                            "max_depth": None,
+                            "max_parallel_workers": None,
+                            "interrupt_policy": "cooperative",
+                        },
+                        "verification": {
+                            "command": "",
+                            "expected_signal": "",
+                            "required_before_handoff": True,
+                        },
+                        "handoff_payload": {
+                            "summary": "",
+                            "changed_files": [],
+                            "verification_result": None,
+                            "blockers": [],
+                            "next_step": "",
+                            "privacy_class": "redacted_summary",
+                        },
+                        "conflict_policy": {
+                            "write_scope_must_be_disjoint": True,
+                            "shared_contract_requires_reviewer": True,
+                            "conflict_resolution": "pause_and_handoff",
+                        },
+                        "privacy_class": "redacted_summary",
+                    }
+                ],
+                "degraded_reason": None,
+                "privacy_class": "redacted_summary",
+            },
             "checkpoint": {
                 "current_task_id": "HMAM-08",
                 "next_step": "Continue HMAM-08",
@@ -369,6 +454,9 @@ def test_run_inspector_memory_workbench_api_returns_safe_readonly_summary(
     assert runtime["enabled_count"] == 1
     assert runtime["flags"][0]["env_var"] == "HERMES_DELEGATE_ACTION_LEDGER"
     assert runtime["flags"][0]["path"] == ".hermes/action_ledger.jsonl"
+    assignments = payload["workbench"]["agent_assignments"]
+    assert assignments["summary"]["ready_task_ids"] == ["HMAM-08"]
+    assert assignments["assignments"][0]["task_id"] == "HMAM-08"
     assert "token=" not in json.dumps(payload)
 
 
@@ -392,4 +480,5 @@ def test_run_inspector_memory_workbench_api_degrades_when_builder_fails(
     assert payload["workbench"]["status"] == "unavailable"
     assert payload["workbench"]["degraded_reason"] == "memory_workbench_api_failed:RuntimeError"
     assert "runtime_persistence" in payload["workbench"]
+    assert "agent_assignments" in payload["workbench"]
     assert "token=secret" not in json.dumps(payload)

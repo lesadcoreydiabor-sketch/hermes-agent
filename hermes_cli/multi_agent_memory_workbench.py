@@ -9,9 +9,15 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable, Dict, Iterable, Optional
 
+import yaml
+
 from hermes_cli.action_ledger import (
     ACTION_LEDGER_PATH,
     normalize_action_ledger_entry,
+)
+from hermes_cli.agent_task_assignment import (
+    build_agent_task_assignments_from_task_contract,
+    summarize_agent_task_assignments,
 )
 from hermes_cli.learning_journal import (
     LONG_TERM_QUEUE_PATH,
@@ -106,6 +112,7 @@ def build_multi_agent_memory_workbench(
     active_work = _active_work_from_events(events or [], limit=safe_limit)
     memory = _memory_summary(memory_diagnostics)
     runtime_persistence = _runtime_persistence_summary(workspace)
+    agent_assignments = _agent_assignment_summary(workspace, limit=safe_limit)
 
     degraded_reasons = [
         checkpoint.get("degraded_reason"),
@@ -113,6 +120,7 @@ def build_multi_agent_memory_workbench(
         queue_degraded,
         journal_degraded,
         memory.get("degraded_reason"),
+        agent_assignments.get("degraded_reason"),
     ]
     status = _workbench_status(
         active_work=active_work,
@@ -132,6 +140,7 @@ def build_multi_agent_memory_workbench(
         "active_work": active_work,
         "memory": memory,
         "runtime_persistence": runtime_persistence,
+        "agent_assignments": agent_assignments,
         "checkpoint": checkpoint,
         "action_ledger": {
             "entries": action_entries,
@@ -174,6 +183,7 @@ def empty_multi_agent_memory_workbench(
             "privacy_class": WORKBENCH_PRIVACY_CLASS,
         },
         "runtime_persistence": _runtime_persistence_summary(Path(".")),
+        "agent_assignments": _empty_agent_assignment_summary(reason),
         "checkpoint": {
             "schema_version": 1,
             "generated_at": generated_at or _utc_now_iso(),
@@ -234,6 +244,45 @@ def _read_jsonl_entries(
             reasons.append(f"{path.stem}_entry_invalid")
 
     return entries[-limit:], _join_reasons(reasons)
+
+
+def _agent_assignment_summary(workspace: Path, *, limit: int) -> Dict[str, Any]:
+    reasons: list[str] = []
+    contract = _read_task_contract(workspace / ".hermes" / "task.yaml", reasons)
+    assignments = build_agent_task_assignments_from_task_contract(contract)
+    summary = summarize_agent_task_assignments(assignments)
+    degraded_reason = _join_reasons([*reasons, summary.get("degraded_reason")])
+    return {
+        "summary": summary,
+        "assignments": assignments[:limit],
+        "degraded_reason": degraded_reason,
+        "privacy_class": WORKBENCH_PRIVACY_CLASS,
+    }
+
+
+def _empty_agent_assignment_summary(reason: Any) -> Dict[str, Any]:
+    summary = summarize_agent_task_assignments([])
+    return {
+        "summary": summary,
+        "assignments": [],
+        "degraded_reason": _safe_label(reason, fallback=None, limit=LABEL_LIMIT),
+        "privacy_class": WORKBENCH_PRIVACY_CLASS,
+    }
+
+
+def _read_task_contract(path: Path, reasons: list[str]) -> Dict[str, Any]:
+    if not path.exists():
+        reasons.append("task_contract_missing")
+        return {}
+    try:
+        loaded = yaml.safe_load(path.read_text(encoding="utf-8"))
+    except Exception:
+        reasons.append("task_contract_parse_error")
+        return {}
+    if not isinstance(loaded, dict):
+        reasons.append("task_contract_invalid")
+        return {}
+    return loaded
 
 
 def _runtime_persistence_summary(workspace: Path) -> Dict[str, Any]:
