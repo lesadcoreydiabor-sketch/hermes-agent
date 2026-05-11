@@ -779,6 +779,22 @@ tasks:
     status: completed
     risk: medium
 
+  - id: HRIDR-01
+    title: Add desktop browser-open failure recovery
+    description: Make the browser-launcher desktop shell report a safe manual recovery URL when the OS/browser launcher fails.
+    depends_on:
+      - HRIDS-10
+    acceptance:
+      - Browser open failure is classified as browser_open_failed.
+      - The printed recovery URL is path-only /run-inspector on loopback and does not expose session tokens.
+      - Reusing an existing dashboard still exits successfully when the browser opens.
+      - The change does not start a native runtime, installer, updater, tray, gateway mutation, or config write.
+    verify:
+      - venv/Scripts/python.exe -m pytest tests/hermes_cli/test_desktop_shell.py tests/hermes_cli/test_dashboard_lifecycle_flags.py tests/hermes_cli/test_update_stale_dashboard.py -q -o addopts=
+      - git diff --check -- hermes_cli/main.py tests/hermes_cli/test_desktop_shell.py website/docs/user-guide/features/web-dashboard.md .hermes/task.yaml
+    status: completed
+    risk: medium
+
 risk_flags:
   destructive_file_change:
     pause: true
@@ -1326,6 +1342,16 @@ progress_report:
       verification_result: "passed: git diff --check -- docs/plans/hermes-desktop-runtime-decision.md .hermes/task.yaml; passed: venv/Scripts/python.exe -c yaml.safe_load task.yaml; GitNexus detect_changes staged risk low with no affected processes"
       blockers: []
       next_step: "HRIDS-10 runtime decision re-accepted browser launcher; verify, commit, push, then plan the next lifecycle reliability slice."
+    - task_id: HRIDR-01
+      status: completed
+      changed_files:
+        - hermes_cli/main.py
+        - tests/hermes_cli/test_desktop_shell.py
+        - website/docs/user-guide/features/web-dashboard.md
+        - .hermes/task.yaml
+      verification_result: "passed: venv/Scripts/python.exe -m pytest tests/hermes_cli/test_desktop_shell.py tests/hermes_cli/test_dashboard_lifecycle_flags.py tests/hermes_cli/test_update_stale_dashboard.py -q -o addopts= (45 passed, 5 skipped); passed: git diff --check for HRIDR-01 files; GitNexus detect_changes staged risk low with no affected processes"
+      blockers: []
+      next_step: "HRIDR-01 browser-open failure recovery implemented locally; run YAML/GitNexus checks, stage, commit, push, then continue lifecycle reliability hardening."
 
 failure_review:
   enabled: true

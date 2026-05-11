@@ -45,6 +45,7 @@ If startup fails, the command prints a classified reason and recovery command. C
 | `dependency_missing` | FastAPI or Uvicorn is missing from the current interpreter | Reinstall the package with the printed `pip install -e .` command |
 | `frontend_build_failed` | The dashboard frontend could not be built | Run the printed `npm install && npm run build` command from `web/` |
 | `server_start_failed` | The dashboard server exited while starting | Try the suggested free port and inspect current dashboard processes |
+| `browser_open_failed` | HERMES started or found the dashboard, but the OS/browser launcher did not open it | Copy the printed `/run-inspector` URL into your browser manually |
 
 The desktop launcher remains local-only. It does not write `.env`, `config.yaml`, provider profiles, gateway config, raw prompts, raw logs, tool arguments, or credentials.
 

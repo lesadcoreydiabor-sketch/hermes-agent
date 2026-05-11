@@ -14,6 +14,7 @@ from hermes_cli.main import (
     _desktop_runtime_record,
     _find_free_desktop_port,
     _find_stale_dashboard_pids,
+    _open_browser_url,
     cmd_desktop,
 )
 
@@ -134,6 +135,28 @@ def test_desktop_reuse_respects_no_open():
         cmd_desktop(_ns(no_open=True))
 
     mock_open.assert_not_called()
+
+
+def test_desktop_browser_open_false_prints_manual_fallback(capsys):
+    url = "http://127.0.0.1:9119/run-inspector"
+    with patch("webbrowser.open", return_value=False):
+        assert _open_browser_url(url, delay=0) is False
+
+    out = capsys.readouterr().out
+    assert "Hermes desktop browser open failed: browser_open_failed" in out
+    assert f"Open manually: {url}" in out
+    assert "token=" not in out
+
+
+def test_desktop_browser_open_exception_prints_detail(capsys):
+    url = "http://127.0.0.1:9119/run-inspector"
+    with patch("webbrowser.open", side_effect=RuntimeError("no browser")):
+        assert _open_browser_url(url, delay=0) is False
+
+    out = capsys.readouterr().out
+    assert "Hermes desktop browser open failed: browser_open_failed" in out
+    assert f"Open manually: {url}" in out
+    assert "RuntimeError: no browser" in out
 
 
 def test_desktop_start_uses_loopback_dashboard_and_run_inspector(monkeypatch):

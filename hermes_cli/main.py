@@ -9163,16 +9163,31 @@ def _print_desktop_startup_failure(
         print(f"  {action}")
 
 
-def _open_browser_url(url: str, *, delay: float = 1.0) -> None:
+def _open_browser_url(url: str, *, delay: float = 1.0) -> bool:
     """Open a browser URL in a short-lived daemon thread."""
     import webbrowser
 
-    def _open() -> None:
+    def _open() -> bool:
         if delay > 0:
             _time.sleep(delay)
-        webbrowser.open(url)
+        try:
+            opened = webbrowser.open(url)
+        except Exception as exc:
+            print("Hermes desktop browser open failed: browser_open_failed")
+            print(f"  Open manually: {url}")
+            print(f"  Detail: {exc.__class__.__name__}: {exc}")
+            return False
+        if not opened:
+            print("Hermes desktop browser open failed: browser_open_failed")
+            print(f"  Open manually: {url}")
+            return False
+        return True
+
+    if delay <= 0:
+        return _open()
 
     threading.Thread(target=_open, daemon=True).start()
+    return True
 
 
 def _terminate_desktop_pid(pid: int) -> tuple[bool, str]:
