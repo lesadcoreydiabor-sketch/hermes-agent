@@ -10,6 +10,8 @@ import type {
   RollbackListResponse,
   RollbackRestoreResponse,
   RunInspectorAttentionSignal,
+  RunInspectorEventSummary,
+  RunInspectorEventsResponse,
   RunInspectorSnapshotSummary,
   RunInspectorStatusResponse,
   SlashExecResponse,
@@ -66,6 +68,7 @@ interface SkillsReloadResponse {
 }
 
 const INSPECTOR_DEFAULT_PORT = 9119
+const INSPECTOR_EVENTS_DEFAULT_LIMIT = 12
 const INSPECTOR_TEXT_LIMIT = 140
 
 const parseInspectorPort = (arg: string): null | number => {
@@ -78,6 +81,18 @@ const parseInspectorPort = (arg: string): null | number => {
   }
   const port = Number(text)
   return port >= 1 && port <= 65535 ? port : null
+}
+
+const parseInspectorEventsLimit = (arg: string): null | number => {
+  const text = arg.trim()
+  if (!text) {
+    return INSPECTOR_EVENTS_DEFAULT_LIMIT
+  }
+  if (!/^\d+$/.test(text)) {
+    return null
+  }
+  const limit = Number(text)
+  return limit >= 1 && limit <= 100 ? limit : null
 }
 
 const desktopSummary = (r: DesktopStatusResponse): string => {
@@ -208,6 +223,32 @@ const renderAttentionSignals = (signals?: RunInspectorAttentionSignal[], attenti
   }
   if (!rows.length) {
     rows.push(['Attention', 'none'])
+  }
+
+  return rows
+}
+
+const renderRunInspectorEvents = (events?: RunInspectorEventSummary[], error?: null | string) => {
+  const rows: [string, string][] = []
+
+  for (const event of events ?? []) {
+    const id = event.id === undefined ? '?' : String(event.id)
+    const type = clipInspectorText(event.type, 'event', 64)
+    const meta = [
+      event.status && `status=${clipInspectorText(event.status, '', 40)}`,
+      event.tool && `tool=${clipInspectorText(event.tool, '', 48)}`,
+      event.source && `source=${clipInspectorText(event.source, '', 48)}`,
+      event.run_id && `run=${clipInspectorText(event.run_id, '', 64)}`
+    ].filter(Boolean)
+    const message = clipInspectorText(event.message || event.timestamp, 'no message', 120)
+    rows.push([`#${id} ${type}`, meta.length ? `${meta.join(' / ')}\n${message}` : message])
+  }
+
+  if (error) {
+    rows.push(['Event source', clipInspectorText(error)])
+  }
+  if (!rows.length) {
+    rows.push(['Events', 'none'])
   }
 
   return rows
@@ -372,7 +413,7 @@ export const opsCommands: SlashCommand[] = [
 
   {
     aliases: ['run-inspector'],
-    help: 'show read-only Run Inspector desktop status [/inspector [port]]',
+    help: 'show read-only Run Inspector snapshot, attention, and desktop status [/inspector [port]]',
     name: 'inspector',
     run: (arg, ctx) => {
       const port = parseInspectorPort(arg)
@@ -399,6 +440,35 @@ export const opsCommands: SlashCommand[] = [
               },
               {
                 text: 'read-only status; use hermes desktop to start, stop, or reuse the dashboard'
+              }
+            ])
+          })
+        )
+        .catch(ctx.guardedErr)
+    }
+  },
+
+  {
+    aliases: ['run-inspector-events'],
+    help: 'show recent read-only Run Inspector events [/inspector-events [limit]]',
+    name: 'inspector-events',
+    run: (arg, ctx) => {
+      const limit = parseInspectorEventsLimit(arg)
+      if (limit === null) {
+        return ctx.transcript.sys('usage: /inspector-events [limit 1..100]')
+      }
+
+      ctx.gateway
+        .rpc<RunInspectorEventsResponse>('run_inspector.events', { limit })
+        .then(
+          ctx.guarded<RunInspectorEventsResponse>(r => {
+            ctx.transcript.panel('Run Inspector Events', [
+              {
+                rows: renderRunInspectorEvents(r?.events, r?.error),
+                title: `Recent ${r?.events?.length ?? 0}`
+              },
+              {
+                text: 'read-only event timeline; raw logs, prompts, tool args, and secrets are not shown'
               }
             ])
           })

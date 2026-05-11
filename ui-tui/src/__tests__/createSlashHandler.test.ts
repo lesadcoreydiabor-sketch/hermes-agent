@@ -353,6 +353,8 @@ describe('createSlashHandler', () => {
     ['/browser status', 'browser.manage', { action: 'status', session_id: null }],
     ['/browser connect', 'browser.manage', { action: 'connect', session_id: null, url: 'http://127.0.0.1:9222' }],
     ['/inspector', 'run_inspector.status', { port: 9119 }],
+    ['/inspector-events', 'run_inspector.events', { limit: 12 }],
+    ['/run-inspector-events 7', 'run_inspector.events', { limit: 7 }],
     ['/run-inspector 9222', 'run_inspector.status', { port: 9222 }],
     ['/reload-mcp', 'reload.mcp', { session_id: null }],
     ['/reload', 'reload.env', {}],
@@ -496,6 +498,54 @@ describe('createSlashHandler', () => {
     expect(rpc).not.toHaveBeenCalled()
     expect(ctx.gateway.gw.request).not.toHaveBeenCalled()
     expect(ctx.transcript.sys).toHaveBeenCalledWith('usage: /inspector [port]')
+  })
+
+  it('/inspector-events renders a read-only event timeline', async () => {
+    const rpc = vi.fn(() =>
+      Promise.resolve({
+        events: [
+          {
+            id: 9,
+            message: 'approval needed',
+            run_id: 'run_event',
+            source: 'gateway_run',
+            status: 'waiting',
+            tool: 'shell',
+            type: 'approval.request'
+          }
+        ],
+        ok: true
+      })
+    )
+    const ctx = buildCtx({ gateway: { ...buildGateway(), rpc } })
+
+    expect(createSlashHandler(ctx)('/inspector-events 1')).toBe(true)
+
+    expect(rpc).toHaveBeenCalledWith('run_inspector.events', { limit: 1 })
+    expect(ctx.gateway.gw.request).not.toHaveBeenCalled()
+    await vi.waitFor(() => {
+      expect(ctx.transcript.panel).toHaveBeenCalledWith(
+        'Run Inspector Events',
+        expect.arrayContaining([
+          expect.objectContaining({
+            rows: expect.arrayContaining([
+              ['#9 approval.request', 'status=waiting / tool=shell / source=gateway_run / run=run_event\napproval needed']
+            ]),
+            title: 'Recent 1'
+          })
+        ])
+      )
+    })
+  })
+
+  it('/inspector-events rejects invalid limits before hitting the gateway', () => {
+    const rpc = vi.fn(() => Promise.resolve({}))
+    const ctx = buildCtx({ gateway: { ...buildGateway(), rpc } })
+
+    expect(createSlashHandler(ctx)('/inspector-events 0')).toBe(true)
+    expect(rpc).not.toHaveBeenCalled()
+    expect(ctx.gateway.gw.request).not.toHaveBeenCalled()
+    expect(ctx.transcript.sys).toHaveBeenCalledWith('usage: /inspector-events [limit 1..100]')
   })
 
   it('routes /rollback through native RPC when a session is active', () => {

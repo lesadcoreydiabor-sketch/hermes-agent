@@ -420,6 +420,24 @@ export interface RunInspectorAttentionSignal {
   ttl_ms?: number
 }
 
+export interface RunInspectorEventSummary {
+  id?: number
+  message?: null | string
+  run_id?: null | string
+  session_id?: null | string
+  source?: null | string
+  status?: null | string
+  timestamp?: null | string
+  tool?: null | string
+  type?: null | string
+}
+
+export interface RunInspectorEventsResponse {
+  error?: null | string
+  events?: RunInspectorEventSummary[]
+  ok?: boolean
+}
+
 export interface RunInspectorStatusResponse {
   attention?: RunInspectorAttentionSignal[]
   attention_error?: null | string

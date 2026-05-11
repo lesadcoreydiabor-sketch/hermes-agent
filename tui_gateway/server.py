@@ -6077,6 +6077,17 @@ def _desktop_status_payload_for_tui(port: int) -> dict:
     return payload
 
 
+def _run_inspector_events_limit(params: dict) -> tuple[int | None, str | None]:
+    raw_limit = params.get("limit", 12)
+    try:
+        limit = int(raw_limit)
+    except (TypeError, ValueError):
+        return None, "run inspector event limit must be an integer"
+    if limit < 1 or limit > 100:
+        return None, "run inspector event limit must be between 1 and 100"
+    return limit, None
+
+
 @method("desktop.status")
 def _(rid, params: dict) -> dict:
     port, error = _desktop_status_port(params)
@@ -6125,6 +6136,27 @@ def _(rid, params: dict) -> dict:
             "desktop": _desktop_status_payload_for_tui(port or 9119),
         },
     )
+
+
+@method("run_inspector.events")
+def _(rid, params: dict) -> dict:
+    limit, error = _run_inspector_events_limit(params)
+    if error:
+        return _err(rid, 4017, error)
+    try:
+        from hermes_cli.run_inspector_events import get_recent_run_inspector_events
+
+        events = get_recent_run_inspector_events(limit=limit or 12)
+        return _ok(rid, {"ok": True, "events": events})
+    except Exception as exc:
+        return _ok(
+            rid,
+            {
+                "ok": False,
+                "events": [],
+                "error": f"run_inspector_events_unavailable:{type(exc).__name__}",
+            },
+        )
 
 
 def _browser_connect(rid, params: dict) -> dict:

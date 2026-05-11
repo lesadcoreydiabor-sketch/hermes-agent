@@ -4042,6 +4042,64 @@ def test_run_inspector_status_degrades_when_attention_builder_fails(monkeypatch)
     assert "token=secret" not in json.dumps(payload)
 
 
+def test_run_inspector_events_returns_recent_events(monkeypatch):
+    calls = []
+
+    def fake_recent(**kwargs):
+        calls.append(kwargs)
+        return [
+            {
+                "id": 1,
+                "type": "approval.request",
+                "source": "gateway_run",
+                "timestamp": "2026-05-11T00:00:00+00:00",
+                "run_id": "run-1",
+                "session_id": "sid-1",
+                "tool": "shell",
+                "status": "waiting",
+                "message": "approval needed",
+            }
+        ]
+
+    monkeypatch.setattr(
+        "hermes_cli.run_inspector_events.get_recent_run_inspector_events",
+        fake_recent,
+    )
+
+    resp = server.handle_request(
+        {"id": "1", "method": "run_inspector.events", "params": {"limit": 7}}
+    )
+
+    assert calls == [{"limit": 7}]
+    assert resp["result"]["ok"] is True
+    assert resp["result"]["events"][0]["type"] == "approval.request"
+
+
+def test_run_inspector_events_rejects_invalid_limit():
+    resp = server.handle_request(
+        {"id": "1", "method": "run_inspector.events", "params": {"limit": 0}}
+    )
+
+    assert resp["error"]["code"] == 4017
+
+
+def test_run_inspector_events_degrades_without_leaking_errors(monkeypatch):
+    monkeypatch.setattr(
+        "hermes_cli.run_inspector_events.get_recent_run_inspector_events",
+        lambda **_kwargs: (_ for _ in ()).throw(RuntimeError("token=secret")),
+    )
+
+    resp = server.handle_request(
+        {"id": "1", "method": "run_inspector.events", "params": {"limit": 3}}
+    )
+
+    payload = resp["result"]
+    assert payload["ok"] is False
+    assert payload["events"] == []
+    assert payload["error"] == "run_inspector_events_unavailable:RuntimeError"
+    assert "token=secret" not in json.dumps(payload)
+
+
 def _stub_urlopen(monkeypatch, *, ok: bool):
     """Patch urllib.request.urlopen used by browser.manage to short-circuit probes."""
 
