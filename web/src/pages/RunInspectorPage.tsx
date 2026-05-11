@@ -86,6 +86,7 @@ import {
   type RunInspectorAttentionState,
 } from "@/pages/runInspectorAttention";
 import {
+  describeDesktopShellAttentionLevel,
   describeDesktopShellHeaderSignal,
   describeDesktopShellNextAction,
   describeDesktopShellSource,
@@ -1296,6 +1297,8 @@ function DesktopShellStatusCard({
         <div className="flex min-w-0 flex-col divide-y divide-border/70 border border-border">
           <DetailRow label="Source" value={describeDesktopShellSource(status)} />
           <DetailRow label="Health" value={formatDisplayValue(status?.health)} />
+          <DetailRow label="Health reason" value={formatDisplayValue(status?.health_reason, "Unknown")} />
+          <DetailRow label="Attention" value={describeDesktopShellAttentionLevel(status)} />
           <DetailRow label="PID" value={formatDisplayValue(status?.pid ? String(status.pid) : null, "None")} />
           <DetailRow label="PID Status" value={formatDisplayValue(status?.pid_status)} />
           <DetailRow label="Started" value={formatDisplayValue(status?.started_at ? formatDateTime(status.started_at) : null, "Unknown")} />

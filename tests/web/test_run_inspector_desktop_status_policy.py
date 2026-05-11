@@ -113,9 +113,21 @@ def test_run_inspector_desktop_status_formats_next_action_row() -> None:
               next_action: null,
               next_command: "hermes desktop --status",
             });
+            const attention = desktopStatus.describeDesktopShellAttentionLevel({
+              attention_level: "warning",
+            });
+            const emptyAttention = desktopStatus.describeDesktopShellAttentionLevel({});
             const empty = desktopStatus.describeDesktopShellNextAction({});
             const noCommand = desktopStatus.getDesktopShellNextCommand({});
-            console.log(JSON.stringify({ action, command, commandOnly, empty, noCommand }));
+            console.log(JSON.stringify({
+              action,
+              command,
+              commandOnly,
+              attention,
+              emptyAttention,
+              empty,
+              noCommand,
+            }));
             """
         )
     )
@@ -124,6 +136,8 @@ def test_run_inspector_desktop_status_formats_next_action_row() -> None:
         "action": "Reuse compatible dashboard: hermes desktop --port 9222",
         "command": "hermes desktop --port 9222",
         "commandOnly": "hermes desktop --status",
+        "attention": "Warning",
+        "emptyAttention": "Unknown",
         "empty": None,
         "noCommand": None,
     }
@@ -135,7 +149,11 @@ def test_run_inspector_desktop_card_renders_next_action_row() -> None:
     ).read_text(encoding="utf-8")
 
     assert "describeDesktopShellNextAction" in page_source
+    assert "describeDesktopShellAttentionLevel" in page_source
     assert "getDesktopShellNextCommand" in page_source
+    assert 'label="Health reason"' in page_source
+    assert 'formatDisplayValue(status?.health_reason, "Unknown")' in page_source
+    assert 'label="Attention"' in page_source
     assert 'label="Next"' in page_source
     assert 'formatDisplayValue(nextAction, "None")' in page_source
     assert 'aria-label="Copy desktop next command"' in page_source

@@ -55,6 +55,16 @@ export function getDesktopShellNextCommand(
   return command || null;
 }
 
+export function describeDesktopShellAttentionLevel(
+  status: RunInspectorDesktopStatus | null,
+): string {
+  const level = status?.attention_level?.trim();
+  if (!level) {
+    return "Unknown";
+  }
+  return level.charAt(0).toUpperCase() + level.slice(1);
+}
+
 export function describeDesktopShellStatus(
   state: RunInspectorDesktopStatusState,
   status: RunInspectorDesktopStatus | null,
