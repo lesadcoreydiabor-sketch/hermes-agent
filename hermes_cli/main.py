@@ -9023,7 +9023,7 @@ def _desktop_record_url(record: dict | None, *, fallback_port: int) -> tuple[str
     host = str(payload.get("host") or "127.0.0.1")
     port = _coerce_int(payload.get("port"), fallback_port)
     route = str(payload.get("route") or _DESKTOP_DEFAULT_PATH)
-    url = str(payload.get("url") or _desktop_dashboard_url(host, port, route))
+    url = _desktop_dashboard_url(host, port, route)
     return host, port, route, url
 
 
@@ -9072,34 +9072,93 @@ def _probe_dashboard_status(
     return False, "non_hermes_status_payload"
 
 
-def _print_desktop_status(args) -> int:
+def _desktop_status_payload(args) -> dict:
     record = _read_desktop_runtime_record()
     host, port, route, url = _desktop_record_url(record, fallback_port=args.port)
+    pid = 0
+    pid_reason = "no_record"
+    pid_status = "none"
+    runtime_record_cleared = False
 
     if record:
         pid, running, pid_reason = _desktop_runtime_pid_status(record)
-        status = "running" if running else f"stale ({pid_reason})"
-        print("Hermes desktop shell:")
-        print(f"  PID: {pid or 'unknown'} ({status})")
-        print(f"  URL: {url}")
-        print(f"  Route: {route}")
-        if record.get("started_at"):
-            print(f"  Started: {record['started_at']}")
+        pid_status = "running" if running else "stale"
         if not running:
             _remove_desktop_runtime_record()
+            runtime_record_cleared = True
+
+    reachable, reason = _probe_dashboard_status(host, port)
+    compatible_dashboard = not record and reachable
+    return {
+        "ok": True,
+        "record_present": bool(record),
+        "runtime_record_cleared": runtime_record_cleared,
+        "pid": pid or None,
+        "pid_status": pid_status,
+        "pid_reason": pid_reason,
+        "host": host,
+        "port": port,
+        "route": route,
+        "url": url,
+        "started_at": record.get("started_at") if record else None,
+        "health": "ok" if reachable else "unavailable",
+        "health_reason": reason,
+        "compatible_dashboard": compatible_dashboard,
+        "reuse_command": f"hermes desktop --port {port}" if compatible_dashboard else None,
+        "manual_url": url if compatible_dashboard else None,
+        "stop_command": (
+            "hermes dashboard --stop"
+            if compatible_dashboard
+            else f"hermes desktop --port {port} --stop"
+            if record
+            else None
+        ),
+    }
+
+
+def _print_desktop_status(args) -> int:
+    payload = _desktop_status_payload(args)
+    if getattr(args, "json", False):
+        print(json.dumps(payload, indent=2, sort_keys=True))
+        return 0
+
+    record = payload["record_present"]
+    port = payload["port"]
+    route = payload["route"]
+    url = payload["url"]
+
+    if record:
+        status = (
+            "running"
+            if payload["pid_status"] == "running"
+            else f"stale ({payload['pid_reason']})"
+        )
+        print("Hermes desktop shell:")
+        print(f"  PID: {payload['pid'] or 'unknown'} ({status})")
+        print(f"  URL: {url}")
+        print(f"  Route: {route}")
+        if payload["started_at"]:
+            print(f"  Started: {payload['started_at']}")
+        if payload["runtime_record_cleared"]:
             print("  Runtime record was stale and has been cleared.")
     else:
         print("No Hermes desktop shell runtime recorded.")
-        print(f"  Requested route: {_desktop_dashboard_url(host, port, route)}")
+        print(f"  Requested route: {url}")
 
-    reachable, reason = _probe_dashboard_status(host, port)
-    health = "ok" if reachable else f"unavailable ({reason})"
+    health = (
+        "ok"
+        if payload["health"] == "ok"
+        else f"unavailable ({payload['health_reason']})"
+    )
     print(f"  Health: {health}")
-    if not record and reachable:
+    if payload["compatible_dashboard"]:
         print(f"  Compatible dashboard reachable: {url}")
-        print(f"  Reuse: hermes desktop --port {port}")
-        print(f"  Open manually: {url}")
-        print("  Stop: use hermes dashboard --stop; no desktop-owned runtime record exists.")
+        print(f"  Reuse: {payload['reuse_command']}")
+        print(f"  Open manually: {payload['manual_url']}")
+        print(
+            f"  Stop: use {payload['stop_command']}; "
+            "no desktop-owned runtime record exists."
+        )
     return 0
 
 
@@ -11910,6 +11969,11 @@ Examples:
         "--status",
         action="store_true",
         help="Show local dashboard process and desktop route status",
+    )
+    desktop_parser.add_argument(
+        "--json",
+        action="store_true",
+        help="Emit machine-readable JSON for --status",
     )
     desktop_parser.add_argument(
         "--stop",

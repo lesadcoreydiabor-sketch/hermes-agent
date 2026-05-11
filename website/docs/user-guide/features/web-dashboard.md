@@ -33,6 +33,9 @@ hermes desktop --port 9121
 # Show the shell-owned dashboard process, URL, route, and health
 hermes desktop --status
 
+# Emit machine-readable status for scripts or UI integrations
+hermes desktop --status --json
+
 # Stop only the shell-owned dashboard process from the runtime record
 hermes desktop --stop
 ```

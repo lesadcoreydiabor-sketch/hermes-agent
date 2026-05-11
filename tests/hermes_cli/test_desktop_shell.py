@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import sys
 from unittest.mock import MagicMock, patch
@@ -20,7 +21,7 @@ from hermes_cli.main import (
 
 
 def _ns(**kw):
-    defaults = dict(port=9119, no_open=False, status=False, stop=False)
+    defaults = dict(port=9119, no_open=False, status=False, stop=False, json=False)
     defaults.update(kw)
     return argparse.Namespace(**defaults)
 
@@ -123,6 +124,58 @@ def test_desktop_status_without_record_points_to_compatible_dashboard(capsys):
     assert "Open manually: http://127.0.0.1:9222/run-inspector" in out
     assert "Stop: use hermes dashboard --stop" in out
     assert "token=" not in out
+
+
+def test_desktop_status_json_reports_compatible_dashboard_without_record(capsys):
+    with patch(
+        "hermes_cli.main._read_desktop_runtime_record",
+        return_value=None,
+    ), patch(
+        "hermes_cli.main._probe_dashboard_status",
+        return_value=(True, "ok"),
+    ), pytest.raises(SystemExit) as exc:
+        cmd_desktop(_ns(port=9222, status=True, json=True))
+
+    assert exc.value.code == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["record_present"] is False
+    assert payload["pid_status"] == "none"
+    assert payload["health"] == "ok"
+    assert payload["compatible_dashboard"] is True
+    assert payload["reuse_command"] == "hermes desktop --port 9222"
+    assert payload["manual_url"] == "http://127.0.0.1:9222/run-inspector"
+    assert payload["stop_command"] == "hermes dashboard --stop"
+    assert "token=" not in json.dumps(payload)
+
+
+def test_desktop_status_json_sanitizes_record_url_query(capsys):
+    with patch(
+        "hermes_cli.main._read_desktop_runtime_record",
+        return_value={
+            "pid": 12345,
+            "host": "127.0.0.1",
+            "port": 9119,
+            "route": "/run-inspector",
+            "url": "http://127.0.0.1:9119/run-inspector?token=secret",
+            "started_at": "2026-05-11T00:00:00Z",
+        },
+    ), patch(
+        "hermes_cli.main._desktop_runtime_pid_status",
+        return_value=(12345, True, "running"),
+    ), patch(
+        "hermes_cli.main._probe_dashboard_status",
+        return_value=(True, "ok"),
+    ), pytest.raises(SystemExit) as exc:
+        cmd_desktop(_ns(status=True, json=True))
+
+    assert exc.value.code == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["record_present"] is True
+    assert payload["pid"] == 12345
+    assert payload["pid_status"] == "running"
+    assert payload["url"] == "http://127.0.0.1:9119/run-inspector"
+    assert payload["stop_command"] == "hermes desktop --port 9119 --stop"
+    assert "token=" not in json.dumps(payload)
 
 
 def test_desktop_reuses_existing_dashboard_and_opens_run_inspector(capsys):

@@ -811,6 +811,23 @@ tasks:
     status: completed
     risk: low
 
+  - id: HRIDR-03
+    title: Add machine-readable desktop status JSON
+    description: Add hermes desktop --status --json so Run Inspector, scripts, and future UI surfaces can read desktop shell state without scraping text.
+    depends_on:
+      - HRIDR-02
+    acceptance:
+      - hermes desktop --status --json emits valid JSON only.
+      - JSON includes record presence, pid status, health, route URL, compatible dashboard state, reuse command, manual URL, and stop command.
+      - Status URLs are sanitized loopback /run-inspector URLs and do not include token/query data from runtime records.
+      - Existing text status output remains compatible.
+    verify:
+      - venv/Scripts/python.exe -m pytest tests/hermes_cli/test_desktop_shell.py tests/hermes_cli/test_dashboard_lifecycle_flags.py tests/hermes_cli/test_update_stale_dashboard.py -q -o addopts=
+      - venv/Scripts/python.exe -m hermes_cli.main desktop --status --json
+      - git diff --check -- hermes_cli/main.py tests/hermes_cli/test_desktop_shell.py website/docs/user-guide/features/web-dashboard.md .hermes/task.yaml
+    status: completed
+    risk: medium
+
 risk_flags:
   destructive_file_change:
     pause: true
@@ -1378,6 +1395,16 @@ progress_report:
       verification_result: "passed: venv/Scripts/python.exe -m pytest tests/hermes_cli/test_desktop_shell.py tests/hermes_cli/test_dashboard_lifecycle_flags.py tests/hermes_cli/test_update_stale_dashboard.py -q -o addopts= (46 passed, 5 skipped); passed: git diff --check for HRIDR-02 files; GitNexus detect_changes staged risk low with no affected processes"
       blockers: []
       next_step: "HRIDR-02 compatible dashboard status guidance implemented locally; run YAML/GitNexus checks, stage, commit, push, then continue lifecycle reliability hardening."
+    - task_id: HRIDR-03
+      status: completed
+      changed_files:
+        - hermes_cli/main.py
+        - tests/hermes_cli/test_desktop_shell.py
+        - website/docs/user-guide/features/web-dashboard.md
+        - .hermes/task.yaml
+      verification_result: "passed: venv/Scripts/python.exe -m pytest tests/hermes_cli/test_desktop_shell.py tests/hermes_cli/test_dashboard_lifecycle_flags.py tests/hermes_cli/test_update_stale_dashboard.py -q -o addopts= (48 passed, 5 skipped); passed: venv/Scripts/python.exe -m hermes_cli.main desktop --status --json; passed: git diff --check for HRIDR-03 files; GitNexus detect_changes staged risk low with no affected processes"
+      blockers: []
+      next_step: "HRIDR-03 desktop status JSON implemented locally; run YAML/GitNexus checks, stage, commit, push, then continue lifecycle reliability hardening."
 
 failure_review:
   enabled: true
