@@ -9082,6 +9082,13 @@ def _desktop_status_payload(args) -> dict:
     )
 
 
+def _format_desktop_attention_level(value) -> str:
+    text = str(value or "unknown").strip().replace("_", " ")
+    if not text:
+        return "Unknown"
+    return text[:1].upper() + text[1:]
+
+
 def _print_desktop_status(args) -> int:
     payload = _desktop_status_payload(args)
     if getattr(args, "json", False):
@@ -9117,6 +9124,7 @@ def _print_desktop_status(args) -> int:
         else f"unavailable ({payload['health_reason']})"
     )
     print(f"  Health: {health}")
+    print(f"  Attention: {_format_desktop_attention_level(payload.get('attention_level'))}")
     next_action = payload.get("next_action")
     next_command = payload.get("next_command")
     if next_action:

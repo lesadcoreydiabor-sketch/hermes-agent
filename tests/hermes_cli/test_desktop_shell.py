@@ -77,6 +77,7 @@ def test_desktop_status_reports_route_without_dashboard_deps(capsys):
     assert "PID: 12345 (running)" in out
     assert "URL: http://127.0.0.1:9119/run-inspector" in out
     assert "Health: ok" in out
+    assert "Attention: Ok" in out
     assert "Next: Open Run Inspector" in out
 
 
@@ -104,6 +105,7 @@ def test_desktop_status_clears_stale_runtime_record(capsys):
     mock_remove.assert_called_once()
     out = capsys.readouterr().out
     assert "PID: 99999 (stale (not_found))" in out
+    assert "Attention: Warning" in out
     assert "Next: Restart desktop shell: hermes desktop --port 9119" in out
     assert "Runtime record was stale and has been cleared" in out
 
@@ -122,6 +124,7 @@ def test_desktop_status_without_record_points_to_compatible_dashboard(capsys):
     out = capsys.readouterr().out
     assert "No Hermes desktop shell runtime recorded" in out
     assert "Compatible dashboard reachable: http://127.0.0.1:9222/run-inspector" in out
+    assert "Attention: Info" in out
     assert "Next: Reuse compatible dashboard: hermes desktop --port 9222" in out
     assert "Reuse: hermes desktop --port 9222" in out
     assert "Open manually: http://127.0.0.1:9222/run-inspector" in out
