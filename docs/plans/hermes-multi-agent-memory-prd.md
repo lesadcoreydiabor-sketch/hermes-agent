@@ -512,6 +512,41 @@ Source-bundle rules:
 - Never record approval payloads, raw prompts, raw outputs, diffs, or environment values.
 - If redaction confidence is low, omit the field.
 
+## Rollout And Review Gates
+
+Local record ownership:
+
+| Record | Owner | Purpose | Write Rule | Review Gate |
+| --- | --- | --- | --- | --- |
+| `.hermes/action_ledger.jsonl` | Orchestrator or explicit runtime integration | Append safe work events for debugging and resume. | Explicit local append only; no raw transcript storage. | Review redaction regressions before adding new event fields. |
+| `.hermes/working_checkpoint.json` | Generated checkpoint helper or orchestrator | Current resumable summary of active, pending, blocked, verified, and next work. | Generated from safe task and ledger summaries; no raw logs. | Human or reviewer can inspect before using as resume source. |
+| `.hermes/long_term_queue.jsonl` | Reviewer or failure candidate helper | Reviewable improvement candidates for recurring failures, missing tests, recovery patterns, docs gaps, and skill ideas. | Candidate or needs-evidence states only unless explicitly reviewed. | Accepted, applied, or superseded states require reviewer evidence. |
+| `.hermes/skills_journal.jsonl` | Reviewer | Accepted skill learnings after evidence and eval coverage exist. | Append accepted summaries only; never edit `SKILL.md` automatically. | Requires source evidence, accepted change, eval coverage, verification, and rollback note. |
+| `.hermes/task.yaml` `failure_review.entries` | Product/reviewer | Authoritative product review log for failed verification and redaction blockers. | Manual or explicit helper-assisted update only. | Redaction failures stay blockers until a regression exists. |
+
+Review gates:
+
+- Long-term memory changes are never silently applied. Queue entries can propose memory facts, but promotion to a provider requires a later explicit provider integration and review.
+- Skill changes are never silently applied. A skills journal entry is evidence, not a patch to a skill package.
+- Failure-review candidates are not accepted by default. They must include what happened, likely cause, verification command or evidence, proposed badcase, and blocker state.
+- Redaction failures are blocker-class candidates. They must not expose the leaked value and must add or reference a regression before promotion.
+- Rollback notes are required for skills journal entries so an accepted learning can be removed or revised without rewriting history.
+
+Run Inspector display policy:
+
+- Missing action ledger, checkpoint, queue, journal, or memory diagnostics surfaces as degraded or unavailable state, not as a dashboard crash.
+- Empty local files surface as empty state.
+- Active child-agent events surface as active work; failed, interrupted, timeout, or blocked items surface as attention state.
+- Memory provider diagnostics show provider name, availability, initialized state, tool names, and lifecycle status only. They do not show memory contents, provider raw responses, prompts, or tool arguments.
+- The Multi-Agent Memory workbench is read-only. It does not approve, deny, stop, spawn, write memory, edit skills, mutate config, or write remote systems.
+
+Migration limits:
+
+- The first implementation is local and process-aware, not a cross-process database. Gateway, dashboard, CLI, and delegated child processes may have separate in-memory event ledgers.
+- Cross-process ledger merging needs an explicit bridge or persistent store design before it can be treated as complete.
+- JSONL helpers are append-by-explicit-call only. Automatic runtime writes should stay behind dedicated slices with redaction tests and failure-review coverage.
+- Source bundles are read-only research artifacts. GitHub Issues, PRs, and Discussions evidence can be missing because of credentials, network, or rate limits; those gaps must be recorded instead of inferred.
+
 ## Evaluation
 
 Minimum evals for the first implementation slices:
