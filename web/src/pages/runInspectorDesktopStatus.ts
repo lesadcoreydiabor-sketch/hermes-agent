@@ -37,6 +37,17 @@ export function describeDesktopShellSource(status: RunInspectorDesktopStatus | n
   return "No desktop runtime record";
 }
 
+export function describeDesktopShellNextAction(
+  status: RunInspectorDesktopStatus | null,
+): string | null {
+  const action = status?.next_action?.trim();
+  const command = status?.next_command?.trim();
+  if (action && command) {
+    return `${action}: ${command}`;
+  }
+  return action || command || null;
+}
+
 export function describeDesktopShellStatus(
   state: RunInspectorDesktopStatusState,
   status: RunInspectorDesktopStatus | null,

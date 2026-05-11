@@ -96,3 +96,38 @@ def test_run_inspector_desktop_status_prefers_next_action_message() -> None:
         "message": "Restart desktop shell",
         "tone": "warning",
     }
+
+
+def test_run_inspector_desktop_status_formats_next_action_row() -> None:
+    payload = run_desktop_status_script(
+        textwrap.dedent(
+            """
+            const action = desktopStatus.describeDesktopShellNextAction({
+              next_action: "Reuse compatible dashboard",
+              next_command: "hermes desktop --port 9222",
+            });
+            const commandOnly = desktopStatus.describeDesktopShellNextAction({
+              next_action: null,
+              next_command: "hermes desktop --status",
+            });
+            const empty = desktopStatus.describeDesktopShellNextAction({});
+            console.log(JSON.stringify({ action, commandOnly, empty }));
+            """
+        )
+    )
+
+    assert payload == {
+        "action": "Reuse compatible dashboard: hermes desktop --port 9222",
+        "commandOnly": "hermes desktop --status",
+        "empty": None,
+    }
+
+
+def test_run_inspector_desktop_card_renders_next_action_row() -> None:
+    page_source = (
+        ROOT / "web" / "src" / "pages" / "RunInspectorPage.tsx"
+    ).read_text(encoding="utf-8")
+
+    assert "describeDesktopShellNextAction" in page_source
+    assert 'label="Next"' in page_source
+    assert 'formatDisplayValue(nextAction, "None")' in page_source

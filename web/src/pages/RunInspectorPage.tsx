@@ -86,6 +86,7 @@ import {
 } from "@/pages/runInspectorAttention";
 import {
   describeDesktopShellHeaderSignal,
+  describeDesktopShellNextAction,
   describeDesktopShellSource,
   describeDesktopShellStatus,
   type RunInspectorDesktopStatusState,
@@ -1229,6 +1230,7 @@ function DesktopShellStatusCard({
   status: RunInspectorDesktopStatus | null;
 }) {
   const display = describeDesktopShellStatus(state, status, error);
+  const nextAction = describeDesktopShellNextAction(status);
   return (
     <Card>
       <CardHeader>
@@ -1270,6 +1272,7 @@ function DesktopShellStatusCard({
           <DetailRow label="Host" value={formatDisplayValue(status?.host)} />
           <DetailRow label="Route" value={formatDisplayValue(status?.route)} />
           <DetailRow label="URL" value={formatDisplayValue(status?.url)} />
+          <DetailRow label="Next" value={formatDisplayValue(nextAction, "None")} />
           <DetailRow label="Manual URL" value={formatDisplayValue(status?.manual_url, "None")} />
           <DetailRow label="Reuse" value={formatDisplayValue(status?.reuse_command, "None")} />
           <DetailRow label="Stop" value={formatDisplayValue(status?.stop_command, "None")} />
