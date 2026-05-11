@@ -71,6 +71,9 @@ interface SkillsReloadResponse {
 const INSPECTOR_DEFAULT_PORT = 9119
 const INSPECTOR_EVENTS_DEFAULT_LIMIT = 12
 const INSPECTOR_TEXT_LIMIT = 140
+const INSPECTOR_EVENT_FILTERS = ['all', 'approval', 'failed', 'gateway', 'run', 'tool'] as const
+
+type InspectorEventFilter = (typeof INSPECTOR_EVENT_FILTERS)[number]
 
 const parseInspectorPort = (arg: string): null | number => {
   const text = arg.trim()
@@ -94,6 +97,34 @@ const parseInspectorEventsLimit = (arg: string): null | number => {
   }
   const limit = Number(text)
   return limit >= 1 && limit <= 100 ? limit : null
+}
+
+const parseInspectorEventsArgs = (
+  arg: string
+): null | { filter: InspectorEventFilter; limit: number } => {
+  const parts = arg.trim().toLowerCase().split(/\s+/).filter(Boolean)
+  let limit = INSPECTOR_EVENTS_DEFAULT_LIMIT
+  let filter: InspectorEventFilter = 'all'
+
+  for (const part of parts) {
+    if (/^\d+$/.test(part)) {
+      const parsed = parseInspectorEventsLimit(part)
+      if (parsed === null) {
+        return null
+      }
+      limit = parsed
+      continue
+    }
+
+    if ((INSPECTOR_EVENT_FILTERS as readonly string[]).includes(part)) {
+      filter = part as InspectorEventFilter
+      continue
+    }
+
+    return null
+  }
+
+  return { filter, limit }
 }
 
 const desktopSummary = (r: DesktopStatusResponse): string => {
@@ -275,6 +306,39 @@ const renderRunInspectorEvents = (events?: RunInspectorEventSummary[], error?: n
   }
 
   return rows
+}
+
+const filterRunInspectorEvents = (
+  events: RunInspectorEventSummary[] | undefined,
+  filter: InspectorEventFilter
+): RunInspectorEventSummary[] => {
+  const source = events ?? []
+  if (filter === 'all') {
+    return source
+  }
+
+  return source.filter(event => {
+    const type = String(event.type || '').toLowerCase()
+    const status = String(event.status || '').toLowerCase()
+    const sourceName = String(event.source || '').toLowerCase()
+
+    if (filter === 'approval') {
+      return type === 'approval.request' || status === 'waiting'
+    }
+    if (filter === 'failed') {
+      return type.endsWith('.failed') || status === 'failed'
+    }
+    if (filter === 'gateway') {
+      return type.startsWith('gateway.') || sourceName.includes('gateway')
+    }
+    if (filter === 'run') {
+      return type.startsWith('run.')
+    }
+    if (filter === 'tool') {
+      return type.startsWith('tool.')
+    }
+    return true
+  })
 }
 
 const renderInspectorStatus = (r: DesktopStatusResponse) => {
@@ -506,22 +570,26 @@ export const opsCommands: SlashCommand[] = [
 
   {
     aliases: ['run-inspector-events'],
-    help: 'show recent read-only Run Inspector events [/inspector-events [limit]]',
+    help: 'show recent read-only Run Inspector events [/inspector-events [limit] [all|approval|failed|gateway|run|tool]]',
     name: 'inspector-events',
     run: (arg, ctx) => {
-      const limit = parseInspectorEventsLimit(arg)
-      if (limit === null) {
-        return ctx.transcript.sys('usage: /inspector-events [limit 1..100]')
+      const parsed = parseInspectorEventsArgs(arg)
+      if (parsed === null) {
+        return ctx.transcript.sys('usage: /inspector-events [limit 1..100] [all|approval|failed|gateway|run|tool]')
       }
 
       ctx.gateway
-        .rpc<RunInspectorEventsResponse>('run_inspector.events', { limit })
+        .rpc<RunInspectorEventsResponse>('run_inspector.events', { limit: parsed.limit })
         .then(
           ctx.guarded<RunInspectorEventsResponse>(r => {
+            const filtered = filterRunInspectorEvents(r?.events, parsed.filter)
             ctx.transcript.panel('Run Inspector Events', [
               {
-                rows: renderRunInspectorEvents(r?.events, r?.error),
-                title: `Recent ${r?.events?.length ?? 0}`
+                rows: renderRunInspectorEvents(filtered, r?.error),
+                title:
+                  parsed.filter === 'all'
+                    ? `Recent ${r?.events?.length ?? 0}`
+                    : `Recent ${filtered.length}/${r?.events?.length ?? 0} ${parsed.filter}`
               },
               {
                 text: 'read-only event timeline; raw logs, prompts, tool args, and secrets are not shown'

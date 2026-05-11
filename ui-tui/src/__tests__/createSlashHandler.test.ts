@@ -354,9 +354,11 @@ describe('createSlashHandler', () => {
     ['/browser connect', 'browser.manage', { action: 'connect', session_id: null, url: 'http://127.0.0.1:9222' }],
     ['/inspector', 'run_inspector.status', { port: 9119 }],
     ['/inspector-events', 'run_inspector.events', { limit: 12 }],
+    ['/inspector-events failed', 'run_inspector.events', { limit: 12 }],
     ['/inspector-health', 'run_inspector.status', { port: 9119 }],
     ['/run-inspector-health 9222', 'run_inspector.status', { port: 9222 }],
     ['/run-inspector-events 7', 'run_inspector.events', { limit: 7 }],
+    ['/run-inspector-events 7 failed', 'run_inspector.events', { limit: 7 }],
     ['/run-inspector 9222', 'run_inspector.status', { port: 9222 }],
     ['/reload-mcp', 'reload.mcp', { session_id: null }],
     ['/reload', 'reload.env', {}],
@@ -601,6 +603,58 @@ describe('createSlashHandler', () => {
     })
   })
 
+  it('/inspector-events filters events locally after fetching the bounded timeline', async () => {
+    const rpc = vi.fn(() =>
+      Promise.resolve({
+        events: [
+          {
+            id: 10,
+            message: 'tool running',
+            source: 'dashboard_chat',
+            status: 'running',
+            tool: 'shell',
+            type: 'tool.progress'
+          },
+          {
+            id: 11,
+            message: 'run failed safely',
+            run_id: 'run_failed',
+            source: 'gateway_run',
+            status: 'failed',
+            type: 'run.failed'
+          }
+        ],
+        ok: true
+      })
+    )
+    const ctx = buildCtx({ gateway: { ...buildGateway(), rpc } })
+
+    expect(createSlashHandler(ctx)('/inspector-events failed')).toBe(true)
+
+    expect(rpc).toHaveBeenCalledWith('run_inspector.events', { limit: 12 })
+    await vi.waitFor(() => {
+      expect(ctx.transcript.panel).toHaveBeenCalledWith(
+        'Run Inspector Events',
+        expect.arrayContaining([
+          expect.objectContaining({
+            rows: expect.arrayContaining([
+              ['#11 run.failed', 'status=failed / source=gateway_run / run=run_failed\nrun failed safely']
+            ]),
+            title: 'Recent 1/2 failed'
+          })
+        ])
+      )
+    })
+    expect(ctx.transcript.panel).not.toHaveBeenCalledWith(
+      'Run Inspector Events',
+      expect.arrayContaining([
+        expect.objectContaining({
+          rows: expect.arrayContaining([['#10 tool.progress', expect.any(String)]])
+        })
+      ])
+    )
+  })
+
   it('/inspector-events rejects invalid limits before hitting the gateway', () => {
     const rpc = vi.fn(() => Promise.resolve({}))
     const ctx = buildCtx({ gateway: { ...buildGateway(), rpc } })
@@ -608,7 +662,9 @@ describe('createSlashHandler', () => {
     expect(createSlashHandler(ctx)('/inspector-events 0')).toBe(true)
     expect(rpc).not.toHaveBeenCalled()
     expect(ctx.gateway.gw.request).not.toHaveBeenCalled()
-    expect(ctx.transcript.sys).toHaveBeenCalledWith('usage: /inspector-events [limit 1..100]')
+    expect(ctx.transcript.sys).toHaveBeenCalledWith(
+      'usage: /inspector-events [limit 1..100] [all|approval|failed|gateway|run|tool]'
+    )
   })
 
   it('routes /rollback through native RPC when a session is active', () => {
