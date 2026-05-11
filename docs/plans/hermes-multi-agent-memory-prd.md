@@ -348,6 +348,67 @@ Use `.hermes/task.yaml` plus Kanban task context to define:
 
 The initial policy can be documentation and schema only. Runtime scheduling changes should wait until the ledger and checkpoint are observable.
 
+Minimum agent-ready task assignment template:
+
+```yaml
+schema_version: 1
+task_id: string
+title: string
+role: planner | orchestrator | worker | reviewer | observer
+owner:
+  agent_id: string | null
+  parent_agent_id: string | null
+  human_owner: string | null
+status: planned | queued | running | blocked | review | completed | failed
+dependencies:
+  task_ids: []
+  required_artifacts: []
+write_scope:
+  files: []
+  directories: []
+  forbidden_paths: []
+  shared_contracts: []
+allowed_tools:
+  toolsets: []
+  commands: []
+  disallowed: []
+delegate_limits:
+  max_depth: number | null
+  max_parallel_workers: number | null
+  interrupt_policy: cooperative | parent_owned | manual_review
+verification:
+  command: string
+  expected_signal: string
+  required_before_handoff: true
+handoff_payload:
+  summary: string
+  changed_files: []
+  verification_result: string | null
+  blockers: []
+  next_step: string
+  privacy_class: redacted_summary
+conflict_policy:
+  write_scope_must_be_disjoint: true
+  shared_contract_requires_reviewer: true
+  conflict_resolution: pause_and_handoff | reviewer_decides | human_decides
+```
+
+Role policy:
+
+- Planner creates PRD slices, task ids, acceptance criteria, risk flags, and safe handoff payloads.
+- Orchestrator assigns disjoint write scopes, watches dependencies, and records action ledger or checkpoint summaries.
+- Worker owns implementation only inside the assigned write scope and reports changed files, verification, blockers, and next step.
+- Reviewer checks contracts, privacy, tests, and conflict policy before a shared schema or public API change is accepted.
+- Observer reads status, events, diagnostics, and ledgers without mutating code, config, memory, or remote systems.
+
+Conflict and handoff rules:
+
+- Parallel workers must have disjoint write scopes. Shared files such as `.hermes/task.yaml`, API contracts, generated schemas, or common UI types require orchestrator sequencing and reviewer handoff.
+- Existing `delegate_task` depth, concurrency, cost, heartbeat, and interrupt behavior remains the runtime guardrail. This policy does not bypass those limits.
+- Kanban task ownership remains the human-visible ownership layer; this template is the agent handoff payload that can be attached to Kanban or `.hermes/task.yaml`.
+- Handoffs must not include raw child transcripts, raw prompts, raw logs, tool arguments, diffs, secrets, or private file bodies.
+- A blocked worker returns a blocker summary and proposed next step instead of widening its own write scope.
+
 ### Phase 7: External Source Bundle
 
 Add a standard PM research artifact that records:

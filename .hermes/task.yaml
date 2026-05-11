@@ -1034,7 +1034,7 @@ tasks:
     verify:
       - git diff --check -- docs/plans/hermes-multi-agent-memory-prd.md .hermes/task.yaml
       - venv/Scripts/python.exe -c "import yaml; yaml.safe_load(open('.hermes/task.yaml', encoding='utf-8'))"
-    status: pending
+    status: completed
     risk: medium
 
   - id: HMAM-12
@@ -1772,6 +1772,14 @@ progress_report:
       verification_result: "passed: git diff --check -- docs/plans/hermes-multi-agent-memory-prd.md .hermes/task.yaml; passed: venv/Scripts/python.exe -c yaml.safe_load task.yaml"
       blockers: []
       next_step: "Implement HMAM-11 agent-ready task ownership and handoff policy."
+    - task_id: HMAM-11
+      status: completed
+      changed_files:
+        - docs/plans/hermes-multi-agent-memory-prd.md
+        - .hermes/task.yaml
+      verification_result: "passed: git diff --check -- docs/plans/hermes-multi-agent-memory-prd.md .hermes/task.yaml; passed: venv/Scripts/python.exe -c yaml.safe_load task.yaml"
+      blockers: []
+      next_step: "Implement HMAM-12 rollout docs and review gates for memory learning."
 
 failure_review:
   enabled: true
