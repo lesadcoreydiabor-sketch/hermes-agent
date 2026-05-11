@@ -446,6 +446,118 @@ export interface RunInspectorStatusResponse {
   snapshot?: RunInspectorSnapshotSummary
 }
 
+export interface RunInspectorMemoryProviderSummary {
+  availability?: string
+  kind?: null | string
+  name?: null | string
+  privacy_class?: string
+  tool_names?: string[]
+}
+
+export interface RunInspectorMemorySummary {
+  degraded_reason?: null | string
+  privacy_class?: string
+  provider_count?: number
+  providers?: RunInspectorMemoryProviderSummary[]
+  registered_tools?: string[]
+  status?: string
+}
+
+export interface RunInspectorRuntimePersistenceSummary {
+  degraded_reason?: null | string
+  enabled_count?: number
+  privacy_class?: string
+  status?: string
+}
+
+export interface RunInspectorAssignmentConflictSummary {
+  privacy_class?: string
+  resolution?: string
+  task_ids?: string[]
+}
+
+export interface RunInspectorAssignmentSummary {
+  active_count?: number
+  blocked_count?: number
+  blocked_task_ids?: string[]
+  completed_count?: number
+  conflicts?: RunInspectorAssignmentConflictSummary[]
+  degraded_reason?: null | string
+  dependency_waiting_task_ids?: string[]
+  failed_count?: number
+  privacy_class?: string
+  ready_task_ids?: string[]
+  role_counts?: Record<string, number>
+  status?: string
+  total_count?: number
+}
+
+export interface RunInspectorAssignment {
+  dependencies?: { task_ids?: string[] }
+  privacy_class?: string
+  role?: string
+  status?: string
+  task_id?: string
+  title?: string
+  write_scope?: {
+    directories?: string[]
+    files?: string[]
+    shared_contracts?: string[]
+  }
+}
+
+export interface RunInspectorAssignmentBatch {
+  index?: number
+  privacy_class?: string
+  roles?: Record<string, number>
+  task_ids?: string[]
+}
+
+export interface RunInspectorAssignmentPlan {
+  active_task_ids?: string[]
+  batches?: RunInspectorAssignmentBatch[]
+  blocked_task_ids?: string[]
+  conflict_task_ids?: string[]
+  conflicts?: RunInspectorAssignmentConflictSummary[]
+  degraded_reason?: null | string
+  max_parallel_workers?: number
+  privacy_class?: string
+  status?: string
+  waiting_task_ids?: string[]
+}
+
+export interface RunInspectorAssignmentWorkbenchSummary {
+  assignments?: RunInspectorAssignment[]
+  degraded_reason?: null | string
+  parallel_plan?: RunInspectorAssignmentPlan
+  privacy_class?: string
+  summary?: RunInspectorAssignmentSummary
+}
+
+export interface RunInspectorMemoryWorkbench {
+  active_work?: unknown[]
+  agent_assignments?: RunInspectorAssignmentWorkbenchSummary
+  checkpoint?: {
+    blocked_tasks?: unknown[]
+    completed_tasks?: unknown[]
+    current_task_id?: null | string
+    degraded_reason?: null | string
+    pending_tasks?: unknown[]
+  }
+  degraded_reason?: null | string
+  generated_at?: string
+  memory?: RunInspectorMemorySummary
+  privacy_class?: string
+  runtime_persistence?: RunInspectorRuntimePersistenceSummary
+  status?: string
+  status_reason?: string
+}
+
+export interface RunInspectorMemoryWorkbenchResponse {
+  ok?: boolean
+  workbench?: RunInspectorMemoryWorkbench
+}
+
 export interface RollbackCheckpoint {
   hash: string
   message?: string

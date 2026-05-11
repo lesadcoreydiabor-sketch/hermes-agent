@@ -9,6 +9,7 @@ import type {
   RollbackDiffResponse,
   RollbackListResponse,
   RollbackRestoreResponse,
+  RunInspectorAssignmentPlan,
   RunInspectorAttentionSignal,
   RunInspectorEventSummary,
   RunInspectorEventsResponse,
@@ -418,6 +419,146 @@ const renderRunInspectorEventSummary = (
   ]
 }
 
+const inspectorListCount = (items?: unknown[]): number => items?.length ?? 0
+
+const renderInspectorTaskIds = (ids?: string[], limit = 6): string => {
+  const visible = ids?.map(id => clipInspectorText(id, '', 48)).filter(Boolean) ?? []
+  if (!visible.length) {
+    return 'none'
+  }
+  const shown = visible.slice(0, limit)
+  const more = visible.length > shown.length ? `, +${visible.length - shown.length} more` : ''
+  return `${shown.join(', ')}${more}`
+}
+
+const plannedInspectorTaskCount = (plan?: RunInspectorAssignmentPlan): number => {
+  if (!Array.isArray(plan?.batches)) {
+    return 0
+  }
+  return plan.batches.reduce((count, batch) => count + inspectorListCount(batch.task_ids), 0)
+}
+
+const renderRunInspectorMemoryWorkbenchSummary = (
+  workbench?: null | RunInspectorMemoryWorkbench
+): [string, string][] => {
+  const assignments = workbench?.agent_assignments
+  const summary = assignments?.summary
+  const plan = assignments?.parallel_plan
+  const plannedTasks = plannedInspectorTaskCount(plan)
+  const rows: [string, string][] = [
+    [
+      'Workbench',
+      [
+        clipInspectorText(workbench?.status, 'unknown', 48),
+        clipInspectorText(workbench?.status_reason, '', 96)
+      ].filter(Boolean).join(' / ')
+    ],
+    [
+      'Assignments',
+      summary
+        ? `${summary.total_count ?? 0} total / ${summary.active_count ?? 0} active / ${inspectorListCount(summary.ready_task_ids)} ready`
+        : 'unknown'
+    ],
+    [
+      'Plan',
+      plan
+        ? `${plannedTasks} planned / ${inspectorListCount(plan.batches)} batches / ${plan.max_parallel_workers ?? 0} max`
+        : 'unknown'
+    ],
+    [
+      'Waiting',
+      plan
+        ? `${inspectorListCount(plan.waiting_task_ids)} waiting / ${inspectorListCount(plan.blocked_task_ids)} blocked`
+        : `${inspectorListCount(summary?.dependency_waiting_task_ids)} waiting / ${summary?.blocked_count ?? 0} blocked`
+    ],
+    [
+      'Conflicts',
+      plan
+        ? `${inspectorListCount(plan.conflict_task_ids)} scoped / ${inspectorListCount(plan.conflicts)} pairs`
+        : `${inspectorListCount(summary?.conflicts)} pairs`
+    ],
+    [
+      'Memory',
+      `${workbench?.memory?.status ?? 'unknown'} / ${workbench?.memory?.provider_count ?? 0} providers`
+    ],
+    [
+      'Persistence',
+      `${workbench?.runtime_persistence?.status ?? 'unknown'} / ${workbench?.runtime_persistence?.enabled_count ?? 0} enabled`
+    ]
+  ]
+
+  const degraded =
+    workbench?.degraded_reason ||
+    assignments?.degraded_reason ||
+    summary?.degraded_reason ||
+    plan?.degraded_reason ||
+    workbench?.memory?.degraded_reason ||
+    workbench?.runtime_persistence?.degraded_reason
+  if (degraded) {
+    rows.push(['Degraded', clipInspectorText(degraded)])
+  }
+  if (workbench?.privacy_class) {
+    rows.push(['Privacy', clipInspectorText(workbench.privacy_class, '', 48)])
+  }
+  return rows
+}
+
+const renderRunInspectorAssignmentRows = (
+  workbench?: null | RunInspectorMemoryWorkbench,
+  limit = 5
+): [string, string][] => {
+  const assignments = workbench?.agent_assignments?.assignments ?? []
+  const rows = assignments.slice(0, limit).map(assignment => {
+    const task = clipInspectorText(assignment.task_id || assignment.title, 'task', 64)
+    const files = inspectorListCount(assignment.write_scope?.files)
+    const directories = inspectorListCount(assignment.write_scope?.directories)
+    const dependencies = inspectorListCount(assignment.dependencies?.task_ids)
+    return [
+      task,
+      [
+        `role=${clipInspectorText(assignment.role, 'unknown', 32)}`,
+        `status=${clipInspectorText(assignment.status, 'unknown', 32)}`,
+        `deps=${dependencies}`,
+        `scope=${files} files/${directories} dirs`
+      ].join(' / ')
+    ] as [string, string]
+  })
+
+  if (assignments.length > rows.length) {
+    rows.push(['More', `${assignments.length - rows.length} more assignments`])
+  }
+  if (!rows.length) {
+    rows.push(['Assignments', 'none'])
+  }
+  return rows
+}
+
+const renderRunInspectorAssignmentPlanRows = (
+  workbench?: null | RunInspectorMemoryWorkbench,
+  limit = 5
+): [string, string][] => {
+  const plan = workbench?.agent_assignments?.parallel_plan
+  if (!plan) {
+    return [['Plan', 'none']]
+  }
+
+  const rows = (plan.batches ?? []).slice(0, limit).map(batch => [
+    `Batch ${batch.index ?? '?'}`,
+    renderInspectorTaskIds(batch.task_ids)
+  ] as [string, string])
+  if ((plan.batches?.length ?? 0) > rows.length) {
+    rows.push(['More batches', `${(plan.batches?.length ?? 0) - rows.length} more batches`])
+  }
+  rows.push(['Active', renderInspectorTaskIds(plan.active_task_ids)])
+  rows.push(['Waiting', renderInspectorTaskIds(plan.waiting_task_ids)])
+  rows.push(['Blocked', renderInspectorTaskIds(plan.blocked_task_ids)])
+  rows.push(['Sequenced', renderInspectorTaskIds(plan.conflict_task_ids)])
+  if (plan.degraded_reason) {
+    rows.push(['Plan degraded', clipInspectorText(plan.degraded_reason)])
+  }
+  return rows
+}
+
 const filterRunInspectorEvents = (
   events: RunInspectorEventSummary[] | undefined,
   filter: InspectorEventFilter
@@ -825,6 +966,43 @@ export const opsCommands: SlashCommand[] = [
               },
               {
                 text: 'read-only event timeline; raw logs, prompts, tool args, and secrets are not shown'
+              }
+            ])
+          })
+        )
+        .catch(ctx.guardedErr)
+    }
+  },
+
+  {
+    aliases: ['run-inspector-memory'],
+    help: 'show read-only Run Inspector multi-agent memory workbench [/inspector-memory [limit]]',
+    name: 'inspector-memory',
+    run: (arg, ctx) => {
+      const limit = parseInspectorEventsLimit(arg)
+      if (limit === null) {
+        return ctx.transcript.sys('usage: /inspector-memory [limit 1..100]')
+      }
+
+      ctx.gateway
+        .rpc<RunInspectorMemoryWorkbenchResponse>('run_inspector.memory_workbench', { limit })
+        .then(
+          ctx.guarded<RunInspectorMemoryWorkbenchResponse>(r => {
+            ctx.transcript.panel('Run Inspector Memory', [
+              {
+                rows: renderRunInspectorMemoryWorkbenchSummary(r?.workbench),
+                title: r?.ok === false ? 'Summary degraded' : 'Summary'
+              },
+              {
+                rows: renderRunInspectorAssignmentRows(r?.workbench),
+                title: 'Assignments'
+              },
+              {
+                rows: renderRunInspectorAssignmentPlanRows(r?.workbench),
+                title: 'Parallel Plan'
+              },
+              {
+                text: 'read-only memory workbench; no agent spawn, tool dispatch, memory write, skill edit, config edit, or task mutation'
               }
             ])
           })

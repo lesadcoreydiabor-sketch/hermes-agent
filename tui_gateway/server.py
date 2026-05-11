@@ -6159,6 +6159,42 @@ def _(rid, params: dict) -> dict:
         )
 
 
+@method("run_inspector.memory_workbench")
+def _(rid, params: dict) -> dict:
+    limit, error = _run_inspector_events_limit(params)
+    if error:
+        return _err(rid, 4017, error)
+    try:
+        from hermes_cli.multi_agent_memory_workbench import (
+            build_multi_agent_memory_workbench,
+        )
+        from hermes_cli.run_inspector_events import get_recent_run_inspector_events
+
+        events = get_recent_run_inspector_events(limit=limit or 12)
+        workbench = build_multi_agent_memory_workbench(
+            Path.cwd(),
+            events=events,
+            limit=limit or 12,
+        )
+        return _ok(rid, {"ok": True, "workbench": workbench})
+    except Exception as exc:
+        from hermes_cli.multi_agent_memory_workbench import (
+            empty_multi_agent_memory_workbench,
+        )
+
+        return _ok(
+            rid,
+            {
+                "ok": False,
+                "workbench": empty_multi_agent_memory_workbench(
+                    degraded_reason=(
+                        f"memory_workbench_unavailable:{type(exc).__name__}"
+                    ),
+                ),
+            },
+        )
+
+
 def _browser_connect(rid, params: dict) -> dict:
     import platform
 

@@ -4100,6 +4100,85 @@ def test_run_inspector_events_degrades_without_leaking_errors(monkeypatch):
     assert "token=secret" not in json.dumps(payload)
 
 
+def test_run_inspector_memory_workbench_returns_safe_summary(monkeypatch):
+    calls = []
+
+    monkeypatch.setattr(
+        "hermes_cli.run_inspector_events.get_recent_run_inspector_events",
+        lambda limit=12: [{"id": 1, "type": "agent.child.running"}],
+    )
+
+    def fake_build(root, *, events, limit):
+        calls.append({"events": events, "limit": limit, "root": root})
+        return {
+            "schema_version": 1,
+            "status": "active",
+            "status_reason": "1 active child",
+            "active_work": [],
+            "memory": {
+                "status": "available",
+                "provider_count": 1,
+                "providers": [],
+                "registered_tools": [],
+                "degraded_reason": None,
+                "privacy_class": "redacted_summary",
+            },
+            "agent_assignments": {
+                "summary": {"total_count": 2},
+                "parallel_plan": {"batches": [{"task_ids": ["HMAMO-11"]}]},
+                "assignments": [],
+                "degraded_reason": None,
+                "privacy_class": "redacted_summary",
+            },
+            "degraded_reason": None,
+            "privacy_class": "redacted_summary",
+        }
+
+    monkeypatch.setattr(
+        "hermes_cli.multi_agent_memory_workbench.build_multi_agent_memory_workbench",
+        fake_build,
+    )
+
+    resp = server.handle_request(
+        {"id": "1", "method": "run_inspector.memory_workbench", "params": {"limit": 7}}
+    )
+
+    payload = resp["result"]
+    assert payload["ok"] is True
+    assert payload["workbench"]["status"] == "active"
+    assert payload["workbench"]["agent_assignments"]["summary"]["total_count"] == 2
+    assert calls[0]["events"] == [{"id": 1, "type": "agent.child.running"}]
+    assert calls[0]["limit"] == 7
+
+
+def test_run_inspector_memory_workbench_rejects_invalid_limit():
+    resp = server.handle_request(
+        {"id": "1", "method": "run_inspector.memory_workbench", "params": {"limit": 0}}
+    )
+
+    assert resp["error"]["code"] == 4017
+
+
+def test_run_inspector_memory_workbench_degrades_without_leaking_errors(monkeypatch):
+    monkeypatch.setattr(
+        "hermes_cli.multi_agent_memory_workbench.build_multi_agent_memory_workbench",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(RuntimeError("token=secret")),
+    )
+
+    resp = server.handle_request(
+        {"id": "1", "method": "run_inspector.memory_workbench", "params": {"limit": 3}}
+    )
+
+    payload = resp["result"]
+    assert payload["ok"] is False
+    assert payload["workbench"]["status"] == "unavailable"
+    assert (
+        payload["workbench"]["degraded_reason"]
+        == "memory_workbench_unavailable:RuntimeError"
+    )
+    assert "token=secret" not in json.dumps(payload)
+
+
 def _stub_urlopen(monkeypatch, *, ok: bool):
     """Patch urllib.request.urlopen used by browser.manage to short-circuit probes."""
 

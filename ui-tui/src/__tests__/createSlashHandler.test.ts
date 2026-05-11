@@ -363,6 +363,7 @@ describe('createSlashHandler', () => {
     ['/inspector-events failed', 'run_inspector.events', { limit: 12 }],
     ['/inspector-events terminal', 'run_inspector.events', { limit: 12 }],
     ['/inspector-health', 'run_inspector.status', { port: 9119 }],
+    ['/inspector-memory', 'run_inspector.memory_workbench', { limit: 12 }],
     ['/inspector-snapshot', 'run_inspector.status', { port: 9119 }],
     ['/run-inspector-attention 9222', 'run_inspector.status', { port: 9222 }],
     ['/run-inspector-desktop 9222', 'run_inspector.status', { port: 9222 }],
@@ -375,6 +376,7 @@ describe('createSlashHandler', () => {
     ['/run-inspector-events 7 completed', 'run_inspector.events', { limit: 7 }],
     ['/run-inspector-events 7 failed', 'run_inspector.events', { limit: 7 }],
     ['/run-inspector-events 7 terminal', 'run_inspector.events', { limit: 7 }],
+    ['/run-inspector-memory 7', 'run_inspector.memory_workbench', { limit: 7 }],
     ['/run-inspector 9222', 'run_inspector.status', { port: 9222 }],
     ['/reload-mcp', 'reload.mcp', { session_id: null }],
     ['/reload', 'reload.env', {}],
@@ -1354,6 +1356,223 @@ describe('createSlashHandler', () => {
     expect(ctx.transcript.sys).toHaveBeenCalledWith(
       'usage: /inspector-events [limit 1..100] [all|active|attention|approval|cancelled|completed|failed|terminal|gateway|run|tool]'
     )
+  })
+
+  it('/inspector-memory renders read-only multi-agent memory summaries', async () => {
+    const rpc = vi.fn(() =>
+      Promise.resolve({
+        ok: true,
+        workbench: {
+          status: 'active',
+          status_reason: '1 active child',
+          privacy_class: 'redacted_summary',
+          memory: {
+            status: 'available',
+            provider_count: 1,
+            providers: [],
+            registered_tools: ['safe-search'],
+            degraded_reason: null,
+            privacy_class: 'redacted_summary'
+          },
+          runtime_persistence: {
+            status: 'disabled',
+            enabled_count: 0,
+            degraded_reason: null,
+            privacy_class: 'redacted_summary'
+          },
+          agent_assignments: {
+            summary: {
+              total_count: 3,
+              active_count: 1,
+              completed_count: 1,
+              failed_count: 0,
+              blocked_count: 0,
+              ready_task_ids: ['HMAMO-11'],
+              dependency_waiting_task_ids: ['HMAMO-12'],
+              blocked_task_ids: [],
+              role_counts: { worker: 2 },
+              status_counts: { running: 1 },
+              conflicts: [],
+              degraded_reason: null,
+              privacy_class: 'redacted_summary'
+            },
+            parallel_plan: {
+              status: 'ready',
+              max_parallel_workers: 2,
+              batches: [{ index: 1, task_ids: ['HMAMO-11'], roles: { worker: 1 }, privacy_class: 'redacted_summary' }],
+              active_task_ids: ['HMAMO-10'],
+              waiting_task_ids: ['HMAMO-12'],
+              blocked_task_ids: [],
+              conflict_task_ids: [],
+              conflicts: [],
+              degraded_reason: null,
+              privacy_class: 'redacted_summary'
+            },
+            assignments: [
+              {
+                task_id: 'HMAMO-11',
+                title: 'TUI memory workbench',
+                role: 'worker',
+                status: 'ready',
+                dependencies: { task_ids: ['HMAMO-10'] },
+                write_scope: {
+                  files: ['redacted_file'],
+                  directories: ['redacted_dir'],
+                  shared_contracts: []
+                },
+                privacy_class: 'redacted_summary'
+              }
+            ],
+            degraded_reason: null,
+            privacy_class: 'redacted_summary'
+          },
+          degraded_reason: null
+        }
+      })
+    )
+    const ctx = buildCtx({ gateway: { ...buildGateway(), rpc } })
+
+    expect(createSlashHandler(ctx)('/inspector-memory 7')).toBe(true)
+
+    expect(rpc).toHaveBeenCalledWith('run_inspector.memory_workbench', { limit: 7 })
+    expect(ctx.gateway.gw.request).not.toHaveBeenCalled()
+    await vi.waitFor(() => {
+      expect(ctx.transcript.panel).toHaveBeenCalledWith(
+        'Run Inspector Memory',
+        expect.arrayContaining([
+          expect.objectContaining({
+            rows: expect.arrayContaining([
+              ['Workbench', 'active / 1 active child'],
+              ['Assignments', '3 total / 1 active / 1 ready'],
+              ['Plan', '1 planned / 1 batches / 2 max'],
+              ['Waiting', '1 waiting / 0 blocked'],
+              ['Conflicts', '0 scoped / 0 pairs'],
+              ['Memory', 'available / 1 providers'],
+              ['Persistence', 'disabled / 0 enabled'],
+              ['Privacy', 'redacted_summary']
+            ]),
+            title: 'Summary'
+          }),
+          expect.objectContaining({
+            rows: expect.arrayContaining([
+              ['HMAMO-11', 'role=worker / status=ready / deps=1 / scope=1 files/1 dirs']
+            ]),
+            title: 'Assignments'
+          }),
+          expect.objectContaining({
+            rows: expect.arrayContaining([
+              ['Batch 1', 'HMAMO-11'],
+              ['Active', 'HMAMO-10'],
+              ['Waiting', 'HMAMO-12'],
+              ['Blocked', 'none'],
+              ['Sequenced', 'none']
+            ]),
+            title: 'Parallel Plan'
+          })
+        ])
+      )
+    })
+  })
+
+  it('/inspector-memory renders degraded workbench state without mutating through slash worker', async () => {
+    const rpc = vi.fn(() =>
+      Promise.resolve({
+        ok: false,
+        workbench: {
+          status: 'unavailable',
+          status_reason: 'Workbench unavailable',
+          degraded_reason: 'memory_workbench_unavailable:RuntimeError',
+          privacy_class: 'redacted_summary',
+          memory: {
+            status: 'unavailable',
+            provider_count: 0,
+            providers: [],
+            registered_tools: [],
+            degraded_reason: 'memory_workbench_unavailable:RuntimeError',
+            privacy_class: 'redacted_summary'
+          },
+          runtime_persistence: {
+            status: 'disabled',
+            enabled_count: 0,
+            degraded_reason: null,
+            privacy_class: 'redacted_summary'
+          },
+          agent_assignments: {
+            summary: {
+              total_count: 0,
+              active_count: 0,
+              completed_count: 0,
+              failed_count: 0,
+              blocked_count: 0,
+              ready_task_ids: [],
+              dependency_waiting_task_ids: [],
+              blocked_task_ids: [],
+              role_counts: {},
+              status_counts: {},
+              conflicts: [],
+              degraded_reason: 'memory_workbench_unavailable:RuntimeError',
+              privacy_class: 'redacted_summary'
+            },
+            parallel_plan: {
+              status: 'unavailable',
+              max_parallel_workers: 0,
+              batches: [],
+              active_task_ids: [],
+              waiting_task_ids: [],
+              blocked_task_ids: [],
+              conflict_task_ids: [],
+              conflicts: [],
+              degraded_reason: 'memory_workbench_unavailable:RuntimeError',
+              privacy_class: 'redacted_summary'
+            },
+            assignments: [],
+            degraded_reason: 'memory_workbench_unavailable:RuntimeError',
+            privacy_class: 'redacted_summary'
+          }
+        }
+      })
+    )
+    const ctx = buildCtx({ gateway: { ...buildGateway(), rpc } })
+
+    expect(createSlashHandler(ctx)('/inspector-memory')).toBe(true)
+
+    expect(rpc).toHaveBeenCalledWith('run_inspector.memory_workbench', { limit: 12 })
+    expect(ctx.gateway.gw.request).not.toHaveBeenCalled()
+    await vi.waitFor(() => {
+      expect(ctx.transcript.panel).toHaveBeenCalledWith(
+        'Run Inspector Memory',
+        expect.arrayContaining([
+          expect.objectContaining({
+            rows: expect.arrayContaining([
+              ['Workbench', 'unavailable / Workbench unavailable'],
+              ['Degraded', 'memory_workbench_unavailable:RuntimeError']
+            ]),
+            title: 'Summary degraded'
+          }),
+          expect.objectContaining({
+            rows: expect.arrayContaining([['Assignments', 'none']]),
+            title: 'Assignments'
+          }),
+          expect.objectContaining({
+            rows: expect.arrayContaining([
+              ['Active', 'none'],
+              ['Plan degraded', 'memory_workbench_unavailable:RuntimeError']
+            ]),
+            title: 'Parallel Plan'
+          })
+        ])
+      )
+    })
+  })
+
+  it('/inspector-memory rejects invalid limits before hitting the gateway', () => {
+    const rpc = vi.fn(() => Promise.resolve({}))
+    const ctx = buildCtx({ gateway: { ...buildGateway(), rpc } })
+
+    expect(createSlashHandler(ctx)('/inspector-memory 0')).toBe(true)
+    expect(rpc).not.toHaveBeenCalled()
+    expect(ctx.gateway.gw.request).not.toHaveBeenCalled()
+    expect(ctx.transcript.sys).toHaveBeenCalledWith('usage: /inspector-memory [limit 1..100]')
   })
 
   it('routes /rollback through native RPC when a session is active', () => {

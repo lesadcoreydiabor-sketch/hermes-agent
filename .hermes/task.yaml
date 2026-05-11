@@ -1466,6 +1466,28 @@ tasks:
     status: completed
     risk: low
 
+  - id: HMAMO-11
+    title: Add TUI memory workbench parity
+    description: Expose the read-only Multi-Agent Memory workbench through the TUI Gateway and slash command surface.
+    depends_on:
+      - HMAMO-07
+      - HMAMO-09
+      - HMAMO-10
+    acceptance:
+      - Gateway exposes run_inspector.memory_workbench as a read-only RPC backed by existing safe workbench summaries.
+      - TUI adds /inspector-memory and /run-inspector-memory aliases with bounded limit parsing.
+      - TUI panel shows workbench, assignment, and parallel-plan counts without raw prompts, logs, tool args, memory payloads, absolute paths, diffs, or secrets.
+      - Gateway and TUI degraded states return safe reason classes and do not leak raw exception text.
+      - Slice does not spawn agents, dispatch tools, start or stop runs, write ledgers, mutate memory, edit skills, edit config, or mutate task ownership.
+    verify:
+      - venv/Scripts/python.exe -m pytest tests/test_tui_gateway_server.py -q -o addopts=
+      - cd ui-tui; npm.cmd test -- createSlashHandler.test.ts
+      - cd ui-tui; npm.cmd run type-check
+      - venv/Scripts/python.exe -c "import yaml; yaml.safe_load(open('.hermes/task.yaml', encoding='utf-8'))"
+      - git diff --check -- tui_gateway/server.py tests/test_tui_gateway_server.py ui-tui/src/gatewayTypes.ts ui-tui/src/app/slash/commands/ops.ts ui-tui/src/__tests__/createSlashHandler.test.ts .hermes/task.yaml
+    status: completed
+    risk: medium
+
 risk_flags:
   destructive_file_change:
     pause: true
@@ -2402,6 +2424,18 @@ progress_report:
       verification_result: "passed: venv/Scripts/python.exe -m pytest tests/runtime/test_multi_agent_memory_workbench.py tests/runtime/test_agent_task_assignment.py tests/hermes_cli/test_run_inspector_api.py -q -o addopts= (33 passed); passed: venv/Scripts/python.exe -m pytest tests/web/test_run_inspector_status_policy.py -q -o addopts= (27 passed); passed: venv/Scripts/python.exe -c yaml.safe_load task.yaml; passed: git diff --check for HMAMO-10 files"
       blockers: []
       next_step: "Review whether assignment plan summaries need TUI parity after current unrelated TUI changes settle."
+    - task_id: HMAMO-11
+      status: completed
+      changed_files:
+        - tui_gateway/server.py
+        - tests/test_tui_gateway_server.py
+        - ui-tui/src/gatewayTypes.ts
+        - ui-tui/src/app/slash/commands/ops.ts
+        - ui-tui/src/__tests__/createSlashHandler.test.ts
+        - .hermes/task.yaml
+      verification_result: "passed: venv/Scripts/python.exe -m pytest tests/test_tui_gateway_server.py -q -o addopts= (187 passed); passed: cd ui-tui; npm.cmd test -- createSlashHandler.test.ts (100 passed); passed: cd ui-tui; npm.cmd run type-check; passed: cd ui-tui; npm.cmd run build; passed: venv/Scripts/python.exe -c yaml.safe_load task.yaml; passed: git diff --check for HMAMO-11 files"
+      blockers: []
+      next_step: "Add operator coverage for handoff protocol and conflict-policy surfaces, or begin real orchestration ledger integration."
 
 failure_review:
   enabled: true
