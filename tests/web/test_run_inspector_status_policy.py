@@ -1367,7 +1367,23 @@ def test_run_inspector_memory_workbench_describes_all_states() -> None:
                 blocked_tasks: [],
                 next_step: "No next step recorded.",
               },
-              action_ledger: { entries: [], degraded_reason: null },
+              action_ledger: {
+                entries: [],
+                recovery_gates: {
+                  status: "empty",
+                  completed_count: 0,
+                  blocked_count: 0,
+                  monitoring_count: 0,
+                  verification_task_ids: [],
+                  blocked_task_ids: [],
+                  monitoring_task_ids: [],
+                  next_steps: [],
+                  blockers: [],
+                  degraded_reason: null,
+                  privacy_class: "redacted_summary",
+                },
+                degraded_reason: null,
+              },
               long_term_queue: { entries: [], unresolved_count: 0, degraded_reason: null },
               skills_journal: { entries: [], degraded_reason: null },
               degraded_reason: null,
@@ -1522,6 +1538,31 @@ def test_run_inspector_memory_workbench_describes_all_states() -> None:
                   },
                 },
               }).label,
+              recoveryQuiet: workbench.describeDelegateRecoveryGateState(base).label,
+              recoveryBlocked: workbench.describeDelegateRecoveryGateState({
+                ...base,
+                action_ledger: {
+                  ...base.action_ledger,
+                  recovery_gates: {
+                    ...base.action_ledger.recovery_gates,
+                    status: "blocked",
+                    completed_count: 1,
+                    blocked_count: 2,
+                  },
+                },
+              }).message,
+              recoveryActive: workbench.describeDelegateRecoveryGateState({
+                ...base,
+                action_ledger: {
+                  ...base.action_ledger,
+                  recovery_gates: {
+                    ...base.action_ledger.recovery_gates,
+                    status: "monitoring",
+                    monitoring_count: 3,
+                  },
+                },
+              }).tone,
+              recoveryMissing: workbench.describeDelegateRecoveryGateState(null).tone,
               handoffMissing: workbench.describeHandoffProtocolState(null).tone,
               planMissing: workbench.describeParallelAssignmentPlanState(null).tone,
               persistenceMissing: workbench.describeRuntimePersistenceState(null).tone,
@@ -1553,6 +1594,10 @@ def test_run_inspector_memory_workbench_describes_all_states() -> None:
     assert payload["handoffVerify"] == "warning"
     assert payload["handoffBlocked"] == "1 blocked / 1 human"
     assert payload["handoffDegraded"] == "Handoff degraded"
+    assert payload["recoveryQuiet"] == "Recovery quiet"
+    assert payload["recoveryBlocked"] == "2 blocked / 1 completed"
+    assert payload["recoveryActive"] == "primary"
+    assert payload["recoveryMissing"] == "muted"
     assert payload["handoffMissing"] == "muted"
     assert payload["planMissing"] == "muted"
     assert payload["persistenceMissing"] == "muted"
@@ -1578,8 +1623,10 @@ def test_run_inspector_memory_workbench_uses_readonly_api() -> None:
     assert "describeAgentAssignmentState" in page_source
     assert "describeHandoffProtocolState" in page_source
     assert "describeParallelAssignmentPlanState" in page_source
+    assert "describeDelegateRecoveryGateState" in page_source
     assert 'label="Persistence"' in page_source
     assert 'label="Assignments"' in page_source
+    assert 'label="Recovery"' in page_source
     assert 'label="Handoff"' in page_source
     assert 'label="Plan"' in page_source
     assert "parallelPlan?.batches.length" in page_source
@@ -1588,6 +1635,7 @@ def test_run_inspector_memory_workbench_uses_readonly_api() -> None:
     assert "agent_assignments" in api_source
     assert "handoff_protocol" in api_source
     assert "parallel_plan" in api_source
+    assert "recovery_gates" in api_source
     assert "describeRuntimePersistenceState" in (
         ROOT / "web" / "src" / "pages" / "runInspectorMemoryWorkbench.ts"
     ).read_text(encoding="utf-8")
@@ -1598,6 +1646,9 @@ def test_run_inspector_memory_workbench_uses_readonly_api() -> None:
         ROOT / "web" / "src" / "pages" / "runInspectorMemoryWorkbench.ts"
     ).read_text(encoding="utf-8")
     assert "describeParallelAssignmentPlanState" in (
+        ROOT / "web" / "src" / "pages" / "runInspectorMemoryWorkbench.ts"
+    ).read_text(encoding="utf-8")
+    assert "describeDelegateRecoveryGateState" in (
         ROOT / "web" / "src" / "pages" / "runInspectorMemoryWorkbench.ts"
     ).read_text(encoding="utf-8")
     assert "/api/run-inspector/memory-workbench?limit=" in api_source

@@ -269,3 +269,49 @@ export function describeHandoffProtocolState(
     tone: "muted",
   };
 }
+
+export function describeDelegateRecoveryGateState(
+  workbench: RunInspectorMemoryWorkbench | null,
+): MemoryWorkbenchDisplay {
+  const gates = workbench?.action_ledger?.recovery_gates ?? null;
+  if (!gates) {
+    return {
+      label: "Recovery unknown",
+      message: "No recovery summary",
+      tone: "muted",
+    };
+  }
+  if (gates.degraded_reason) {
+    return {
+      label: "Recovery degraded",
+      message: gates.degraded_reason,
+      tone: "warning",
+    };
+  }
+  if (gates.blocked_count > 0) {
+    return {
+      label: "Recovery blocked",
+      message: `${gates.blocked_count} blocked / ${gates.completed_count} completed`,
+      tone: "destructive",
+    };
+  }
+  if (gates.monitoring_count > 0) {
+    return {
+      label: "Recovery active",
+      message: `${gates.monitoring_count} monitoring`,
+      tone: "primary",
+    };
+  }
+  if (gates.completed_count > 0) {
+    return {
+      label: "Recovery ready",
+      message: `${gates.completed_count} completed`,
+      tone: "success",
+    };
+  }
+  return {
+    label: "Recovery quiet",
+    message: "No delegate recovery gates",
+    tone: "muted",
+  };
+}

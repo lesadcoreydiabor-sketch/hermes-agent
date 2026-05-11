@@ -1380,6 +1380,22 @@ describe('createSlashHandler', () => {
             degraded_reason: null,
             privacy_class: 'redacted_summary'
           },
+          action_ledger: {
+            degraded_reason: null,
+            recovery_gates: {
+              status: 'blocked',
+              completed_count: 1,
+              blocked_count: 1,
+              monitoring_count: 1,
+              verification_task_ids: ['HMAMO-10'],
+              blocked_task_ids: ['HMAMO-12'],
+              monitoring_task_ids: ['HMAMO-11'],
+              next_steps: ['Review delegate failure and decide retry, reassignment, or handoff.'],
+              blockers: ['delegate child failed'],
+              degraded_reason: null,
+              privacy_class: 'redacted_summary'
+            }
+          },
           agent_assignments: {
             summary: {
               total_count: 3,
@@ -1461,6 +1477,7 @@ describe('createSlashHandler', () => {
               ['Waiting', '1 waiting / 0 blocked'],
               ['Conflicts', '0 scoped / 0 pairs'],
               ['Handoff', '1 ready / 0 verify / 1 review'],
+              ['Recovery', '1 completed / 1 blocked / 1 monitoring'],
               ['Memory', 'available / 1 providers'],
               ['Persistence', 'disabled / 0 enabled'],
               ['Privacy', 'redacted_summary']
@@ -1492,6 +1509,17 @@ describe('createSlashHandler', () => {
               ['Conflicts', 'none']
             ]),
             title: 'Handoff'
+          }),
+          expect.objectContaining({
+            rows: expect.arrayContaining([
+              ['Status', 'blocked'],
+              ['Verified', 'HMAMO-10'],
+              ['Blocked', 'HMAMO-12'],
+              ['Monitoring', 'HMAMO-11'],
+              ['Next', 'Review delegate failure and decide retry, reassignment, or handoff.'],
+              ['Blockers', 'delegate child failed']
+            ]),
+            title: 'Recovery'
           })
         ])
       )

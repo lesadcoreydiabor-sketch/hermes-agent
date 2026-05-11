@@ -549,8 +549,26 @@ export interface RunInspectorAssignmentWorkbenchSummary {
   summary?: RunInspectorAssignmentSummary
 }
 
+export interface RunInspectorRecoveryGates {
+  blocked_count?: number
+  blocked_task_ids?: string[]
+  blockers?: string[]
+  completed_count?: number
+  degraded_reason?: null | string
+  monitoring_count?: number
+  monitoring_task_ids?: string[]
+  next_steps?: string[]
+  privacy_class?: string
+  status?: string
+  verification_task_ids?: string[]
+}
+
 export interface RunInspectorMemoryWorkbench {
   active_work?: unknown[]
+  action_ledger?: {
+    degraded_reason?: null | string
+    recovery_gates?: RunInspectorRecoveryGates
+  }
   agent_assignments?: RunInspectorAssignmentWorkbenchSummary
   checkpoint?: {
     blocked_tasks?: unknown[]

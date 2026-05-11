@@ -445,6 +445,7 @@ const renderRunInspectorMemoryWorkbenchSummary = (
   const summary = assignments?.summary
   const plan = assignments?.parallel_plan
   const handoff = assignments?.handoff_protocol
+  const recovery = workbench?.action_ledger?.recovery_gates
   const plannedTasks = plannedInspectorTaskCount(plan)
   const rows: [string, string][] = [
     [
@@ -485,6 +486,12 @@ const renderRunInspectorMemoryWorkbenchSummary = (
         : 'unknown'
     ],
     [
+      'Recovery',
+      recovery
+        ? `${recovery.completed_count ?? 0} completed / ${recovery.blocked_count ?? 0} blocked / ${recovery.monitoring_count ?? 0} monitoring`
+        : 'unknown'
+    ],
+    [
       'Memory',
       `${workbench?.memory?.status ?? 'unknown'} / ${workbench?.memory?.provider_count ?? 0} providers`
     ],
@@ -500,6 +507,7 @@ const renderRunInspectorMemoryWorkbenchSummary = (
     summary?.degraded_reason ||
     plan?.degraded_reason ||
     handoff?.degraded_reason ||
+    recovery?.degraded_reason ||
     workbench?.memory?.degraded_reason ||
     workbench?.runtime_persistence?.degraded_reason
   if (degraded) {
@@ -507,6 +515,28 @@ const renderRunInspectorMemoryWorkbenchSummary = (
   }
   if (workbench?.privacy_class) {
     rows.push(['Privacy', clipInspectorText(workbench.privacy_class, '', 48)])
+  }
+  return rows
+}
+
+const renderRunInspectorRecoveryRows = (
+  workbench?: null | RunInspectorMemoryWorkbench
+): [string, string][] => {
+  const recovery = workbench?.action_ledger?.recovery_gates
+  if (!recovery) {
+    return [['Recovery', 'none']]
+  }
+
+  const rows: [string, string][] = [
+    ['Status', clipInspectorText(recovery.status, 'unknown', 48)],
+    ['Verified', renderInspectorTaskIds(recovery.verification_task_ids)],
+    ['Blocked', renderInspectorTaskIds(recovery.blocked_task_ids)],
+    ['Monitoring', renderInspectorTaskIds(recovery.monitoring_task_ids)],
+    ['Next', clipInspectorText(recovery.next_steps?.[0], 'none', 96)],
+    ['Blockers', clipInspectorText(recovery.blockers?.[0], 'none', 96)]
+  ]
+  if (recovery.degraded_reason) {
+    rows.push(['Recovery degraded', clipInspectorText(recovery.degraded_reason)])
   }
   return rows
 }
@@ -1035,6 +1065,10 @@ export const opsCommands: SlashCommand[] = [
               {
                 rows: renderRunInspectorHandoffRows(r?.workbench),
                 title: 'Handoff'
+              },
+              {
+                rows: renderRunInspectorRecoveryRows(r?.workbench),
+                title: 'Recovery'
               },
               {
                 text: 'read-only memory workbench; no agent spawn, tool dispatch, memory write, skill edit, config edit, or task mutation'

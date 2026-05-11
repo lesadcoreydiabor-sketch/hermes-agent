@@ -1570,6 +1570,29 @@ tasks:
     status: completed
     risk: medium
 
+  - id: HMAMO-16
+    title: Render delegate recovery gates in operator workbenches
+    description: Surface action ledger recovery gate summaries in Run Inspector and TUI memory workbench views without adding mutation controls.
+    depends_on:
+      - HMAMO-14
+      - HMAMO-15
+    acceptance:
+      - Run Inspector Multi-Agent Memory card shows a compact Recovery signal and bounded safe recovery detail rows.
+      - TUI /inspector-memory summary and Recovery panel show completed, blocked, monitoring, verified, next-step, and blocker summaries.
+      - UI and TUI do not render raw child output, prompts, logs, tool args, diffs, secrets, absolute paths, or file contents.
+      - Slice does not add start, stop, spawn, approve, write memory, edit skill, edit config, or task mutation controls.
+      - Narrow and compact layouts preserve bounded text handling and existing workbench behavior.
+    verify:
+      - venv/Scripts/python.exe -m pytest tests/web/test_run_inspector_status_policy.py -q -o addopts=
+      - cd ui-tui; npm.cmd test -- createSlashHandler.test.ts
+      - cd ui-tui; npm.cmd run type-check
+      - cd ui-tui; npm.cmd run build
+      - cd web; npm.cmd run build
+      - venv/Scripts/python.exe -c "import yaml; yaml.safe_load(open('.hermes/task.yaml', encoding='utf-8'))"
+      - git diff --check -- web/src/pages/runInspectorMemoryWorkbench.ts web/src/pages/RunInspectorPage.tsx tests/web/test_run_inspector_status_policy.py ui-tui/src/gatewayTypes.ts ui-tui/src/app/slash/commands/ops.ts ui-tui/src/__tests__/createSlashHandler.test.ts .hermes/task.yaml
+    status: completed
+    risk: medium
+
 risk_flags:
   destructive_file_change:
     pause: true
@@ -2563,6 +2586,19 @@ progress_report:
       verification_result: "passed: venv/Scripts/python.exe -m pytest tests/runtime/test_multi_agent_memory_workbench.py tests/hermes_cli/test_run_inspector_api.py -q -o addopts= (22 passed); passed: cd web; npm.cmd run build; passed: venv/Scripts/python.exe -c yaml.safe_load task.yaml"
       blockers: []
       next_step: "Render delegate recovery gates in Run Inspector and TUI memory workbench views."
+    - task_id: HMAMO-16
+      status: completed
+      changed_files:
+        - web/src/pages/runInspectorMemoryWorkbench.ts
+        - web/src/pages/RunInspectorPage.tsx
+        - tests/web/test_run_inspector_status_policy.py
+        - ui-tui/src/gatewayTypes.ts
+        - ui-tui/src/app/slash/commands/ops.ts
+        - ui-tui/src/__tests__/createSlashHandler.test.ts
+        - .hermes/task.yaml
+      verification_result: "passed: venv/Scripts/python.exe -m pytest tests/web/test_run_inspector_status_policy.py -q -o addopts= (27 passed); passed: cd ui-tui; npm.cmd test -- createSlashHandler.test.ts (100 passed); passed: cd ui-tui; npm.cmd run type-check; passed: cd ui-tui; npm.cmd run build; passed: cd web; npm.cmd run build"
+      blockers: []
+      next_step: "Continue HERMES Multi-Agent Memory orchestration integration after reviewing recovery gate UI smoke needs."
 
 failure_review:
   enabled: true

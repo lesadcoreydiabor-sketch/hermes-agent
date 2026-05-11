@@ -90,6 +90,7 @@ import {
 } from "@/pages/runInspectorDesktopStatus";
 import {
   describeAgentAssignmentState,
+  describeDelegateRecoveryGateState,
   describeHandoffProtocolState,
   describeMemoryWorkbenchState,
   describeParallelAssignmentPlanState,
@@ -693,8 +694,10 @@ function MultiAgentMemoryWorkbenchCard({
   const assignmentSummary = workbench?.agent_assignments?.summary ?? null;
   const handoffProtocol = workbench?.agent_assignments?.handoff_protocol ?? null;
   const parallelPlan = workbench?.agent_assignments?.parallel_plan ?? null;
+  const recoveryGates = workbench?.action_ledger?.recovery_gates ?? null;
   const runtimePersistenceDisplay = describeRuntimePersistenceState(workbench);
   const assignmentDisplay = describeAgentAssignmentState(workbench);
+  const recoveryDisplay = describeDelegateRecoveryGateState(workbench);
   const handoffDisplay = describeHandoffProtocolState(workbench);
   const parallelPlanDisplay = describeParallelAssignmentPlanState(workbench);
   const runtimePersistenceFlags = runtimePersistence?.flags ?? [];
@@ -740,7 +743,7 @@ function MultiAgentMemoryWorkbenchCard({
           </div>
         ) : null}
 
-        <div className="grid min-w-0 gap-2 sm:grid-cols-2 xl:grid-cols-8">
+        <div className="grid min-w-0 gap-2 sm:grid-cols-2 xl:grid-cols-9">
           <Metric
             icon={<Activity className="h-4 w-4" />}
             label="Work"
@@ -775,6 +778,12 @@ function MultiAgentMemoryWorkbenchCard({
             label="Assignments"
             tone={assignmentDisplay.tone}
             value={assignmentDisplay.label}
+          />
+          <Metric
+            icon={<AlertTriangle className="h-4 w-4" />}
+            label="Recovery"
+            tone={recoveryDisplay.tone}
+            value={recoveryDisplay.label}
           />
           <Metric
             icon={<Handshake className="h-4 w-4" />}
@@ -840,6 +849,30 @@ function MultiAgentMemoryWorkbenchCard({
                 )}
               />
             </div>
+          </div>
+        ) : null}
+
+        {recoveryGates ? (
+          <div className="flex min-w-0 flex-col divide-y divide-border/70 border border-border">
+            <DetailRow
+              label="Recovery"
+              value={`${recoveryGates.completed_count} completed / ${recoveryGates.blocked_count} blocked / ${recoveryGates.monitoring_count} monitoring`}
+            />
+            <DetailRow
+              label="Verified"
+              value={formatDisplayValue(
+                recoveryGates.verification_task_ids[0],
+                "None",
+              )}
+            />
+            <DetailRow
+              label="Blocked"
+              value={formatDisplayValue(recoveryGates.blocked_task_ids[0], "None")}
+            />
+            <DetailRow
+              label="Next"
+              value={formatDisplayValue(recoveryGates.next_steps[0], "No next step")}
+            />
           </div>
         ) : null}
 
