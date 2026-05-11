@@ -352,6 +352,89 @@ class TestMemoryManager:
         assert p1._init_kwargs["session_id"] == "test-123"
         assert p1._init_kwargs["platform"] == "cli"
 
+    def test_diagnostics_reports_safe_provider_lifecycle(self):
+        mgr = MemoryManager()
+        p1 = FakeMemoryProvider("builtin", tools=[
+            {"name": "builtin_recall", "description": "Recall", "parameters": {}}
+        ])
+        p2 = FakeMemoryProvider("external", tools=[
+            {"name": "external_remember", "description": "Remember", "parameters": {}}
+        ])
+        p1._prefetch_result = "private builtin memory"
+        p2._prefetch_result = "private external memory"
+        mgr.add_provider(p1)
+        mgr.add_provider(p2)
+
+        mgr.initialize_all(session_id="test-123", platform="cli")
+        mgr.prefetch_all("private user query", session_id="test-123")
+        mgr.sync_all("private user", "private assistant", session_id="test-123")
+
+        diagnostics = mgr.get_diagnostics()
+
+        assert diagnostics["schema_version"] == 1
+        assert diagnostics["provider_count"] == 2
+        assert diagnostics["has_external_provider"] is True
+        assert diagnostics["degraded_reason"] is None
+        assert diagnostics["privacy_class"] == "redacted_summary"
+
+        by_name = {provider["name"]: provider for provider in diagnostics["providers"]}
+        assert by_name["builtin"]["availability"] == "available"
+        assert by_name["builtin"]["initialized"] is True
+        assert by_name["builtin"]["tool_names"] == ["builtin_recall"]
+        assert by_name["builtin"]["lifecycle"]["initialize"]["status"] == "ok"
+        assert by_name["builtin"]["lifecycle"]["prefetch"]["status"] == "ok"
+        assert by_name["builtin"]["lifecycle"]["sync_turn"]["status"] == "ok"
+        assert by_name["external"]["tool_names"] == ["external_remember"]
+
+        rendered = json.dumps(diagnostics)
+        assert "private builtin memory" not in rendered
+        assert "private external memory" not in rendered
+        assert "private user query" not in rendered
+        assert "private assistant" not in rendered
+
+    def test_diagnostics_degrades_when_availability_fails_without_leaking(self):
+        mgr = MemoryManager()
+        p = FakeMemoryProvider(
+            "token=secret-provider",
+            tools=[{"name": "ghp_1234567890", "description": "Secret", "parameters": {}}],
+        )
+        p.is_available = MagicMock(side_effect=RuntimeError("api_key=leaked"))
+        p.sync_turn = MagicMock(side_effect=RuntimeError("password=leaked"))
+        mgr.add_provider(p)
+
+        mgr.sync_all("user content", "assistant content")
+        diagnostics = mgr.get_diagnostics()
+
+        provider = diagnostics["providers"][0]
+        assert diagnostics["degraded_reason"] == "provider_diagnostics_degraded"
+        assert provider["name"] == "Redacted"
+        assert provider["availability"] == "unknown"
+        assert provider["tool_names"] == ["Redacted"]
+        assert provider["lifecycle"]["sync_turn"]["status"] == "failed"
+        assert provider["lifecycle"]["sync_turn"]["error_type"] == "RuntimeError"
+        assert provider["lifecycle"]["availability"]["status"] == "failed"
+
+        rendered = json.dumps(diagnostics)
+        assert "api_key=leaked" not in rendered
+        assert "password=leaked" not in rendered
+        assert "user content" not in rendered
+        assert "assistant content" not in rendered
+
+    def test_diagnostics_does_not_call_memory_content_apis(self):
+        mgr = MemoryManager()
+        p = FakeMemoryProvider("external")
+        p.prefetch = MagicMock(return_value="memory payload")
+        p.system_prompt_block = MagicMock(return_value="prompt payload")
+        p.handle_tool_call = MagicMock(return_value='{"payload": true}')
+        mgr.add_provider(p)
+
+        diagnostics = mgr.get_diagnostics()
+
+        assert diagnostics["providers"][0]["name"] == "external"
+        p.prefetch.assert_not_called()
+        p.system_prompt_block.assert_not_called()
+        p.handle_tool_call.assert_not_called()
+
     # -- Error resilience ---------------------------------------------------
 
     def test_prefetch_failure_doesnt_block(self):

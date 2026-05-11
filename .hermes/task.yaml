@@ -924,7 +924,7 @@ tasks:
       - Memory provider failures return degraded diagnostics instead of blocking the agent.
     verify:
       - venv/Scripts/python.exe -m pytest tests/agent/test_memory_provider.py tests/run_agent/test_memory_sync_interrupted.py -q -o addopts=
-    status: pending
+    status: completed
     risk: medium
 
   - id: HMAM-05
@@ -1703,6 +1703,15 @@ progress_report:
       verification_result: "passed: venv/Scripts/python.exe -m pytest tests/tools/test_delegate.py tests/runtime/test_multi_agent_work_events.py -q -o addopts= (136 passed); passed: venv/Scripts/python.exe -m pytest tests/agent/test_subagent_stop_hook.py -q -o addopts= (7 passed); passed: git diff --check for HMAM-03 files; GitNexus pre-change impact for delegate_task was CRITICAL, reviewed and covered with delegate/subagent stop regressions; passed: GitNexus detect_changes staged risk low with no affected processes"
       blockers: []
       next_step: "Implement HMAM-04 memory lifecycle diagnostics after delegate lifecycle mirroring is verified and pushed."
+    - task_id: HMAM-04
+      status: completed
+      changed_files:
+        - agent/memory_manager.py
+        - tests/agent/test_memory_provider.py
+        - .hermes/task.yaml
+      verification_result: "passed: venv/Scripts/python.exe -m pytest tests/agent/test_memory_provider.py tests/run_agent/test_memory_sync_interrupted.py -q -o addopts= (81 passed); GitNexus MemoryManager upstream impact MEDIUM and reviewed as additive read-only diagnostics with no provider content exposure"
+      blockers: []
+      next_step: "Implement HMAM-05 local action_ledger schema and append helper with strict redaction before wiring runtime writes."
 
 failure_review:
   enabled: true

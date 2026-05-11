@@ -28,12 +28,27 @@ from __future__ import annotations
 import logging
 import re
 import inspect
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 from agent.memory_provider import MemoryProvider
 from tools.registry import tool_error
 
 logger = logging.getLogger(__name__)
+
+MEMORY_DIAGNOSTICS_SCHEMA_VERSION = 1
+MEMORY_DIAGNOSTICS_PRIVACY_CLASS = "redacted_summary"
+_DIAGNOSTIC_TEXT_LIMIT = 96
+_DIAGNOSTIC_SECRET_RE = re.compile(
+    r"\b(?:api[_-]?key|token|secret|password|credential)\s*[:=]\s*[^,\s;]+"
+    r"|\b(?:sk|gh[pousr])[-_][A-Za-z0-9_-]{8,}",
+    re.IGNORECASE,
+)
+_DIAGNOSTIC_PATH_RE = re.compile(
+    r"(?:[A-Za-z]:\\[^\s]+)|(?:/(?:Users|home|tmp|var|etc|mnt|workspace)/[^\s]+)",
+    re.IGNORECASE,
+)
+_DIAGNOSTIC_LABEL_RE = re.compile(r"[^A-Za-z0-9_.:/ -]+")
 
 
 # ---------------------------------------------------------------------------
@@ -198,6 +213,8 @@ class MemoryManager:
         self._providers: List[MemoryProvider] = []
         self._tool_to_provider: Dict[str, MemoryProvider] = {}
         self._has_external: bool = False  # True once a non-builtin provider is added
+        self._provider_lifecycle: Dict[int, Dict[str, Dict[str, Any]]] = {}
+        self._provider_last_lifecycle: Dict[int, Dict[str, Any]] = {}
 
     # -- Registration --------------------------------------------------------
 
@@ -246,6 +263,7 @@ class MemoryManager:
             provider.name,
             len(provider.get_tool_schemas()),
         )
+        self._record_lifecycle(provider, "registered", "ok")
 
     @property
     def providers(self) -> List[MemoryProvider]:
@@ -258,6 +276,110 @@ class MemoryManager:
             if p.name == name:
                 return p
         return None
+
+    # -- Diagnostics ---------------------------------------------------------
+
+    def get_diagnostics(self) -> Dict[str, Any]:
+        """Return a privacy-safe, read-only memory lifecycle summary.
+
+        This method does not call recall, sync, tool handlers, or provider
+        payload APIs. It only reports provider identity, availability, indexed
+        tool names, and lifecycle status recorded by this manager.
+        """
+        providers = []
+        degraded = False
+        for provider in self._providers:
+            provider_diag, provider_degraded = self._provider_diagnostics(provider)
+            providers.append(provider_diag)
+            degraded = degraded or provider_degraded
+
+        return {
+            "schema_version": MEMORY_DIAGNOSTICS_SCHEMA_VERSION,
+            "provider_count": len(providers),
+            "has_external_provider": self._has_external,
+            "providers": providers,
+            "degraded_reason": (
+                "provider_diagnostics_degraded" if degraded else None
+            ),
+            "privacy_class": MEMORY_DIAGNOSTICS_PRIVACY_CLASS,
+        }
+
+    diagnostics = get_diagnostics
+
+    def _provider_diagnostics(self, provider: MemoryProvider) -> tuple[Dict[str, Any], bool]:
+        degraded = False
+        provider_id = id(provider)
+        name = self._safe_provider_name(provider)
+        availability = "unknown"
+        try:
+            availability = "available" if provider.is_available() else "unavailable"
+        except Exception as exc:
+            degraded = True
+            self._record_lifecycle(
+                provider,
+                "availability",
+                "failed",
+                error=exc,
+            )
+
+        lifecycle = {
+            event: dict(status)
+            for event, status in self._provider_lifecycle.get(provider_id, {}).items()
+        }
+        last_lifecycle = self._provider_last_lifecycle.get(provider_id)
+        initialized = self._initialized_state(provider)
+
+        return {
+            "name": name,
+            "kind": "builtin" if name == "builtin" else "external",
+            "availability": availability,
+            "initialized": initialized,
+            "tool_names": self._provider_tool_names(provider),
+            "last_lifecycle": dict(last_lifecycle) if last_lifecycle else None,
+            "lifecycle": lifecycle,
+            "privacy_class": MEMORY_DIAGNOSTICS_PRIVACY_CLASS,
+        }, degraded
+
+    def _initialized_state(self, provider: MemoryProvider) -> Optional[bool]:
+        lifecycle = self._provider_lifecycle.get(id(provider), {})
+        initialize = lifecycle.get("initialize")
+        if initialize:
+            return initialize.get("status") == "ok"
+        return None
+
+    def _provider_tool_names(self, provider: MemoryProvider) -> List[str]:
+        names = []
+        for tool_name, owner in self._tool_to_provider.items():
+            if owner is provider:
+                safe = _diagnostic_safe_label(tool_name)
+                if safe and safe not in names:
+                    names.append(safe)
+        return sorted(names)
+
+    def _safe_provider_name(self, provider: MemoryProvider) -> str:
+        try:
+            return _diagnostic_safe_label(provider.name) or "unknown"
+        except Exception:
+            return "unknown"
+
+    def _record_lifecycle(
+        self,
+        provider: MemoryProvider,
+        event: str,
+        status: str,
+        *,
+        error: Optional[BaseException] = None,
+    ) -> None:
+        provider_id = id(provider)
+        entry: Dict[str, Any] = {
+            "event": _diagnostic_safe_label(event) or "unknown",
+            "status": _diagnostic_safe_label(status) or "unknown",
+            "timestamp": _utc_now_iso(),
+        }
+        if error is not None:
+            entry["error_type"] = _diagnostic_safe_label(type(error).__name__)
+        self._provider_lifecycle.setdefault(provider_id, {})[entry["event"]] = dict(entry)
+        self._provider_last_lifecycle[provider_id] = dict(entry)
 
     # -- System prompt -------------------------------------------------------
 
@@ -273,11 +395,13 @@ class MemoryManager:
                 block = provider.system_prompt_block()
                 if block and block.strip():
                     blocks.append(block)
+                self._record_lifecycle(provider, "system_prompt", "ok")
             except Exception as e:
                 logger.warning(
                     "Memory provider '%s' system_prompt_block() failed: %s",
                     provider.name, e,
                 )
+                self._record_lifecycle(provider, "system_prompt", "failed", error=e)
         return "\n\n".join(blocks)
 
     # -- Prefetch / recall ---------------------------------------------------
@@ -294,11 +418,13 @@ class MemoryManager:
                 result = provider.prefetch(query, session_id=session_id)
                 if result and result.strip():
                     parts.append(result)
+                self._record_lifecycle(provider, "prefetch", "ok")
             except Exception as e:
                 logger.debug(
                     "Memory provider '%s' prefetch failed (non-fatal): %s",
                     provider.name, e,
                 )
+                self._record_lifecycle(provider, "prefetch", "failed", error=e)
         return "\n\n".join(parts)
 
     def queue_prefetch_all(self, query: str, *, session_id: str = "") -> None:
@@ -306,11 +432,13 @@ class MemoryManager:
         for provider in self._providers:
             try:
                 provider.queue_prefetch(query, session_id=session_id)
+                self._record_lifecycle(provider, "queue_prefetch", "ok")
             except Exception as e:
                 logger.debug(
                     "Memory provider '%s' queue_prefetch failed (non-fatal): %s",
                     provider.name, e,
                 )
+                self._record_lifecycle(provider, "queue_prefetch", "failed", error=e)
 
     # -- Sync ----------------------------------------------------------------
 
@@ -319,11 +447,13 @@ class MemoryManager:
         for provider in self._providers:
             try:
                 provider.sync_turn(user_content, assistant_content, session_id=session_id)
+                self._record_lifecycle(provider, "sync_turn", "ok")
             except Exception as e:
                 logger.warning(
                     "Memory provider '%s' sync_turn failed: %s",
                     provider.name, e,
                 )
+                self._record_lifecycle(provider, "sync_turn", "failed", error=e)
 
     # -- Tools ---------------------------------------------------------------
 
@@ -365,12 +495,15 @@ class MemoryManager:
         if provider is None:
             return tool_error(f"No memory provider handles tool '{tool_name}'")
         try:
-            return provider.handle_tool_call(tool_name, args, **kwargs)
+            result = provider.handle_tool_call(tool_name, args, **kwargs)
+            self._record_lifecycle(provider, "tool_call", "ok")
+            return result
         except Exception as e:
             logger.error(
                 "Memory provider '%s' handle_tool_call(%s) failed: %s",
                 provider.name, tool_name, e,
             )
+            self._record_lifecycle(provider, "tool_call", "failed", error=e)
             return tool_error(f"Memory tool '{tool_name}' failed: {e}")
 
     # -- Lifecycle hooks -----------------------------------------------------
@@ -383,22 +516,26 @@ class MemoryManager:
         for provider in self._providers:
             try:
                 provider.on_turn_start(turn_number, message, **kwargs)
+                self._record_lifecycle(provider, "turn_start", "ok")
             except Exception as e:
                 logger.debug(
                     "Memory provider '%s' on_turn_start failed: %s",
                     provider.name, e,
                 )
+                self._record_lifecycle(provider, "turn_start", "failed", error=e)
 
     def on_session_end(self, messages: List[Dict[str, Any]]) -> None:
         """Notify all providers of session end."""
         for provider in self._providers:
             try:
                 provider.on_session_end(messages)
+                self._record_lifecycle(provider, "session_end", "ok")
             except Exception as e:
                 logger.debug(
                     "Memory provider '%s' on_session_end failed: %s",
                     provider.name, e,
                 )
+                self._record_lifecycle(provider, "session_end", "failed", error=e)
 
     def on_session_switch(
         self,
@@ -429,11 +566,13 @@ class MemoryManager:
                     reset=reset,
                     **kwargs,
                 )
+                self._record_lifecycle(provider, "session_switch", "ok")
             except Exception as e:
                 logger.debug(
                     "Memory provider '%s' on_session_switch failed: %s",
                     provider.name, e,
                 )
+                self._record_lifecycle(provider, "session_switch", "failed", error=e)
 
     def on_pre_compress(self, messages: List[Dict[str, Any]]) -> str:
         """Notify all providers before context compression.
@@ -447,11 +586,13 @@ class MemoryManager:
                 result = provider.on_pre_compress(messages)
                 if result and result.strip():
                     parts.append(result)
+                self._record_lifecycle(provider, "pre_compress", "ok")
             except Exception as e:
                 logger.debug(
                     "Memory provider '%s' on_pre_compress failed: %s",
                     provider.name, e,
                 )
+                self._record_lifecycle(provider, "pre_compress", "failed", error=e)
         return "\n\n".join(parts)
 
     @staticmethod
@@ -504,11 +645,13 @@ class MemoryManager:
                     provider.on_memory_write(action, target, content, dict(metadata or {}))
                 else:
                     provider.on_memory_write(action, target, content)
+                self._record_lifecycle(provider, "memory_write", "ok")
             except Exception as e:
                 logger.debug(
                     "Memory provider '%s' on_memory_write failed: %s",
                     provider.name, e,
                 )
+                self._record_lifecycle(provider, "memory_write", "failed", error=e)
 
     def on_delegation(self, task: str, result: str, *,
                       child_session_id: str = "", **kwargs) -> None:
@@ -518,22 +661,26 @@ class MemoryManager:
                 provider.on_delegation(
                     task, result, child_session_id=child_session_id, **kwargs
                 )
+                self._record_lifecycle(provider, "delegation", "ok")
             except Exception as e:
                 logger.debug(
                     "Memory provider '%s' on_delegation failed: %s",
                     provider.name, e,
                 )
+                self._record_lifecycle(provider, "delegation", "failed", error=e)
 
     def shutdown_all(self) -> None:
         """Shut down all providers (reverse order for clean teardown)."""
         for provider in reversed(self._providers):
             try:
                 provider.shutdown()
+                self._record_lifecycle(provider, "shutdown", "ok")
             except Exception as e:
                 logger.warning(
                     "Memory provider '%s' shutdown failed: %s",
                     provider.name, e,
                 )
+                self._record_lifecycle(provider, "shutdown", "failed", error=e)
 
     def initialize_all(self, session_id: str, **kwargs) -> None:
         """Initialize all providers.
@@ -548,8 +695,30 @@ class MemoryManager:
         for provider in self._providers:
             try:
                 provider.initialize(session_id=session_id, **kwargs)
+                self._record_lifecycle(provider, "initialize", "ok")
             except Exception as e:
                 logger.warning(
                     "Memory provider '%s' initialize failed: %s",
                     provider.name, e,
                 )
+                self._record_lifecycle(provider, "initialize", "failed", error=e)
+
+
+def _diagnostic_safe_label(value: Any) -> Optional[str]:
+    if value is None:
+        return None
+    text = str(value).strip()
+    if not text:
+        return None
+    if _DIAGNOSTIC_SECRET_RE.search(text) or _DIAGNOSTIC_PATH_RE.search(text):
+        return "Redacted"
+    cleaned = _DIAGNOSTIC_LABEL_RE.sub("_", text).strip()
+    if not cleaned:
+        return None
+    if len(cleaned) > _DIAGNOSTIC_TEXT_LIMIT:
+        return cleaned[: _DIAGNOSTIC_TEXT_LIMIT - 3] + "..."
+    return cleaned
+
+
+def _utc_now_iso() -> str:
+    return datetime.now(timezone.utc).isoformat()
