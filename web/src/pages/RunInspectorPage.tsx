@@ -87,7 +87,9 @@ import {
   type RunInspectorDesktopStatusState,
 } from "@/pages/runInspectorDesktopStatus";
 import {
+  describeAgentAssignmentState,
   describeMemoryWorkbenchState,
+  describeParallelAssignmentPlanState,
   describeRuntimePersistenceState,
   memoryProviderTone,
   type RunInspectorMemoryWorkbenchState,
@@ -685,7 +687,11 @@ function MultiAgentMemoryWorkbenchCard({
   const queue = workbench?.long_term_queue ?? null;
   const journal = workbench?.skills_journal ?? null;
   const runtimePersistence = workbench?.runtime_persistence ?? null;
+  const assignmentSummary = workbench?.agent_assignments?.summary ?? null;
+  const parallelPlan = workbench?.agent_assignments?.parallel_plan ?? null;
   const runtimePersistenceDisplay = describeRuntimePersistenceState(workbench);
+  const assignmentDisplay = describeAgentAssignmentState(workbench);
+  const parallelPlanDisplay = describeParallelAssignmentPlanState(workbench);
   const runtimePersistenceFlags = runtimePersistence?.flags ?? [];
   const providers = memory?.providers ?? [];
 
@@ -729,7 +735,7 @@ function MultiAgentMemoryWorkbenchCard({
           </div>
         ) : null}
 
-        <div className="grid min-w-0 gap-2 sm:grid-cols-2 xl:grid-cols-5">
+        <div className="grid min-w-0 gap-2 sm:grid-cols-2 xl:grid-cols-7">
           <Metric
             icon={<Activity className="h-4 w-4" />}
             label="Work"
@@ -759,7 +765,54 @@ function MultiAgentMemoryWorkbenchCard({
             tone={runtimePersistenceDisplay.tone}
             value={runtimePersistenceDisplay.label}
           />
+          <Metric
+            icon={<Wrench className="h-4 w-4" />}
+            label="Assignments"
+            tone={assignmentDisplay.tone}
+            value={assignmentDisplay.label}
+          />
+          <Metric
+            icon={<Link className="h-4 w-4" />}
+            label="Plan"
+            tone={parallelPlanDisplay.tone}
+            value={parallelPlanDisplay.label}
+          />
         </div>
+
+        {assignmentSummary || parallelPlan ? (
+          <div className="grid min-w-0 gap-2 sm:grid-cols-2">
+            <div className="flex min-w-0 flex-col divide-y divide-border/70 border border-border">
+              <DetailRow
+                label="Ready"
+                value={String(assignmentSummary?.ready_task_ids.length ?? 0)}
+              />
+              <DetailRow
+                label="Waiting"
+                value={String(
+                  assignmentSummary?.dependency_waiting_task_ids.length ?? 0,
+                )}
+              />
+              <DetailRow
+                label="Conflicts"
+                value={String(assignmentSummary?.conflicts.length ?? 0)}
+              />
+            </div>
+            <div className="flex min-w-0 flex-col divide-y divide-border/70 border border-border">
+              <DetailRow
+                label="Batches"
+                value={String(parallelPlan?.batches.length ?? 0)}
+              />
+              <DetailRow
+                label="Parallel"
+                value={String(parallelPlan?.max_parallel_workers ?? 0)}
+              />
+              <DetailRow
+                label="Sequenced"
+                value={String(parallelPlan?.conflict_task_ids.length ?? 0)}
+              />
+            </div>
+          </div>
+        ) : null}
 
         {runtimePersistenceFlags.length > 0 ? (
           <div className="flex min-w-0 flex-col divide-y divide-border/70 border border-border">

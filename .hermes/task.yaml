@@ -1425,6 +1425,27 @@ tasks:
     status: completed
     risk: low
 
+  - id: HMAMO-09
+    title: Render assignment and plan summaries in Run Inspector
+    description: Display read-only assignment and parallel plan status inside the Multi-Agent Memory workbench card.
+    depends_on:
+      - HMAMO-05
+      - HMAMO-08
+    acceptance:
+      - Run Inspector Multi-Agent Memory card shows Assignments and Plan metrics using view-model helper labels.
+      - Card shows bounded ready, waiting, conflict, batch, parallel, and sequenced counts without raw assignment payloads.
+      - UI does not show raw prompts, raw logs, raw tool args, absolute paths, diffs, or secret-looking values.
+      - UI does not add start, stop, spawn, approve, write memory, edit skill, edit config, or task mutation controls.
+      - Layout remains bounded on desktop and narrow viewports.
+    verify:
+      - venv/Scripts/python.exe -m pytest tests/web/test_run_inspector_status_policy.py -q -o addopts=
+      - cd web; npm.cmd run build
+      - Playwright temporary dashboard smoke on port 9135 for desktop 1440x1000 and narrow 390x900 viewports
+      - venv/Scripts/python.exe -c "import yaml; yaml.safe_load(open('.hermes/task.yaml', encoding='utf-8'))"
+      - git diff --check -- web/src/pages/RunInspectorPage.tsx tests/web/test_run_inspector_status_policy.py .hermes/task.yaml
+    status: completed
+    risk: medium
+
 risk_flags:
   destructive_file_change:
     pause: true
@@ -2242,7 +2263,6 @@ progress_report:
       status: completed
       changed_files:
         - web/src/pages/RunInspectorPage.tsx
-        - tests/web/test_run_inspector_status_policy.py
         - .hermes/task.yaml
       verification_result: "passed: venv/Scripts/python.exe -m pytest tests/web/test_run_inspector_status_policy.py -q -o addopts= (27 passed); passed: cd web; npm.cmd run build; passed: venv/Scripts/python.exe -c yaml.safe_load task.yaml"
       blockers: []
@@ -2342,6 +2362,15 @@ progress_report:
       blockers:
         - "RunInspectorPage.tsx and runInspectorEventTimeline.ts still have unrelated dirty active-event filter changes, so this slice stops at model helpers."
       next_step: "Render assignment and parallel plan summaries in Run Inspector after coordinating existing dirty page files."
+    - task_id: HMAMO-09
+      status: completed
+      changed_files:
+        - web/src/pages/RunInspectorPage.tsx
+        - tests/web/test_run_inspector_status_policy.py
+        - .hermes/task.yaml
+      verification_result: "passed: venv/Scripts/python.exe -m pytest tests/web/test_run_inspector_status_policy.py -q -o addopts= (27 passed); passed: cd web; npm.cmd run build; passed: Playwright temporary dashboard smoke on port 9135 desktop/narrow; passed: venv/Scripts/python.exe -c yaml.safe_load task.yaml; passed: git diff --check for HMAMO-09 files"
+      blockers: []
+      next_step: "Add browser/API coverage for assignment and parallel plan degraded states if needed."
 
 failure_review:
   enabled: true
