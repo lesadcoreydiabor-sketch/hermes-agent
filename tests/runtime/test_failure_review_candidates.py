@@ -3,6 +3,7 @@ import json
 import pytest
 
 from hermes_cli.failure_review_candidates import (
+    append_failure_review_candidates_to_long_term_queue,
     build_failure_review_candidate,
     build_failure_review_candidates,
 )
@@ -140,6 +141,74 @@ def test_failure_review_candidate_build_only_does_not_write_files(
 
     assert not (tmp_path / ".hermes" / "long_term_queue.jsonl").exists()
     assert not (tmp_path / ".hermes" / "task.yaml").exists()
+
+
+def test_append_failure_review_candidates_to_long_term_queue_dedupes_existing(
+    tmp_path,
+) -> None:
+    queue_path = tmp_path / ".hermes" / "long_term_queue.jsonl"
+    candidates = build_failure_review_candidates(
+        [
+            {
+                "trigger": "repeated_tool_error",
+                "tool_name": "delegate_task",
+                "error_type": "TimeoutError",
+                "what_happened": "delegate timed out",
+            },
+            {
+                "trigger": "repeated_tool_error",
+                "tool_name": "delegate_task",
+                "error_type": "TimeoutError",
+                "what_happened": "delegate timed out again",
+            },
+        ],
+        timestamp="2026-05-11T00:00:00Z",
+    )
+
+    appended_once = append_failure_review_candidates_to_long_term_queue(
+        candidates,
+        queue_path=queue_path,
+    )
+    appended_twice = append_failure_review_candidates_to_long_term_queue(
+        candidates,
+        queue_path=queue_path,
+    )
+    persisted = [
+        json.loads(line) for line in queue_path.read_text(encoding="utf-8").splitlines()
+    ]
+
+    assert len(appended_once) == 1
+    assert appended_twice == []
+    assert len(persisted) == 1
+    assert persisted[0]["category"] == "recurring_failure"
+    assert persisted[0]["dedupe_key"] == "repeated_tool_error:delegate_task:TimeoutError"
+    assert "occurrences=2" in persisted[0]["evidence"]
+
+
+def test_append_failure_review_candidates_to_long_term_queue_keeps_blockers_redacted(
+    tmp_path,
+) -> None:
+    queue_path = tmp_path / ".hermes" / "long_term_queue.jsonl"
+    candidate = build_failure_review_candidate(
+        "redaction_failure",
+        task_id="HMAM-ghp_1234567890",
+        what_happened="token=secret reached C:\\Users\\XQQ\\secret.txt",
+        likely_cause="diff --git a/secret b/secret\n+sk-secret123456",
+        timestamp="2026-05-11T00:00:00Z",
+    )
+
+    appended = append_failure_review_candidates_to_long_term_queue(
+        [candidate],
+        queue_path=queue_path,
+    )
+
+    assert appended[0]["state"] == "needs_evidence"
+    rendered = queue_path.read_text(encoding="utf-8")
+    assert "token=secret" not in rendered
+    assert "C:\\Users" not in rendered
+    assert "diff --git" not in rendered
+    assert "sk-secret123456" not in rendered
+    assert "Redacted" in rendered
 
 
 def test_failure_review_candidate_rejects_missing_trigger() -> None:

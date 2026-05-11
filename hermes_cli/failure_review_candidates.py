@@ -2,12 +2,19 @@
 
 from __future__ import annotations
 
+import json
 import re
 import uuid
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any, Dict, Iterable, Optional
 
-from hermes_cli.learning_journal import build_long_term_queue_entry
+from hermes_cli.learning_journal import (
+    LONG_TERM_QUEUE_PATH,
+    append_long_term_queue_entry,
+    build_long_term_queue_entry,
+    normalize_long_term_queue_entry,
+)
 
 
 FAILURE_CANDIDATE_SCHEMA_VERSION = 1
@@ -189,6 +196,64 @@ def dedupe_failure_review_candidates(
             existing["occurrence_count"],
         )
     return list(merged.values())
+
+
+def append_failure_review_candidates_to_long_term_queue(
+    candidates: Iterable[Dict[str, Any]],
+    *,
+    queue_path: str | Path = LONG_TERM_QUEUE_PATH,
+) -> list[Dict[str, Any]]:
+    """Explicitly append candidate queue entries, skipping existing dedupe keys."""
+
+    path = Path(queue_path)
+    existing_keys = _read_existing_queue_dedupe_keys(path)
+    appended: list[Dict[str, Any]] = []
+
+    for candidate in dedupe_failure_review_candidates(candidates):
+        queue_entry = candidate.get("queue_entry") if isinstance(candidate, dict) else None
+        if not isinstance(queue_entry, dict):
+            continue
+        try:
+            normalized = normalize_long_term_queue_entry(queue_entry)
+        except (TypeError, ValueError):
+            continue
+        dedupe_key = normalized.get("dedupe_key") or normalized.get("entry_id")
+        if dedupe_key and dedupe_key in existing_keys:
+            continue
+        appended_entry = append_long_term_queue_entry(normalized, queue_path=path)
+        appended.append(appended_entry)
+        if dedupe_key:
+            existing_keys.add(dedupe_key)
+
+    return appended
+
+
+def _read_existing_queue_dedupe_keys(path: Path) -> set[str]:
+    if not path.exists():
+        return set()
+    try:
+        lines = path.read_text(encoding="utf-8").splitlines()
+    except OSError:
+        return set()
+
+    keys: set[str] = set()
+    for line in lines:
+        if not line.strip():
+            continue
+        try:
+            payload = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if not isinstance(payload, dict):
+            continue
+        try:
+            normalized = normalize_long_term_queue_entry(payload)
+        except (TypeError, ValueError):
+            continue
+        key = normalized.get("dedupe_key") or normalized.get("entry_id")
+        if isinstance(key, str) and key:
+            keys.add(key)
+    return keys
 
 
 def _with_occurrence_evidence(
