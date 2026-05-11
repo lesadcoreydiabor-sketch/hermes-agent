@@ -406,7 +406,23 @@ export interface RunInspectorSnapshotSummary {
   workspace?: null | string
 }
 
+export interface RunInspectorAttentionSignal {
+  body?: string
+  dedupe_key?: null | string
+  kind?: string
+  privacy_class?: string
+  route?: string
+  run_id?: null | string
+  session_id?: null | string
+  severity?: string
+  timestamp?: null | string
+  title?: string
+  ttl_ms?: number
+}
+
 export interface RunInspectorStatusResponse {
+  attention?: RunInspectorAttentionSignal[]
+  attention_error?: null | string
   desktop?: DesktopStatusResponse
   ok?: boolean
   snapshot?: RunInspectorSnapshotSummary

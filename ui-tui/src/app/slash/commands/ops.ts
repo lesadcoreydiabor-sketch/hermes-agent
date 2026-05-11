@@ -9,6 +9,7 @@ import type {
   RollbackDiffResponse,
   RollbackListResponse,
   RollbackRestoreResponse,
+  RunInspectorAttentionSignal,
   RunInspectorSnapshotSummary,
   RunInspectorStatusResponse,
   SlashExecResponse,
@@ -181,6 +182,32 @@ const renderRunInspectorSnapshot = (snapshot?: null | RunInspectorSnapshotSummar
   }
   if (snapshot?.privacy_flags?.length) {
     rows.push(['Privacy', snapshot.privacy_flags.map(flag => clipInspectorText(flag, '', 32)).filter(Boolean).join(', ')])
+  }
+
+  return rows
+}
+
+const renderAttentionSignals = (signals?: RunInspectorAttentionSignal[], attentionError?: null | string) => {
+  const rows: [string, string][] = []
+  const visible = signals?.slice(0, 3) ?? []
+
+  for (const signal of visible) {
+    const title = clipInspectorText(signal.title || signal.kind, 'Attention', 64)
+    const severity = clipInspectorText(signal.severity, '', 32)
+    rows.push([
+      severity ? `${title} (${severity})` : title,
+      clipInspectorText(signal.body || signal.route || signal.kind, 'Open Run Inspector for details')
+    ])
+  }
+
+  if ((signals?.length ?? 0) > visible.length) {
+    rows.push(['More', `${(signals?.length ?? 0) - visible.length} more attention signals`])
+  }
+  if (attentionError) {
+    rows.push(['Attention source', clipInspectorText(attentionError)])
+  }
+  if (!rows.length) {
+    rows.push(['Attention', 'none'])
   }
 
   return rows
@@ -361,6 +388,10 @@ export const opsCommands: SlashCommand[] = [
               {
                 rows: renderRunInspectorSnapshot(r?.snapshot),
                 title: 'Run Snapshot'
+              },
+              {
+                rows: renderAttentionSignals(r?.attention, r?.attention_error),
+                title: 'Attention'
               },
               {
                 rows: renderInspectorStatus(r?.desktop || {}),

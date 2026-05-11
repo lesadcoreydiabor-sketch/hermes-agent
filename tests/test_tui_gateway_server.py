@@ -3909,6 +3909,10 @@ def test_run_inspector_status_combines_snapshot_and_desktop(monkeypatch):
         "hermes_cli.desktop_shell_status.build_desktop_status_payload",
         fake_build,
     )
+    monkeypatch.setattr(
+        "hermes_cli.run_inspector_events.get_recent_run_inspector_events",
+        lambda limit=50: [],
+    )
 
     resp = server.handle_request(
         {"id": "1", "method": "run_inspector.status", "params": {"port": 9222}}
@@ -3919,6 +3923,7 @@ def test_run_inspector_status_combines_snapshot_and_desktop(monkeypatch):
     assert payload["ok"] is True
     assert payload["snapshot"]["status"] == "waiting_approval"
     assert payload["snapshot"]["active_tool"]["name"] == "terminal"
+    assert payload["attention"][0]["kind"] == "approval_waiting"
     assert payload["desktop"]["runtime_record_cleared"] is False
     assert payload["desktop"]["url"] == "http://127.0.0.1:9222/run-inspector"
 
@@ -3975,6 +3980,65 @@ def test_run_inspector_status_degrades_when_snapshot_builder_fails(monkeypatch):
     )
     assert payload["snapshot"]["privacy_flags"] == ["safe"]
     assert payload["desktop"]["runtime_record_cleared"] is False
+    assert "token=secret" not in json.dumps(payload)
+
+
+def test_run_inspector_status_degrades_when_attention_builder_fails(monkeypatch):
+    monkeypatch.setattr(
+        "hermes_cli.status.get_run_inspector_status_payload",
+        lambda: {
+            "version": 1,
+            "run_id": "run-1",
+            "source": "gateway",
+            "status": "thinking",
+            "active_tool": {"name": None},
+            "tool_health": [],
+            "mcp_health": [],
+            "privacy_flags": ["safe", "redacted", "local_only"],
+            "degraded_reason": None,
+        },
+    )
+    monkeypatch.setattr(
+        "hermes_cli.run_inspector_events.get_recent_run_inspector_events",
+        lambda limit=50: [],
+    )
+    monkeypatch.setattr(
+        "hermes_cli.run_inspector_attention.build_attention_signals",
+        lambda **_kwargs: (_ for _ in ()).throw(RuntimeError("token=secret")),
+    )
+    monkeypatch.setattr(
+        "hermes_cli.desktop_shell_status.build_desktop_status_payload",
+        lambda **_kwargs: {
+            "ok": True,
+            "record_present": False,
+            "runtime_record_cleared": True,
+            "pid": None,
+            "pid_status": "none",
+            "pid_reason": "no_record",
+            "host": "127.0.0.1",
+            "port": 9222,
+            "route": "/run-inspector",
+            "url": "http://127.0.0.1:9222/run-inspector",
+            "started_at": None,
+            "health": "ok",
+            "health_reason": "ok",
+            "compatible_dashboard": True,
+            "reuse_command": None,
+            "manual_url": None,
+            "stop_command": None,
+        },
+    )
+
+    resp = server.handle_request(
+        {"id": "1", "method": "run_inspector.status", "params": {"port": 9222}}
+    )
+
+    payload = resp["result"]
+    assert payload["attention"] == []
+    assert (
+        payload["attention_error"]
+        == "run_inspector_attention_unavailable:RuntimeError"
+    )
     assert "token=secret" not in json.dumps(payload)
 
 

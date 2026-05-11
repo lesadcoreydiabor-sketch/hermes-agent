@@ -6101,11 +6101,27 @@ def _(rid, params: dict) -> dict:
         snapshot = empty_run_snapshot(
             degraded_reason=f"run_inspector_status_unavailable:{type(exc).__name__}",
         ).to_dict()
+
+    attention = []
+    attention_error = None
+    try:
+        from hermes_cli.run_inspector_attention import build_attention_signals
+        from hermes_cli.run_inspector_events import get_recent_run_inspector_events
+
+        attention = build_attention_signals(
+            snapshot=snapshot,
+            events=get_recent_run_inspector_events(limit=25),
+        )
+    except Exception as exc:
+        attention_error = f"run_inspector_attention_unavailable:{type(exc).__name__}"
+
     return _ok(
         rid,
         {
             "ok": True,
             "snapshot": snapshot,
+            "attention": attention,
+            "attention_error": attention_error,
             "desktop": _desktop_status_payload_for_tui(port or 9119),
         },
     )

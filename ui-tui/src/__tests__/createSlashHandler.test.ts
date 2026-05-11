@@ -419,6 +419,15 @@ describe('createSlashHandler', () => {
           status: 'waiting_approval',
           tool_health: [{ name: 'terminal', status: 'running' }]
         },
+        attention: [
+          {
+            body: 'A HERMES run is waiting for approval. Open Run Inspector to review safe details.',
+            kind: 'approval_waiting',
+            route: '/run-inspector',
+            severity: 'warning',
+            title: 'Approval waiting'
+          }
+        ],
         desktop: {
           compatible_dashboard: true,
           health: 'ok',
@@ -456,6 +465,15 @@ describe('createSlashHandler', () => {
               ['Privacy', 'safe, redacted, local_only']
             ]),
             title: 'Run Snapshot'
+          }),
+          expect.objectContaining({
+            rows: expect.arrayContaining([
+              [
+                'Approval waiting (warning)',
+                'A HERMES run is waiting for approval. Open Run Inspector to review safe details.'
+              ]
+            ]),
+            title: 'Attention'
           }),
           expect.objectContaining({
             rows: expect.arrayContaining([
