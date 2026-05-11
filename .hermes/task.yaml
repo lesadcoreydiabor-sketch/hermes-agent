@@ -1671,6 +1671,23 @@ tasks:
     status: completed
     risk: medium
 
+  - id: HMAMO-21
+    title: Document recovery gate source semantics
+    description: Update the Multi-Agent Memory PRD to distinguish persisted action_ledger recovery gates from live event_stream diagnostics.
+    depends_on:
+      - HMAMO-20
+    acceptance:
+      - PRD explains recovery gate source_counts and the difference between action_ledger and event_stream.
+      - PRD states that event_stream recovery gates are live diagnostics and do not imply durable ledger persistence.
+      - PRD states that missing action ledger remains degraded metadata even when event-derived recovery gates are visible.
+      - PRD states that recovery gates collapse to latest per-child lifecycle state.
+      - Documentation remains read-only and does not change runtime behavior, memory provider data, skills, config, or task ownership.
+    verify:
+      - git diff --check -- docs/plans/hermes-multi-agent-memory-prd.md .hermes/task.yaml
+      - venv/Scripts/python.exe -c "import yaml; yaml.safe_load(open('.hermes/task.yaml', encoding='utf-8'))"
+    status: completed
+    risk: low
+
 risk_flags:
   destructive_file_change:
     pause: true
@@ -2717,6 +2734,14 @@ progress_report:
       verification_result: "passed: venv/Scripts/python.exe -m pytest tests/runtime/test_multi_agent_memory_workbench.py tests/hermes_cli/test_run_inspector_api.py tests/test_tui_gateway_server.py -q -o addopts= (211 passed); passed: venv/Scripts/python.exe -m pytest tests/web/test_run_inspector_status_policy.py -q -o addopts= (27 passed); passed: cd ui-tui; npm.cmd test -- createSlashHandler.test.ts (100 passed); passed: cd ui-tui; npm.cmd run type-check; passed: cd ui-tui; npm.cmd run build; passed: cd web; npm.cmd run build"
       blockers: []
       next_step: "Continue HERMES Multi-Agent Memory orchestration integration with operator documentation or broader live event diagnostics."
+    - task_id: HMAMO-21
+      status: completed
+      changed_files:
+        - docs/plans/hermes-multi-agent-memory-prd.md
+        - .hermes/task.yaml
+      verification_result: "passed: git diff --check -- docs/plans/hermes-multi-agent-memory-prd.md .hermes/task.yaml; passed: venv/Scripts/python.exe -c yaml.safe_load task.yaml"
+      blockers: []
+      next_step: "Continue HERMES Multi-Agent Memory orchestration integration with broader live event diagnostics or review-gated controls."
 
 failure_review:
   enabled: true

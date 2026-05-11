@@ -329,10 +329,23 @@ Add a Run Inspector section for:
 - active parent and child agents
 - current work checkpoint
 - recent safe action ledger entries
+- delegate recovery gates with source counts
 - memory provider diagnostics
 - unresolved long-term queue items
 
 This should be read-only first.
+
+Recovery gates summarize the latest known lifecycle state for each delegate
+child or work item. They combine two safe sources:
+
+- `action_ledger`: persisted local entries written only when
+  `HERMES_DELEGATE_ACTION_LEDGER` is explicitly enabled.
+- `event_stream`: current in-process Run Inspector `agent.child.*` events.
+
+The workbench must keep these sources distinguishable with bounded
+`source_counts`. `event_stream` entries are live diagnostics, not durable
+memory; they must not imply that `.hermes/action_ledger.jsonl` exists or that a
+checkpoint can be reconstructed after process restart.
 
 ### Phase 5: Review Gates
 
@@ -547,6 +560,8 @@ Run Inspector display policy:
 - Missing action ledger, checkpoint, queue, journal, or memory diagnostics surfaces as degraded or unavailable state, not as a dashboard crash.
 - Empty local files surface as empty state.
 - Active child-agent events surface as active work; failed, interrupted, timeout, or blocked items surface as attention state.
+- Recovery gates show the latest per-child state and source counts only; stale spawned or running states are hidden after the same child completes, fails, times out, or is interrupted.
+- `event_stream` recovery gates can remain visible while the action ledger is missing, but the missing ledger stays degraded metadata.
 - Memory provider diagnostics show provider name, availability, initialized state, tool names, and lifecycle status only. They do not show memory contents, provider raw responses, prompts, or tool arguments.
 - The Multi-Agent Memory workbench is read-only. It does not approve, deny, stop, spawn, write memory, edit skills, mutate config, or write remote systems.
 
