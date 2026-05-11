@@ -354,6 +354,8 @@ describe('createSlashHandler', () => {
     ['/browser connect', 'browser.manage', { action: 'connect', session_id: null, url: 'http://127.0.0.1:9222' }],
     ['/inspector', 'run_inspector.status', { port: 9119 }],
     ['/inspector-events', 'run_inspector.events', { limit: 12 }],
+    ['/inspector-health', 'run_inspector.status', { port: 9119 }],
+    ['/run-inspector-health 9222', 'run_inspector.status', { port: 9222 }],
     ['/run-inspector-events 7', 'run_inspector.events', { limit: 7 }],
     ['/run-inspector 9222', 'run_inspector.status', { port: 9222 }],
     ['/reload-mcp', 'reload.mcp', { session_id: null }],
@@ -498,6 +500,67 @@ describe('createSlashHandler', () => {
     expect(rpc).not.toHaveBeenCalled()
     expect(ctx.gateway.gw.request).not.toHaveBeenCalled()
     expect(ctx.transcript.sys).toHaveBeenCalledWith('usage: /inspector [port]')
+  })
+
+  it('/inspector-health renders tool and MCP health details without slash worker fallback', async () => {
+    const rpc = vi.fn(() =>
+      Promise.resolve({
+        ok: true,
+        snapshot: {
+          mcp_health: [
+            {
+              affected_tools: ['search', 'context'],
+              last_error_class: 'TimeoutError',
+              name: 'gitnexus',
+              status: 'degraded'
+            }
+          ],
+          tool_health: [
+            {
+              name: 'terminal',
+              reason: 'ready',
+              status: 'available',
+              toolset: 'local'
+            }
+          ]
+        }
+      })
+    )
+    const ctx = buildCtx({ gateway: { ...buildGateway(), rpc } })
+
+    expect(createSlashHandler(ctx)('/inspector-health 9222')).toBe(true)
+
+    expect(rpc).toHaveBeenCalledWith('run_inspector.status', { port: 9222 })
+    expect(ctx.gateway.gw.request).not.toHaveBeenCalled()
+    await vi.waitFor(() => {
+      expect(ctx.transcript.panel).toHaveBeenCalledWith(
+        'Run Inspector Health',
+        expect.arrayContaining([
+          expect.objectContaining({
+            rows: expect.arrayContaining([
+              ['terminal (available)', 'toolset=local / reason=ready']
+            ]),
+            title: 'Tools'
+          }),
+          expect.objectContaining({
+            rows: expect.arrayContaining([
+              ['gitnexus (degraded)', 'error=TimeoutError / affected=search, context']
+            ]),
+            title: 'MCP'
+          })
+        ])
+      )
+    })
+  })
+
+  it('/inspector-health rejects invalid ports before hitting the gateway', () => {
+    const rpc = vi.fn(() => Promise.resolve({}))
+    const ctx = buildCtx({ gateway: { ...buildGateway(), rpc } })
+
+    expect(createSlashHandler(ctx)('/inspector-health nope')).toBe(true)
+    expect(rpc).not.toHaveBeenCalled()
+    expect(ctx.gateway.gw.request).not.toHaveBeenCalled()
+    expect(ctx.transcript.sys).toHaveBeenCalledWith('usage: /inspector-health [port]')
   })
 
   it('/inspector-events renders a read-only event timeline', async () => {

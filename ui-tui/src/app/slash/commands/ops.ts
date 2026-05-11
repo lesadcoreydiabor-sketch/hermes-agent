@@ -12,6 +12,7 @@ import type {
   RunInspectorAttentionSignal,
   RunInspectorEventSummary,
   RunInspectorEventsResponse,
+  RunInspectorHealthSummary,
   RunInspectorSnapshotSummary,
   RunInspectorStatusResponse,
   SlashExecResponse,
@@ -159,6 +160,28 @@ const healthSummary = (
   const ok = items.filter(item => okStatuses.includes(String(item.status || '').toLowerCase())).length
   const attention = items.length - ok
   return attention > 0 ? `${ok}/${items.length} ok, ${attention} attention` : `${ok}/${items.length} ok`
+}
+
+const renderInspectorHealthRows = (
+  items: RunInspectorHealthSummary[] | undefined,
+  emptyLabel: string
+): [string, string][] => {
+  if (!items?.length) {
+    return [[emptyLabel, 'none']]
+  }
+
+  return items.map(item => {
+    const name = clipInspectorText(item.name, 'unknown', 64)
+    const status = clipInspectorText(item.status, 'unknown', 40)
+    const details = [
+      item.toolset && `toolset=${clipInspectorText(item.toolset, '', 48)}`,
+      item.reason && `reason=${clipInspectorText(item.reason, '', 72)}`,
+      item.last_error_class && `error=${clipInspectorText(item.last_error_class, '', 48)}`,
+      item.affected_tools?.length && `affected=${item.affected_tools.map(tool => clipInspectorText(tool, '', 32)).filter(Boolean).join(', ')}`
+    ].filter(Boolean)
+
+    return [`${name} (${status})`, details.join(' / ') || 'no details']
+  })
 }
 
 const renderRunInspectorSnapshot = (snapshot?: null | RunInspectorSnapshotSummary) => {
@@ -440,6 +463,39 @@ export const opsCommands: SlashCommand[] = [
               },
               {
                 text: 'read-only status; use hermes desktop to start, stop, or reuse the dashboard'
+              }
+            ])
+          })
+        )
+        .catch(ctx.guardedErr)
+    }
+  },
+
+  {
+    aliases: ['run-inspector-health'],
+    help: 'show read-only Run Inspector tool and MCP health [/inspector-health [port]]',
+    name: 'inspector-health',
+    run: (arg, ctx) => {
+      const port = parseInspectorPort(arg)
+      if (port === null) {
+        return ctx.transcript.sys('usage: /inspector-health [port]')
+      }
+
+      ctx.gateway
+        .rpc<RunInspectorStatusResponse>('run_inspector.status', { port })
+        .then(
+          ctx.guarded<RunInspectorStatusResponse>(r => {
+            ctx.transcript.panel('Run Inspector Health', [
+              {
+                rows: renderInspectorHealthRows(r?.snapshot?.tool_health, 'Tools'),
+                title: 'Tools'
+              },
+              {
+                rows: renderInspectorHealthRows(r?.snapshot?.mcp_health, 'MCP'),
+                title: 'MCP'
+              },
+              {
+                text: 'read-only health summary; no tool dispatch, MCP reconnect, or config mutation'
               }
             ])
           })
