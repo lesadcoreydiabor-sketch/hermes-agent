@@ -777,6 +777,7 @@ describe('createSlashHandler', () => {
             id: 9,
             message: 'approval needed',
             run_id: 'run_event',
+            session_id: 'sid_event',
             source: 'gateway_run',
             status: 'waiting',
             tool: 'shell',
@@ -808,7 +809,10 @@ describe('createSlashHandler', () => {
           }),
           expect.objectContaining({
             rows: expect.arrayContaining([
-              ['#9 approval.request', 'status=waiting / tool=shell / source=gateway_run / run=run_event\napproval needed']
+              [
+                '#9 approval.request',
+                'status=waiting / tool=shell / source=gateway_run / run=run_event / session=sid_event\napproval needed'
+              ]
             ]),
             title: 'Recent 1'
           })

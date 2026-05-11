@@ -323,7 +323,8 @@ const renderRunInspectorEvents = (events?: RunInspectorEventSummary[], error?: n
       event.status && `status=${clipInspectorText(event.status, '', 40)}`,
       event.tool && `tool=${clipInspectorText(event.tool, '', 48)}`,
       event.source && `source=${clipInspectorText(event.source, '', 48)}`,
-      event.run_id && `run=${clipInspectorText(event.run_id, '', 64)}`
+      event.run_id && `run=${clipInspectorText(event.run_id, '', 64)}`,
+      event.session_id && `session=${clipInspectorText(event.session_id, '', 64)}`
     ].filter(Boolean)
     const message = clipInspectorText(event.message || event.timestamp, 'no message', 120)
     rows.push([`#${id} ${type}`, meta.length ? `${meta.join(' / ')}\n${message}` : message])
