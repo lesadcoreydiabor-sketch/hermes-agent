@@ -802,6 +802,7 @@ describe('createSlashHandler', () => {
               ['Fetched', '1'],
               ['Showing', '1'],
               ['Attention', '1'],
+              ['Approval', '1'],
               ['Failed', '0'],
               ['Latest', '#9 approval.request']
             ]),
@@ -859,6 +860,7 @@ describe('createSlashHandler', () => {
               ['Fetched', '2'],
               ['Showing', '1 failed'],
               ['Attention', '1'],
+              ['Approval', '0'],
               ['Failed', '1'],
               ['Latest', '#11 run.failed']
             ]),
@@ -929,6 +931,7 @@ describe('createSlashHandler', () => {
               ['Fetched', '3'],
               ['Showing', '2 attention'],
               ['Attention', '2'],
+              ['Approval', '1'],
               ['Failed', '1'],
               ['Latest', '#22 run.failed']
             ]),

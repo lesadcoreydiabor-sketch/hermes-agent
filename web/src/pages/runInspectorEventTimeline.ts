@@ -17,6 +17,7 @@ export interface RunInspectorEventDisplay {
 
 export interface RunInspectorEventSummary {
   attention: number;
+  approval: number;
   failed: number;
   latest: RunInspectorEvent | null;
   total: number;
@@ -136,6 +137,7 @@ export function summarizeRunInspectorEvents(
 
   return {
     attention: filterRunInspectorEvents(events, "attention").length,
+    approval: filterRunInspectorEvents(events, "approval").length,
     failed,
     latest: ordered.length > 0 ? ordered[ordered.length - 1] : null,
     total: events.length,

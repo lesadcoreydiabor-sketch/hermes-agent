@@ -1698,7 +1698,7 @@ function EventTimelineCard({
           </span>
         </div>
 
-        <div className="grid min-w-0 gap-2 sm:grid-cols-4">
+        <div className="grid min-w-0 gap-2 sm:grid-cols-2 xl:grid-cols-5">
           <Metric
             icon={<Activity className="h-4 w-4" />}
             label="Recent"
@@ -1710,6 +1710,12 @@ function EventTimelineCard({
             label="Attention"
             value={String(summary.attention)}
             tone={summary.attention > 0 ? "warning" : "muted"}
+          />
+          <Metric
+            icon={<Shield className="h-4 w-4" />}
+            label="Approval"
+            value={String(summary.approval)}
+            tone={summary.approval > 0 ? "warning" : "muted"}
           />
           <Metric
             icon={<XCircle className="h-4 w-4" />}

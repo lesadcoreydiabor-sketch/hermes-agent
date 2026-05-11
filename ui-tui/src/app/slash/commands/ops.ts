@@ -341,9 +341,13 @@ const renderRunInspectorEvents = (events?: RunInspectorEventSummary[], error?: n
 }
 
 const isAttentionRunInspectorEvent = (event: RunInspectorEventSummary): boolean => {
+  return isApprovalRunInspectorEvent(event) || isFailedRunInspectorEvent(event)
+}
+
+const isApprovalRunInspectorEvent = (event: RunInspectorEventSummary): boolean => {
   const type = String(event.type || '').toLowerCase()
   const status = String(event.status || '').toLowerCase()
-  return type === 'approval.request' || status === 'waiting' || status === 'failed' || type.endsWith('.failed')
+  return type === 'approval.request' || status === 'waiting'
 }
 
 const isFailedRunInspectorEvent = (event: RunInspectorEventSummary): boolean => {
@@ -369,6 +373,7 @@ const renderRunInspectorEventSummary = (
     ['Fetched', String(source.length)],
     ['Showing', filter === 'all' ? String(filtered.length) : `${filtered.length} ${filter}`],
     ['Attention', String(source.filter(isAttentionRunInspectorEvent).length)],
+    ['Approval', String(source.filter(isApprovalRunInspectorEvent).length)],
     ['Failed', String(source.filter(isFailedRunInspectorEvent).length)],
     ['Latest', latest ? `#${latestId} ${latestType}` : 'none']
   ]
@@ -392,7 +397,7 @@ const filterRunInspectorEvents = (
       return isAttentionRunInspectorEvent(event)
     }
     if (filter === 'approval') {
-      return type === 'approval.request' || status === 'waiting'
+      return isApprovalRunInspectorEvent(event)
     }
     if (filter === 'failed') {
       return type.endsWith('.failed') || status === 'failed'
