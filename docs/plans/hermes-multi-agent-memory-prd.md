@@ -586,6 +586,7 @@ Review gates:
 - Skill changes are never silently applied. A skills journal entry is evidence, not a patch to a skill package.
 - Failure-review candidates are not accepted by default. They must include what happened, likely cause, verification command or evidence, proposed badcase, and blocker state.
 - Failure-review export previews are build-only diagnostics. They may summarize eligible long-term queue items, but they must not create files, mark queue entries applied, edit skills, write memory, mutate config, mutate tasks, dispatch tools, or spawn agents.
+- Failure-review export handoff records are also build-only. They identify the preview, required reviewer decision fields, allowed decisions, and blocked effects so a later explicit review flow can decide whether an export is allowed.
 - Redaction failures are blocker-class candidates. They must not expose the leaked value and must add or reference a regression before promotion.
 - Rollback notes are required for skills journal entries so an accepted learning can be removed or revised without rewriting history.
 

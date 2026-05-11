@@ -86,6 +86,17 @@ EXPORT_PREVIEW_BLOCKED_EFFECTS = (
     "write_export_file_without_review",
     "mark_queue_entries_applied",
 )
+EXPORT_HANDOFF_ALLOWED_DECISIONS = (
+    "approve_export_summary",
+    "request_changes",
+    "reject_export_summary",
+)
+EXPORT_HANDOFF_REQUIRED_FIELDS = (
+    "reviewer",
+    "decision",
+    "verification",
+    "rollback_note",
+)
 
 _SECRET_RE = re.compile(
     r"\b(?:api[_-]?key|token|secret|password|credential)\s*[:=]\s*[^,\s;]+"
@@ -411,6 +422,62 @@ def build_failure_review_export_preview(
     }
 
 
+def build_failure_review_export_handoff(
+    preview: Dict[str, Any],
+    *,
+    handoff_id: Any = None,
+    timestamp: Optional[str] = None,
+    reviewer: Any = None,
+    target_ref: Any = None,
+    instructions: Any = None,
+    privacy_class: Any = LEARNING_PRIVACY_CLASS,
+) -> Dict[str, Any]:
+    """Build a review handoff request for an export preview without applying it."""
+
+    if not isinstance(preview, dict):
+        raise ValueError("failure review export preview is required")
+    if _safe_status(preview.get("output_kind")) != "failure_review_summary":
+        raise ValueError("failure_review_summary preview is required")
+    if _safe_status(preview.get("state")) != "preview_only":
+        raise ValueError("preview_only state is required")
+
+    preview_id = _safe_identifier(preview.get("preview_id"))
+    if not preview_id:
+        raise ValueError("preview_id is required")
+
+    summary_lines = _safe_list(
+        preview.get("summary_lines") if isinstance(preview.get("summary_lines"), list) else []
+    )
+    return {
+        "schema_version": LEARNING_SCHEMA_VERSION,
+        "handoff_id": _safe_identifier(handoff_id) or _new_entry_id("handoff"),
+        "timestamp": _safe_timestamp(timestamp) or _utc_now_iso(),
+        "action": "review_failure_review_export",
+        "state": "pending_review",
+        "requires_review": True,
+        "preview_id": preview_id,
+        "output_kind": "failure_review_summary",
+        "entry_count": _safe_non_negative_int(
+            preview.get("entry_count"),
+            fallback=len(summary_lines),
+        ),
+        "category_counts": _safe_count_map(preview.get("category_counts")),
+        "state_counts": _safe_count_map(preview.get("state_counts")),
+        "summary_lines": summary_lines,
+        "reviewer": _safe_identifier(reviewer),
+        "target_ref": _safe_summary(target_ref, fallback=None),
+        "instructions": _safe_summary(
+            instructions,
+            fallback="Review preview before any export.",
+        ),
+        "required_decision_fields": list(EXPORT_HANDOFF_REQUIRED_FIELDS),
+        "allowed_decisions": list(EXPORT_HANDOFF_ALLOWED_DECISIONS),
+        "requested_effect": "manual_export_after_review",
+        "blocked_effects": list(EXPORT_PREVIEW_BLOCKED_EFFECTS),
+        "privacy_class": _safe_privacy_class(privacy_class),
+    }
+
+
 def _atomic_append_jsonl(path: Path, entry: Dict[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     existing = ""
@@ -527,6 +594,29 @@ def _count_entries_by_key(
         safe_key = _safe_status(entry.get(key)) or "unknown"
         counts[safe_key] = counts.get(safe_key, 0) + 1
     return counts
+
+
+def _safe_count_map(value: Any) -> Dict[str, int]:
+    if not isinstance(value, dict):
+        return {}
+    counts: Dict[str, int] = {}
+    for raw_key, raw_count in value.items():
+        safe_key = _safe_status(raw_key) or "unknown"
+        count = _safe_non_negative_int(raw_count)
+        if count <= 0:
+            continue
+        counts[safe_key] = counts.get(safe_key, 0) + count
+        if len(counts) >= LIST_LIMIT:
+            break
+    return counts
+
+
+def _safe_non_negative_int(value: Any, *, fallback: int = 0) -> int:
+    try:
+        count = int(value)
+    except (TypeError, ValueError):
+        return fallback
+    return max(0, min(count, 10_000))
 
 
 def _safe_entry_limit(value: Any) -> int:

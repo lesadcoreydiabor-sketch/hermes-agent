@@ -6,6 +6,7 @@ import hermes_cli.learning_journal as learning_journal
 from hermes_cli.learning_journal import (
     append_long_term_queue_entry,
     append_skills_journal_entry,
+    build_failure_review_export_handoff,
     build_failure_review_export_preview,
     build_learning_review_request,
     build_long_term_queue_entry,
@@ -494,6 +495,144 @@ def test_failure_review_export_preview_build_only_does_not_write_files(
     )
 
     assert preview["entry_count"] == 1
+    assert not (tmp_path / ".hermes").exists()
+    assert not (tmp_path / "failure-review.md").exists()
+
+
+def test_failure_review_export_handoff_summarizes_preview_for_review() -> None:
+    preview = build_failure_review_export_preview(
+        [
+            {
+                "entry_id": "queue-1",
+                "category": "missing_test",
+                "state": "candidate",
+                "title": "Cover export regression",
+                "proposed_change": "Add smoke badcase",
+            }
+        ],
+        preview_id="export-1",
+        timestamp="2026-05-11T00:00:00Z",
+    )
+
+    handoff = build_failure_review_export_handoff(
+        preview,
+        handoff_id="handoff-1",
+        timestamp="2026-05-11T00:01:00Z",
+        reviewer="human-reviewer",
+        target_ref="docs/reviews/failure-review.md",
+    )
+
+    assert handoff == {
+        "schema_version": 1,
+        "handoff_id": "handoff-1",
+        "timestamp": "2026-05-11T00:01:00Z",
+        "action": "review_failure_review_export",
+        "state": "pending_review",
+        "requires_review": True,
+        "preview_id": "export-1",
+        "output_kind": "failure_review_summary",
+        "entry_count": 1,
+        "category_counts": {"missing_test": 1},
+        "state_counts": {"candidate": 1},
+        "summary_lines": [
+            "missing_test/candidate: Cover export regression -> Add smoke badcase"
+        ],
+        "reviewer": "human-reviewer",
+        "target_ref": "docs/reviews/failure-review.md",
+        "instructions": "Review preview before any export.",
+        "required_decision_fields": [
+            "reviewer",
+            "decision",
+            "verification",
+            "rollback_note",
+        ],
+        "allowed_decisions": [
+            "approve_export_summary",
+            "request_changes",
+            "reject_export_summary",
+        ],
+        "requested_effect": "manual_export_after_review",
+        "blocked_effects": [
+            "edit_skill_files",
+            "write_memory_provider_data",
+            "mutate_config",
+            "mutate_task_yaml",
+            "dispatch_tools_without_review",
+            "write_export_file_without_review",
+            "mark_queue_entries_applied",
+        ],
+        "privacy_class": "redacted_summary",
+    }
+
+
+def test_failure_review_export_handoff_redacts_sensitive_preview_fields() -> None:
+    handoff = build_failure_review_export_handoff(
+        {
+            "preview_id": "export-token=secret",
+            "state": "preview_only",
+            "output_kind": "failure_review_summary",
+            "entry_count": "2",
+            "category_counts": {"token=secret": 1, "missing_test": 1},
+            "state_counts": {"candidate": 2},
+            "summary_lines": [
+                "api_key=hidden",
+                "safe summary",
+                "C:\\Users\\XQQ\\secret\\file.md",
+            ],
+        },
+        handoff_id="handoff-ghp_1234567890",
+        timestamp="token=secret",
+        reviewer="reviewer-token=secret",
+        target_ref="/Users/xqq/failure-review.md",
+        instructions="diff --git a/secret b/secret\n+sk-secret123456",
+    )
+
+    rendered = json.dumps(handoff, sort_keys=True)
+    assert handoff["handoff_id"] == "Redacted"
+    assert handoff["preview_id"] == "Redacted"
+    assert handoff["reviewer"] == "Redacted"
+    assert handoff["target_ref"] == "Redacted"
+    assert handoff["instructions"] == "Redacted"
+    assert handoff["category_counts"] == {"missing_test": 1, "redacted": 1}
+    assert handoff["summary_lines"] == ["Redacted", "safe summary"]
+    assert "token=secret" not in rendered
+    assert "ghp_1234567890" not in rendered
+    assert "api_key=hidden" not in rendered
+    assert "C:\\Users" not in rendered
+    assert "/Users/xqq" not in rendered
+    assert "diff --git" not in rendered
+    assert "sk-secret123456" not in rendered
+
+
+def test_failure_review_export_handoff_validates_preview_contract() -> None:
+    with pytest.raises(ValueError, match="preview is required"):
+        build_failure_review_export_handoff(None)  # type: ignore[arg-type]
+    with pytest.raises(ValueError, match="failure_review_summary"):
+        build_failure_review_export_handoff(
+            {"preview_id": "export-1", "state": "preview_only", "output_kind": "doc"}
+        )
+    with pytest.raises(ValueError, match="preview_only"):
+        build_failure_review_export_handoff(
+            {
+                "preview_id": "export-1",
+                "state": "applied",
+                "output_kind": "failure_review_summary",
+            }
+        )
+
+
+def test_failure_review_export_handoff_build_only_does_not_write_files(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+
+    preview = build_failure_review_export_preview(
+        [{"category": "documentation_gap", "state": "candidate", "title": "Doc gap"}]
+    )
+    handoff = build_failure_review_export_handoff(preview)
+
+    assert handoff["state"] == "pending_review"
     assert not (tmp_path / ".hermes").exists()
     assert not (tmp_path / "failure-review.md").exists()
 
