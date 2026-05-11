@@ -559,6 +559,7 @@ export interface RunInspectorRecoveryGates {
   monitoring_task_ids?: string[]
   next_steps?: string[]
   privacy_class?: string
+  source_counts?: Record<string, number>
   status?: string
   verification_task_ids?: string[]
 }

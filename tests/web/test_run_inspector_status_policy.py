@@ -1389,6 +1389,7 @@ def test_run_inspector_memory_workbench_describes_all_states() -> None:
                   monitoring_task_ids: [],
                   next_steps: [],
                   blockers: [],
+                  source_counts: {},
                   degraded_reason: null,
                   privacy_class: "redacted_summary",
                 },
@@ -1637,6 +1638,7 @@ def test_run_inspector_memory_workbench_uses_readonly_api() -> None:
     assert 'label="Persistence"' in page_source
     assert 'label="Assignments"' in page_source
     assert 'label="Recovery"' in page_source
+    assert 'label="Sources"' in page_source
     assert 'label="Handoff"' in page_source
     assert 'label="Plan"' in page_source
     assert "parallelPlan?.batches.length" in page_source
@@ -1646,6 +1648,7 @@ def test_run_inspector_memory_workbench_uses_readonly_api() -> None:
     assert "handoff_protocol" in api_source
     assert "parallel_plan" in api_source
     assert "recovery_gates" in api_source
+    assert "source_counts" in api_source
     assert "describeRuntimePersistenceState" in (
         ROOT / "web" / "src" / "pages" / "runInspectorMemoryWorkbench.ts"
     ).read_text(encoding="utf-8")

@@ -78,6 +78,22 @@ const INSPECTOR_EVENT_FILTERS = ['all', 'active', 'attention', 'approval', 'canc
 
 type InspectorEventFilter = (typeof INSPECTOR_EVENT_FILTERS)[number]
 
+const INSPECTOR_EVENT_FILTER_LABELS: Record<InspectorEventFilter, string> = {
+  all: 'all',
+  active: 'active',
+  attention: 'needs action',
+  approval: 'approval',
+  cancelled: 'cancelled',
+  completed: 'completed',
+  failed: 'failed',
+  terminal: 'done',
+  gateway: 'gateway',
+  run: 'run',
+  tool: 'tool'
+}
+
+const inspectorEventFilterLabel = (filter: InspectorEventFilter): string => INSPECTOR_EVENT_FILTER_LABELS[filter]
+
 const parseInspectorPort = (arg: string): null | number => {
   const text = arg.trim()
   if (!text) {
@@ -407,14 +423,14 @@ const renderRunInspectorEventSummary = (
 
   return [
     ['Fetched', String(source.length)],
-    ['Showing', filter === 'all' ? String(filtered.length) : `${filtered.length} ${filter}`],
+    ['Showing', filter === 'all' ? String(filtered.length) : `${filtered.length} ${inspectorEventFilterLabel(filter)}`],
     ['Active', String(source.filter(isActiveRunInspectorEvent).length)],
     ['Attention', String(source.filter(isAttentionRunInspectorEvent).length)],
     ['Approval', String(source.filter(isApprovalRunInspectorEvent).length)],
     ['Cancelled', String(source.filter(isCancelledRunInspectorEvent).length)],
     ['Completed', String(source.filter(isCompletedRunInspectorEvent).length)],
     ['Failed', String(source.filter(isFailedRunInspectorEvent).length)],
-    ['Terminal', String(source.filter(isTerminalRunInspectorEvent).length)],
+    ['Done', String(source.filter(isTerminalRunInspectorEvent).length)],
     ['Latest', latest ? `#${latestId} ${latestType}` : 'none']
   ]
 }
@@ -436,6 +452,16 @@ const plannedInspectorTaskCount = (plan?: RunInspectorAssignmentPlan): number =>
     return 0
   }
   return plan.batches.reduce((count, batch) => count + inspectorListCount(batch.task_ids), 0)
+}
+
+const renderInspectorSourceCounts = (sourceCounts?: Record<string, number>): string => {
+  const entries = Object.entries(sourceCounts ?? {})
+    .filter(([, count]) => count > 0)
+    .sort(([left], [right]) => left.localeCompare(right))
+  if (!entries.length) {
+    return 'none'
+  }
+  return entries.map(([source, count]) => `${source}:${count}`).join(' / ')
 }
 
 const renderRunInspectorMemoryWorkbenchSummary = (
@@ -529,6 +555,7 @@ const renderRunInspectorRecoveryRows = (
 
   const rows: [string, string][] = [
     ['Status', clipInspectorText(recovery.status, 'unknown', 48)],
+    ['Sources', renderInspectorSourceCounts(recovery.source_counts)],
     ['Verified', renderInspectorTaskIds(recovery.verification_task_ids)],
     ['Blocked', renderInspectorTaskIds(recovery.blocked_task_ids)],
     ['Monitoring', renderInspectorTaskIds(recovery.monitoring_task_ids)],
@@ -1011,8 +1038,9 @@ export const opsCommands: SlashCommand[] = [
           ctx.guarded<RunInspectorEventsResponse>(r => {
             const filtered = filterRunInspectorEvents(r?.events, parsed.filter)
             const sourceCount = r?.events?.length ?? 0
+            const filterLabel = inspectorEventFilterLabel(parsed.filter)
             const emptyText =
-              parsed.filter === 'all' || sourceCount === 0 ? 'none' : `no ${parsed.filter} events`
+              parsed.filter === 'all' || sourceCount === 0 ? 'none' : `no ${filterLabel} events`
             ctx.transcript.panel('Run Inspector Events', [
               {
                 rows: renderRunInspectorEventSummary(r?.events, filtered, parsed.filter),
@@ -1023,7 +1051,7 @@ export const opsCommands: SlashCommand[] = [
                 title:
                   parsed.filter === 'all'
                     ? `Recent ${sourceCount}`
-                    : `Recent ${filtered.length}/${sourceCount} ${parsed.filter}`
+                    : `Recent ${filtered.length}/${sourceCount} ${filterLabel}`
               },
               {
                 text: 'read-only event timeline; raw logs, prompts, tool args, and secrets are not shown'

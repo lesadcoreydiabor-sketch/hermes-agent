@@ -183,6 +183,9 @@ def test_multi_agent_memory_workbench_reads_runtime_persisted_files(tmp_path) ->
     assert workbench["action_ledger"]["recovery_gates"]["monitoring_task_ids"] == [
         "HMAMR-06"
     ]
+    assert workbench["action_ledger"]["recovery_gates"]["source_counts"] == {
+        "action_ledger": 1
+    }
     assert workbench["long_term_queue"]["unresolved_count"] == 1
     assert workbench["long_term_queue"]["entries"][0]["category"] == "recurring_failure"
     rendered = json.dumps(workbench, sort_keys=True)
@@ -239,6 +242,7 @@ def test_multi_agent_memory_workbench_summarizes_delegate_recovery_gates(
     assert gates["completed_count"] == 1
     assert gates["blocked_count"] == 1
     assert gates["monitoring_count"] == 0
+    assert gates["source_counts"] == {"action_ledger": 2}
     assert gates["verification_task_ids"] == ["HMAMO-14"]
     assert gates["blocked_task_ids"] == ["HMAMO-15"]
     assert gates["next_steps"] == [
@@ -296,6 +300,7 @@ def test_multi_agent_memory_workbench_derives_recovery_gates_from_events(
     assert gates["status"] == "blocked"
     assert gates["blocked_count"] == 1
     assert gates["monitoring_count"] == 1
+    assert gates["source_counts"] == {"event_stream": 2}
     assert gates["blocked_task_ids"] == ["HMAMO-18"]
     assert gates["monitoring_task_ids"] == ["HMAMO-18"]
     assert gates["next_steps"] == [
@@ -387,6 +392,10 @@ def test_multi_agent_memory_workbench_uses_latest_recovery_gate_state(
     assert gates["completed_count"] == 1
     assert gates["blocked_count"] == 1
     assert gates["monitoring_count"] == 0
+    assert gates["source_counts"] == {
+        "action_ledger": 1,
+        "event_stream": 1,
+    }
     assert gates["verification_task_ids"] == ["HMAMO-19"]
     assert gates["blocked_task_ids"] == ["HMAMO-19"]
     assert gates["monitoring_task_ids"] == []

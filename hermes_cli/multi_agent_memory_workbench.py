@@ -115,7 +115,7 @@ def build_multi_agent_memory_workbench(
     active_work = _active_work_from_events(recent_events, limit=safe_limit)
     recovery_entries = _dedupe_recovery_gate_entries(
         [
-            *action_entries,
+            *_delegate_recovery_entries_from_action_ledger(action_entries),
             *_delegate_recovery_entries_from_events(recent_events, limit=safe_limit),
         ],
         limit=safe_limit,
@@ -371,6 +371,7 @@ def _delegate_recovery_gate_summary(
     monitoring_task_ids: list[str] = []
     next_steps: list[str] = []
     blockers: list[str] = []
+    source_counts: dict[str, int] = {}
 
     for entry in _latest_delegate_recovery_entries(entries):
         if not isinstance(entry, dict):
@@ -378,6 +379,12 @@ def _delegate_recovery_gate_summary(
         event_type = _safe_label(entry.get("event_type"), fallback="", limit=LABEL_LIMIT)
         if not event_type.startswith("agent.child."):
             continue
+        source = _safe_label(
+            entry.get("source"),
+            fallback="unknown",
+            limit=LABEL_LIMIT,
+        ) or "unknown"
+        source_counts[source] = source_counts.get(source, 0) + 1
 
         status = _safe_status(entry.get("status")) or "unknown"
         task_id = (
@@ -431,6 +438,7 @@ def _delegate_recovery_gate_summary(
         "monitoring_task_ids": monitoring_task_ids,
         "next_steps": next_steps,
         "blockers": blockers,
+        "source_counts": source_counts,
         "degraded_reason": None,
         "privacy_class": WORKBENCH_PRIVACY_CLASS,
     }
@@ -457,6 +465,16 @@ def _latest_delegate_recovery_entries(
             order.append(key)
         latest_by_work[key] = entry
     return [latest_by_work[key] for key in order]
+
+
+def _delegate_recovery_entries_from_action_ledger(
+    entries: Iterable[Dict[str, Any]],
+) -> list[Dict[str, Any]]:
+    return [
+        {**entry, "source": "action_ledger"}
+        for entry in entries
+        if isinstance(entry, dict)
+    ]
 
 
 def _delegate_recovery_entries_from_events(
@@ -495,6 +513,7 @@ def _delegate_recovery_entries_from_events(
                 ),
                 "work_id": _safe_identifier(event.get("work_id") or event.get("run_id")),
                 "status": status,
+                "source": "event_stream",
                 "summary": _safe_summary(message, fallback=""),
                 "verification": _delegate_recovery_verification(event_type, status),
                 "blockers": _delegate_recovery_blockers(event_type, status, message),

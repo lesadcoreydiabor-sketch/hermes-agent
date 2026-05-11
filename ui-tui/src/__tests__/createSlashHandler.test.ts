@@ -1007,7 +1007,7 @@ describe('createSlashHandler', () => {
               ['Showing', '0 active'],
               ['Active', '0'],
               ['Completed', '1'],
-              ['Terminal', '1'],
+              ['Done', '1'],
               ['Latest', '#55 run.completed']
             ]),
             title: 'Summary'
@@ -1065,7 +1065,7 @@ describe('createSlashHandler', () => {
           expect.objectContaining({
             rows: expect.arrayContaining([
               ['Fetched', '3'],
-              ['Showing', '2 attention'],
+              ['Showing', '2 needs action'],
               ['Active', '1'],
               ['Attention', '2'],
               ['Approval', '1'],
@@ -1081,7 +1081,7 @@ describe('createSlashHandler', () => {
               ['#21 approval.request', 'status=waiting / source=gateway_run / run=run_waiting\napproval needed'],
               ['#22 run.failed', 'status=failed / source=gateway_run / run=run_failed\nrun failed safely']
             ]),
-            title: 'Recent 2/3 attention'
+            title: 'Recent 2/3 needs action'
           })
         ])
       )
@@ -1305,14 +1305,14 @@ describe('createSlashHandler', () => {
           expect.objectContaining({
             rows: expect.arrayContaining([
               ['Fetched', '5'],
-              ['Showing', '3 terminal'],
+              ['Showing', '3 done'],
               ['Active', '1'],
               ['Attention', '2'],
               ['Approval', '1'],
               ['Cancelled', '1'],
               ['Completed', '1'],
               ['Failed', '1'],
-              ['Terminal', '3'],
+              ['Done', '3'],
               ['Latest', '#64 approval.request']
             ]),
             title: 'Summary'
@@ -1323,7 +1323,7 @@ describe('createSlashHandler', () => {
               ['#62 run.cancelled', 'status=cancelled / source=gateway_run / run=run_cancelled\nrun cancelled'],
               ['#63 tool.completed', 'status=completed / tool=shell / source=dashboard_chat\ntool completed']
             ]),
-            title: 'Recent 3/5 terminal'
+            title: 'Recent 3/5 done'
           })
         ])
       )
@@ -1392,6 +1392,7 @@ describe('createSlashHandler', () => {
               monitoring_task_ids: ['HMAMO-11'],
               next_steps: ['Review delegate failure and decide retry, reassignment, or handoff.'],
               blockers: ['delegate child failed'],
+              source_counts: { action_ledger: 1, event_stream: 2 },
               degraded_reason: null,
               privacy_class: 'redacted_summary'
             }
@@ -1513,6 +1514,7 @@ describe('createSlashHandler', () => {
           expect.objectContaining({
             rows: expect.arrayContaining([
               ['Status', 'blocked'],
+              ['Sources', 'action_ledger:1 / event_stream:2'],
               ['Verified', 'HMAMO-10'],
               ['Blocked', 'HMAMO-12'],
               ['Monitoring', 'HMAMO-11'],

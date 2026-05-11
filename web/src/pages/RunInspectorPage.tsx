@@ -860,6 +860,10 @@ function MultiAgentMemoryWorkbenchCard({
               value={`${recoveryGates.completed_count} completed / ${recoveryGates.blocked_count} blocked / ${recoveryGates.monitoring_count} monitoring`}
             />
             <DetailRow
+              label="Sources"
+              value={formatRecoverySourceCounts(recoveryGates.source_counts)}
+            />
+            <DetailRow
               label="Verified"
               value={formatDisplayValue(
                 recoveryGates.verification_task_ids[0],
@@ -1986,6 +1990,16 @@ function DetailRow({ label, value }: { label: string; value: string }) {
       </span>
     </div>
   );
+}
+
+function formatRecoverySourceCounts(sourceCounts?: Record<string, number>): string {
+  const entries = Object.entries(sourceCounts ?? {})
+    .filter(([, count]) => count > 0)
+    .sort(([left], [right]) => left.localeCompare(right));
+  if (entries.length === 0) {
+    return "none";
+  }
+  return entries.map(([source, count]) => `${source}:${count}`).join(" / ");
 }
 
 function HealthSummary({

@@ -836,6 +836,7 @@ export interface RunInspectorMemoryWorkbenchRecoveryGates {
   monitoring_task_ids: string[];
   next_steps: string[];
   blockers: string[];
+  source_counts: Record<string, number>;
   degraded_reason: string | null;
   privacy_class: string;
 }
