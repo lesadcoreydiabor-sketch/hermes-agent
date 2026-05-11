@@ -1938,6 +1938,28 @@ tasks:
     status: completed
     risk: medium
 
+  - id: HMAMO-34
+    title: Render export handoff readiness diagnostics
+    description: Show read-only export handoff readiness in Run Inspector and TUI operator views without adding approval or export actions.
+    depends_on:
+      - HMAMO-33
+    acceptance:
+      - Run Inspector Multi-Agent Memory card shows a compact Gate signal derived from failure_review_export_handoff status and entry_count.
+      - Run Inspector renders safe Export gate detail rows for entry count/status, required decision fields, allowed decisions, and requested effect.
+      - TUI /inspector-memory summary includes Export gate count/status and an Export Handoff section with status, decision fields, decisions, and effect.
+      - View-model and slash command tests cover quiet, ready, degraded, and missing export handoff states.
+      - UI/TUI does not add approve, export, write-file, mark-applied, retry, spawn, write memory, edit skill, edit config, or task mutation controls.
+    verify:
+      - venv/Scripts/python.exe -m pytest tests/web/test_run_inspector_status_policy.py -q -o addopts=
+      - cd ui-tui; npm.cmd test -- createSlashHandler.test.ts
+      - cd ui-tui; npm.cmd run type-check
+      - cd web; npm.cmd run build
+      - Playwright smoke for /run-inspector desktop and narrow viewports
+      - venv/Scripts/python.exe -c "import yaml; yaml.safe_load(open('.hermes/task.yaml', encoding='utf-8'))"
+      - git diff --check -- web/src/pages/RunInspectorPage.tsx web/src/pages/runInspectorMemoryWorkbench.ts tests/web/test_run_inspector_status_policy.py ui-tui/src/app/slash/commands/ops.ts ui-tui/src/__tests__/createSlashHandler.test.ts docs/plans/hermes-multi-agent-memory-prd.md .hermes/task.yaml
+    status: completed
+    risk: medium
+
 risk_flags:
   destructive_file_change:
     pause: true
@@ -3132,6 +3154,19 @@ progress_report:
       verification_result: "passed: venv/Scripts/python.exe -m pytest tests/runtime/test_multi_agent_memory_workbench.py tests/runtime/test_learning_journal.py tests/runtime/test_failure_review_candidates.py -q -o addopts= (43 passed); passed: venv/Scripts/python.exe -m pytest tests/web/test_run_inspector_status_policy.py -q -o addopts= (27 passed); passed: cd ui-tui; npm.cmd run type-check; passed: cd web; npm.cmd run build; passed: venv/Scripts/python.exe -c yaml.safe_load task.yaml; passed: git diff --check for HMAMO-33 files"
       blockers: []
       next_step: "Continue HERMES Multi-Agent Memory orchestration integration by rendering export handoff readiness in operator views or adding a reviewed export application gate."
+    - task_id: HMAMO-34
+      status: completed
+      changed_files:
+        - web/src/pages/RunInspectorPage.tsx
+        - web/src/pages/runInspectorMemoryWorkbench.ts
+        - tests/web/test_run_inspector_status_policy.py
+        - ui-tui/src/app/slash/commands/ops.ts
+        - ui-tui/src/__tests__/createSlashHandler.test.ts
+        - docs/plans/hermes-multi-agent-memory-prd.md
+        - .hermes/task.yaml
+      verification_result: "passed: venv/Scripts/python.exe -m pytest tests/web/test_run_inspector_status_policy.py -q -o addopts= (27 passed); passed: cd ui-tui; npm.cmd test -- createSlashHandler.test.ts (100 passed); passed: cd ui-tui; npm.cmd run type-check; passed: cd web; npm.cmd run build; passed: Playwright smoke at http://127.0.0.1:9146/run-inspector for 1280x720 and 390x844 viewports showed Multi-Agent Memory Gate diagnostics, no horizontal overflow, and no approve/export-file/mark-applied/write-memory/edit-skill buttons; passed: venv/Scripts/python.exe -c yaml.safe_load task.yaml; passed: git diff --check for HMAMO-34 files"
+      blockers: []
+      next_step: "Continue HERMES Multi-Agent Memory orchestration integration by defining a reviewed export application gate before any file-writing export action."
 
 failure_review:
   enabled: true

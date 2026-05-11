@@ -93,6 +93,7 @@ import {
 import {
   describeAgentAssignmentState,
   describeDelegateRecoveryGateState,
+  describeFailureReviewExportHandoffState,
   describeFailureReviewExportPreviewState,
   describeHandoffProtocolState,
   describeLearningReviewState,
@@ -701,12 +702,16 @@ function MultiAgentMemoryWorkbenchCard({
   const recoveryGates = workbench?.action_ledger?.recovery_gates ?? null;
   const learningReview = workbench?.learning_review ?? null;
   const failureReviewExport = workbench?.failure_review_export ?? null;
+  const failureReviewExportHandoff =
+    workbench?.failure_review_export_handoff ?? null;
   const runtimePersistenceDisplay = describeRuntimePersistenceState(workbench);
   const assignmentDisplay = describeAgentAssignmentState(workbench);
   const recoveryDisplay = describeDelegateRecoveryGateState(workbench);
   const learningReviewDisplay = describeLearningReviewState(workbench);
   const failureReviewExportDisplay =
     describeFailureReviewExportPreviewState(workbench);
+  const failureReviewExportHandoffDisplay =
+    describeFailureReviewExportHandoffState(workbench);
   const handoffDisplay = describeHandoffProtocolState(workbench);
   const parallelPlanDisplay = describeParallelAssignmentPlanState(workbench);
   const runtimePersistenceFlags = runtimePersistence?.flags ?? [];
@@ -805,6 +810,12 @@ function MultiAgentMemoryWorkbenchCard({
             label="Export"
             tone={failureReviewExportDisplay.tone}
             value={failureReviewExportDisplay.label}
+          />
+          <Metric
+            icon={<Shield className="h-4 w-4" />}
+            label="Gate"
+            tone={failureReviewExportHandoffDisplay.tone}
+            value={failureReviewExportHandoffDisplay.label}
           />
           <Metric
             icon={<Handshake className="h-4 w-4" />}
@@ -958,6 +969,36 @@ function MultiAgentMemoryWorkbenchCard({
             <DetailRow
               label="Blocked effects"
               value={formatFailureReviewExportBlocked(failureReviewExport)}
+            />
+          </div>
+        ) : null}
+
+        {failureReviewExportHandoff ? (
+          <div className="flex min-w-0 flex-col divide-y divide-border/70 border border-border">
+            <DetailRow
+              label="Export gate"
+              value={`${failureReviewExportHandoff.entry_count} entries / ${failureReviewExportHandoff.status}`}
+            />
+            <DetailRow
+              label="Decision fields"
+              value={formatStringList(
+                failureReviewExportHandoff.required_decision_fields,
+                "None",
+              )}
+            />
+            <DetailRow
+              label="Decisions"
+              value={formatStringList(
+                failureReviewExportHandoff.allowed_decisions,
+                "None",
+              )}
+            />
+            <DetailRow
+              label="Effect"
+              value={formatDisplayValue(
+                failureReviewExportHandoff.requested_effect,
+                "None",
+              )}
             />
           </div>
         ) : null}
@@ -2110,8 +2151,11 @@ function formatLearningReviewMissing(
 function formatFailureReviewExportBlocked(
   preview: NonNullable<RunInspectorMemoryWorkbench["failure_review_export"]>,
 ): string {
-  const effects = preview.blocked_effects ?? [];
-  return effects.length ? effects.slice(0, 3).join(" / ") : "None";
+  return formatStringList(preview.blocked_effects, "None");
+}
+
+function formatStringList(values: string[] | undefined, fallback: string): string {
+  return values?.length ? values.slice(0, 3).join(" / ") : fallback;
 }
 
 function HealthSummary({

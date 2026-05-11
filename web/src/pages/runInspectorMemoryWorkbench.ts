@@ -400,3 +400,42 @@ export function describeFailureReviewExportPreviewState(
     tone: "muted",
   };
 }
+
+export function describeFailureReviewExportHandoffState(
+  workbench: RunInspectorMemoryWorkbench | null,
+): MemoryWorkbenchDisplay {
+  const handoff = workbench?.failure_review_export_handoff ?? null;
+  if (!handoff) {
+    return {
+      label: "Gate unknown",
+      message: "No export handoff summary",
+      tone: "muted",
+    };
+  }
+  if (handoff.degraded_reason) {
+    return {
+      label: "Gate degraded",
+      message: handoff.degraded_reason,
+      tone: "warning",
+    };
+  }
+  if (handoff.entry_count > 0) {
+    return {
+      label: "Gate ready",
+      message: `${handoff.entry_count} entries need review`,
+      tone: "primary",
+    };
+  }
+  if (handoff.status === "unavailable") {
+    return {
+      label: "Gate unavailable",
+      message: "Export handoff summary unavailable",
+      tone: "warning",
+    };
+  }
+  return {
+    label: "Gate quiet",
+    message: "No export handoff needed",
+    tone: "muted",
+  };
+}

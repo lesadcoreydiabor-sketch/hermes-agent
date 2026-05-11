@@ -498,6 +498,7 @@ const renderRunInspectorMemoryWorkbenchSummary = (
   const recovery = workbench?.action_ledger?.recovery_gates
   const review = workbench?.learning_review
   const exportPreview = workbench?.failure_review_export
+  const exportHandoff = workbench?.failure_review_export_handoff
   const plannedTasks = plannedInspectorTaskCount(plan)
   const rows: [string, string][] = [
     [
@@ -556,6 +557,12 @@ const renderRunInspectorMemoryWorkbenchSummary = (
         : 'unknown'
     ],
     [
+      'Export gate',
+      exportHandoff
+        ? `${exportHandoff.entry_count ?? 0} entries / ${clipInspectorText(exportHandoff.status, 'unknown', 48)}`
+        : 'unknown'
+    ],
+    [
       'Memory',
       `${workbench?.memory?.status ?? 'unknown'} / ${workbench?.memory?.provider_count ?? 0} providers`
     ],
@@ -574,6 +581,7 @@ const renderRunInspectorMemoryWorkbenchSummary = (
     recovery?.degraded_reason ||
     review?.degraded_reason ||
     exportPreview?.degraded_reason ||
+    exportHandoff?.degraded_reason ||
     workbench?.memory?.degraded_reason ||
     workbench?.runtime_persistence?.degraded_reason
   if (degraded) {
@@ -581,6 +589,29 @@ const renderRunInspectorMemoryWorkbenchSummary = (
   }
   if (workbench?.privacy_class) {
     rows.push(['Privacy', clipInspectorText(workbench.privacy_class, '', 48)])
+  }
+  return rows
+}
+
+const renderRunInspectorFailureReviewExportHandoffRows = (
+  workbench?: null | RunInspectorMemoryWorkbench
+): [string, string][] => {
+  const handoff = workbench?.failure_review_export_handoff
+  if (!handoff) {
+    return [['Export handoff', 'none']]
+  }
+
+  const rows: [string, string][] = [
+    [
+      'Status',
+      `${clipInspectorText(handoff.status, 'unknown', 48)} / ${handoff.entry_count ?? 0} entries`
+    ],
+    ['Decision fields', renderInspectorTaskIds(handoff.required_decision_fields, 6)],
+    ['Decisions', renderInspectorTaskIds(handoff.allowed_decisions, 6)],
+    ['Effect', clipInspectorText(handoff.requested_effect, 'none', 96)]
+  ]
+  if (handoff.degraded_reason) {
+    rows.push(['Export handoff degraded', clipInspectorText(handoff.degraded_reason)])
   }
   return rows
 }
@@ -1203,6 +1234,10 @@ export const opsCommands: SlashCommand[] = [
               {
                 rows: renderRunInspectorFailureReviewExportRows(r?.workbench),
                 title: 'Export Preview'
+              },
+              {
+                rows: renderRunInspectorFailureReviewExportHandoffRows(r?.workbench),
+                title: 'Export Handoff'
               },
               {
                 text: 'read-only memory workbench; no review action, export file, agent spawn, tool dispatch, memory write, skill edit, config edit, or task mutation'

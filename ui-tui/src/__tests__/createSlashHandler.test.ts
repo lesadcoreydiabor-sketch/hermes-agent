@@ -1449,6 +1449,21 @@ describe('createSlashHandler', () => {
             degraded_reason: null,
             privacy_class: 'redacted_summary'
           },
+          failure_review_export_handoff: {
+            status: 'ready',
+            handoff_id: 'failure-review-export-handoff',
+            action: 'review_failure_review_export',
+            state: 'pending_review',
+            preview_id: 'failure-review-export-preview',
+            output_kind: 'failure_review_summary',
+            entry_count: 2,
+            required_decision_fields: ['reviewer', 'decision', 'verification', 'rollback_note'],
+            allowed_decisions: ['approve_export_summary', 'request_changes', 'reject_export_summary'],
+            requested_effect: 'manual_export_after_review',
+            blocked_effects: ['write_export_file_without_review'],
+            degraded_reason: null,
+            privacy_class: 'redacted_summary'
+          },
           agent_assignments: {
             summary: {
               total_count: 3,
@@ -1533,6 +1548,7 @@ describe('createSlashHandler', () => {
               ['Recovery', '1 completed / 1 blocked / 1 monitoring'],
               ['Review', '1 ready / 1 blocked'],
               ['Export', '2 entries / ready'],
+              ['Export gate', '2 entries / ready'],
               ['Memory', 'available / 1 providers'],
               ['Persistence', 'disabled / 0 enabled'],
               ['Privacy', 'redacted_summary']
@@ -1598,6 +1614,15 @@ describe('createSlashHandler', () => {
               ['Blocked effects', 'write_export_file_without_review / mark_queue_entries_applied']
             ]),
             title: 'Export Preview'
+          }),
+          expect.objectContaining({
+            rows: expect.arrayContaining([
+              ['Status', 'ready / 2 entries'],
+              ['Decision fields', 'reviewer, decision, verification, rollback_note'],
+              ['Decisions', 'approve_export_summary, request_changes, reject_export_summary'],
+              ['Effect', 'manual_export_after_review']
+            ]),
+            title: 'Export Handoff'
           })
         ])
       )
