@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import re
 from datetime import datetime, timezone
 from pathlib import Path
@@ -19,6 +20,7 @@ from hermes_cli.learning_journal import (
     normalize_skills_journal_entry,
 )
 from hermes_cli.working_checkpoint import build_working_checkpoint_from_files
+from utils import is_truthy_value
 
 
 WORKBENCH_SCHEMA_VERSION = 1
@@ -28,6 +30,24 @@ SUMMARY_LIMIT = 240
 ID_LIMIT = 96
 LABEL_LIMIT = 96
 ENTRY_LIMIT = 12
+
+RUNTIME_PERSISTENCE_FLAGS = (
+    {
+        "name": "action_ledger",
+        "env_var": "HERMES_DELEGATE_ACTION_LEDGER",
+        "path": ".hermes/action_ledger.jsonl",
+    },
+    {
+        "name": "working_checkpoint",
+        "env_var": "HERMES_DELEGATE_WORKING_CHECKPOINT",
+        "path": ".hermes/working_checkpoint.json",
+    },
+    {
+        "name": "failure_queue",
+        "env_var": "HERMES_DELEGATE_FAILURE_QUEUE",
+        "path": ".hermes/long_term_queue.jsonl",
+    },
+)
 
 ACTIVE_STATUSES = frozenset({"queued", "running", "started", "in_progress", "waiting"})
 FAILED_STATUSES = frozenset(
@@ -85,6 +105,7 @@ def build_multi_agent_memory_workbench(
     )
     active_work = _active_work_from_events(events or [], limit=safe_limit)
     memory = _memory_summary(memory_diagnostics)
+    runtime_persistence = _runtime_persistence_summary(workspace)
 
     degraded_reasons = [
         checkpoint.get("degraded_reason"),
@@ -110,6 +131,7 @@ def build_multi_agent_memory_workbench(
         "status_reason": _status_reason(status, active_work, checkpoint),
         "active_work": active_work,
         "memory": memory,
+        "runtime_persistence": runtime_persistence,
         "checkpoint": checkpoint,
         "action_ledger": {
             "entries": action_entries,
@@ -151,6 +173,7 @@ def empty_multi_agent_memory_workbench(
             "degraded_reason": reason,
             "privacy_class": WORKBENCH_PRIVACY_CLASS,
         },
+        "runtime_persistence": _runtime_persistence_summary(Path(".")),
         "checkpoint": {
             "schema_version": 1,
             "generated_at": generated_at or _utc_now_iso(),
@@ -211,6 +234,33 @@ def _read_jsonl_entries(
             reasons.append(f"{path.stem}_entry_invalid")
 
     return entries[-limit:], _join_reasons(reasons)
+
+
+def _runtime_persistence_summary(workspace: Path) -> Dict[str, Any]:
+    flags = []
+    enabled_count = 0
+    for spec in RUNTIME_PERSISTENCE_FLAGS:
+        enabled = is_truthy_value(os.environ.get(spec["env_var"], False))
+        if enabled:
+            enabled_count += 1
+        flags.append(
+            {
+                "name": spec["name"],
+                "env_var": spec["env_var"],
+                "enabled": enabled,
+                "path": spec["path"],
+                "exists": (workspace / spec["path"]).exists(),
+                "privacy_class": WORKBENCH_PRIVACY_CLASS,
+            }
+        )
+
+    return {
+        "status": "enabled" if enabled_count else "disabled",
+        "enabled_count": enabled_count,
+        "flags": flags,
+        "degraded_reason": None,
+        "privacy_class": WORKBENCH_PRIVACY_CLASS,
+    }
 
 
 def _active_work_from_events(

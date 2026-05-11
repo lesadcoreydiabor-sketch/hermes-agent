@@ -183,6 +183,49 @@ def test_multi_agent_memory_workbench_reads_runtime_persisted_files(tmp_path) ->
     assert "C:\\Users" not in rendered
 
 
+def test_multi_agent_memory_workbench_reports_runtime_persistence_flags(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    hermes_dir = tmp_path / ".hermes"
+    hermes_dir.mkdir()
+    (hermes_dir / "task.yaml").write_text(
+        yaml.safe_dump({"capability": "hermes-multi-agent-memory"}, sort_keys=False),
+        encoding="utf-8",
+    )
+    (hermes_dir / "action_ledger.jsonl").write_text("", encoding="utf-8")
+    (hermes_dir / "working_checkpoint.json").write_text("{}", encoding="utf-8")
+    monkeypatch.setenv("HERMES_DELEGATE_ACTION_LEDGER", "1")
+    monkeypatch.setenv("HERMES_DELEGATE_WORKING_CHECKPOINT", "true")
+    monkeypatch.setenv("HERMES_DELEGATE_FAILURE_QUEUE", "token=secret")
+
+    workbench = build_multi_agent_memory_workbench(
+        tmp_path,
+        events=[],
+        memory_diagnostics={"providers": [], "degraded_reason": None},
+        generated_at="2026-05-11T00:01:00Z",
+    )
+
+    runtime = workbench["runtime_persistence"]
+    flags = {flag["name"]: flag for flag in runtime["flags"]}
+    assert runtime["status"] == "enabled"
+    assert runtime["enabled_count"] == 2
+    assert flags["action_ledger"] == {
+        "name": "action_ledger",
+        "env_var": "HERMES_DELEGATE_ACTION_LEDGER",
+        "enabled": True,
+        "path": ".hermes/action_ledger.jsonl",
+        "exists": True,
+        "privacy_class": "redacted_summary",
+    }
+    assert flags["working_checkpoint"]["enabled"] is True
+    assert flags["working_checkpoint"]["exists"] is True
+    assert flags["failure_queue"]["enabled"] is False
+    assert flags["failure_queue"]["exists"] is False
+    rendered = json.dumps(runtime, sort_keys=True)
+    assert "token=secret" not in rendered
+
+
 def test_multi_agent_memory_workbench_degrades_when_sources_are_missing(tmp_path) -> None:
     workbench = build_multi_agent_memory_workbench(
         tmp_path,

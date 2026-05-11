@@ -1182,6 +1182,23 @@ tasks:
     status: completed
     risk: low
 
+  - id: HMAMR-08
+    title: Expose runtime persistence status in workbench payload
+    description: Add a read-only runtime_persistence summary to the Multi-Agent Memory workbench payload so operators can see which delegate persistence opt-ins are active.
+    depends_on:
+      - HMAMR-07
+    acceptance:
+      - Workbench payload reports HERMES_DELEGATE_ACTION_LEDGER, HERMES_DELEGATE_WORKING_CHECKPOINT, and HERMES_DELEGATE_FAILURE_QUEUE as enabled or disabled without exposing env values.
+      - Payload reports the local file targets and whether each target currently exists.
+      - Payload is read-only and does not create files, write ledgers, refresh checkpoints, append queues, mutate config, or edit skills.
+      - Missing or disabled flags remain normal workbench state and do not mark the workbench degraded.
+    verify:
+      - venv/Scripts/python.exe -m pytest tests/runtime/test_multi_agent_memory_workbench.py tests/hermes_cli/test_run_inspector_api.py -q -o addopts=
+      - venv/Scripts/python.exe -c "import yaml; yaml.safe_load(open('.hermes/task.yaml', encoding='utf-8'))"
+      - git diff --check -- hermes_cli/multi_agent_memory_workbench.py tests/runtime/test_multi_agent_memory_workbench.py .hermes/task.yaml
+    status: completed
+    risk: medium
+
 risk_flags:
   destructive_file_change:
     pause: true
@@ -1976,6 +1993,15 @@ progress_report:
       verification_result: "passed: git diff --check -- docs/plans/hermes-multi-agent-memory-prd.md .hermes/task.yaml; passed: venv/Scripts/python.exe -c yaml.safe_load task.yaml"
       blockers: []
       next_step: "Review next UI or operator-facing status hint only after checking existing Run Inspector dirty files."
+    - task_id: HMAMR-08
+      status: completed
+      changed_files:
+        - hermes_cli/multi_agent_memory_workbench.py
+        - tests/runtime/test_multi_agent_memory_workbench.py
+        - .hermes/task.yaml
+      verification_result: "passed: venv/Scripts/python.exe -m pytest tests/runtime/test_multi_agent_memory_workbench.py tests/hermes_cli/test_run_inspector_api.py -q -o addopts= (18 passed); passed: venv/Scripts/python.exe -c yaml.safe_load task.yaml; passed: git diff --check for HMAMR-08 files"
+      blockers: []
+      next_step: "Add frontend display for runtime persistence status only after coordinating existing dirty web files."
 
 failure_review:
   enabled: true
