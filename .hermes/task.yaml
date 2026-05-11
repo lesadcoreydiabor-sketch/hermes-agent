@@ -776,7 +776,7 @@ tasks:
     verify:
       - git diff --check -- docs/plans/hermes-desktop-runtime-decision.md .hermes/task.yaml
       - venv/Scripts/python.exe -c "import yaml; yaml.safe_load(open('.hermes/task.yaml', encoding='utf-8'))"
-    status: pending
+    status: completed
     risk: medium
 
 risk_flags:
@@ -1318,6 +1318,14 @@ progress_report:
       verification_result: "passed: venv/Scripts/python.exe -m pytest tests/web/test_run_inspector_status_policy.py -q -o addopts= (23 passed); passed: cd web; npm.cmd run build; passed: Playwright smoke for /run-inspector desktop and narrow viewports with no permission request, no horizontal overflow, and denied permission degrading safely; GitNexus detect_changes staged risk low with no affected processes"
       blockers: []
       next_step: "HRIDS-09 browser notification opt-in implemented locally; run YAML/diff/GitNexus checks, stage, commit, push, then re-evaluate native tray and desktop runtime in HRIDS-10."
+    - task_id: HRIDS-10
+      status: completed
+      changed_files:
+        - docs/plans/hermes-desktop-runtime-decision.md
+        - .hermes/task.yaml
+      verification_result: "passed: git diff --check -- docs/plans/hermes-desktop-runtime-decision.md .hermes/task.yaml; passed: venv/Scripts/python.exe -c yaml.safe_load task.yaml; GitNexus detect_changes staged risk low with no affected processes"
+      blockers: []
+      next_step: "HRIDS-10 runtime decision re-accepted browser launcher; verify, commit, push, then plan the next lifecycle reliability slice."
 
 failure_review:
   enabled: true

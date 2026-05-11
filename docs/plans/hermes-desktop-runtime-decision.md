@@ -1,12 +1,13 @@
 # HERMES Desktop Runtime Decision
 
 Date: 2026-05-11
-Status: Accepted for HRIDS-04
+Status: Re-accepted for HRIDS-10 after browser notification validation
 Owner: Product Manager skill
 Related:
 
 - `docs/plans/hermes-run-inspector-desktop-shell-prd.md`
 - `docs/plans/hermes-desktop-wrapper-decision.md`
+- `docs/plans/hermes-desktop-attention-notifications-prd.md`
 - `.hermes/task.yaml`
 
 ## Decision
@@ -22,6 +23,21 @@ Do not add Tauri, Electron, or Python webview packaging yet. The current runtime
 - existing React dashboard and FastAPI backend as the only UI/runtime implementation
 
 This keeps the desktop work focused on lifecycle reliability before adding installer, tray, update, signing, and bundled-runtime responsibilities.
+
+## HRIDS-10 Re-Evaluation
+
+HRIDS-09 validated the next desktop-adjacent capability without adding a native runtime:
+
+- The Run Inspector dashboard can render safe attention signals.
+- Browser notifications require an explicit user click before `requestPermission`.
+- Denied or unsupported browser notification permission degrades inside the dashboard.
+- Delivered notifications use the safe attention signal title/body only.
+- Notification click routing uses `/run-inspector` and does not carry a session token.
+- Dedupe and TTL are enforced before notification delivery.
+
+This means the first attention workflow no longer requires a tray, packaged window, installer, or native notification bridge. The product still needs better lifecycle reliability and operator observability before native packaging would pay for itself.
+
+Decision: keep the browser-launcher runtime for the next phase. Revisit a packaged runtime only after HERMES has evidence that browser-open notification delivery is insufficient for real operators.
 
 ## Current State
 
@@ -86,6 +102,24 @@ Risks:
 | Tauri | Small packaged shell | Good if WebView2 is present; Rust toolchain needed | High | Good | Requires signing/update decisions | Strong isolation if configured correctly | Medium-high | Evaluate later |
 | Electron | Mature desktop runtime | Good but heavier | High | Good | Requires app updater/signing path | Larger attack surface, Node integration constraints | High | Defer unless Tauri/webview fail |
 
+## Post-Notification Runtime Gate
+
+| Gate | Current Browser Launcher | Python Webview | Tauri | Electron | HRIDS-10 Decision |
+| --- | --- | --- | --- | --- | --- |
+| OS matrix | Works anywhere supported HERMES and a browser run | Requires WebView2/GTK/Cocoa validation | Requires Rust build plus system WebView validation | Requires Electron package validation | Keep browser launcher until platform-specific need is proven |
+| Packaging | No new packaging | New Python dependency and native webview packaging | New app packaging pipeline | New app packaging pipeline | Defer packaged runtime |
+| Signing | Existing HERMES distribution only | New signing path if distributed as app | New signing path | New signing path | Defer |
+| Update model | Existing HERMES update path | Custom app/runtime update story | Tauri updater or custom update story | Electron updater or custom update story | Defer |
+| Session token handling | Existing FastAPI injection model | Must audit embedded window storage and navigation | Must audit window isolation and deep links | Must audit Node integration and deep links | Keep existing token model |
+| Local dashboard discovery | Already implemented through `hermes desktop --status` and shell-owned runtime file | Still needs same discovery | Still needs same discovery | Still needs same discovery | Improve current discovery first |
+| Port conflicts | Current shell reports/degrades without mutating gateway config | Same problem remains | Same problem remains | Same problem remains | Improve diagnostics before packaging |
+| Remote mode | Browser can already open a remote dashboard URL if separately supported | Needs explicit remote navigation and auth story | Needs explicit remote navigation and auth story | Needs explicit remote navigation and auth story | Keep remote mode out of runtime packaging |
+| Tray | Not available | Limited/non-standard | Good | Good | Not justified yet |
+| OS notifications | Browser notifications while dashboard is open | Native bridge possible | Native bridge possible | Native bridge possible | Browser opt-in is enough for validation |
+| Rollback | Revert CLI/dashboard changes | App rollback needed | App rollback needed | App rollback needed | Avoid extra rollback surface |
+| Support ownership | Existing CLI/dashboard owner | Adds native runtime support | Adds Rust/native app support | Adds Electron/security support | Avoid until usage evidence requires it |
+| CI cost | Existing web/Python checks | Adds webview matrix | Adds Rust/app build matrix | Adds Electron build matrix | Avoid until packaging is accepted |
+
 ## Accepted Path
 
 For the next implementation phase:
@@ -126,6 +160,8 @@ No packaged runtime work should begin until a new PRD answers:
 - rollback and support plan
 - CI build cost and release ownership
 
+The current answer is no: HRIDS-10 does not approve packaged runtime work. A later PRD may reopen the gate only with measured evidence from Run Inspector usage, notification opt-in behavior, and dashboard lifecycle telemetry.
+
 ## Product Boundary
 
 The desktop runtime must not become:
@@ -140,7 +176,7 @@ The desktop runtime must not become:
 
 ## Next Step
 
-HRIDS-04 closes the runtime choice for this phase.
+HRIDS-10 closes the runtime choice for this phase after browser notification validation.
 
 Next product slice should improve browser-launcher reliability rather than package a new runtime:
 
