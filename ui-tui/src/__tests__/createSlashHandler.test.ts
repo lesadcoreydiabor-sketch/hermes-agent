@@ -714,6 +714,16 @@ describe('createSlashHandler', () => {
         expect.arrayContaining([
           expect.objectContaining({
             rows: expect.arrayContaining([
+              ['Fetched', '1'],
+              ['Showing', '1'],
+              ['Attention', '1'],
+              ['Failed', '0'],
+              ['Latest', '#9 approval.request']
+            ]),
+            title: 'Summary'
+          }),
+          expect.objectContaining({
+            rows: expect.arrayContaining([
               ['#9 approval.request', 'status=waiting / tool=shell / source=gateway_run / run=run_event\napproval needed']
             ]),
             title: 'Recent 1'
@@ -756,6 +766,16 @@ describe('createSlashHandler', () => {
       expect(ctx.transcript.panel).toHaveBeenCalledWith(
         'Run Inspector Events',
         expect.arrayContaining([
+          expect.objectContaining({
+            rows: expect.arrayContaining([
+              ['Fetched', '2'],
+              ['Showing', '1 failed'],
+              ['Attention', '1'],
+              ['Failed', '1'],
+              ['Latest', '#11 run.failed']
+            ]),
+            title: 'Summary'
+          }),
           expect.objectContaining({
             rows: expect.arrayContaining([
               ['#11 run.failed', 'status=failed / source=gateway_run / run=run_failed\nrun failed safely']

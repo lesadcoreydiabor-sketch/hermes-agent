@@ -320,6 +320,40 @@ const renderRunInspectorEvents = (events?: RunInspectorEventSummary[], error?: n
   return rows
 }
 
+const isAttentionRunInspectorEvent = (event: RunInspectorEventSummary): boolean => {
+  const type = String(event.type || '').toLowerCase()
+  const status = String(event.status || '').toLowerCase()
+  return type === 'approval.request' || status === 'waiting' || status === 'failed' || type.endsWith('.failed')
+}
+
+const isFailedRunInspectorEvent = (event: RunInspectorEventSummary): boolean => {
+  const type = String(event.type || '').toLowerCase()
+  const status = String(event.status || '').toLowerCase()
+  return status === 'failed' || type.endsWith('.failed')
+}
+
+const latestRunInspectorEvent = (events: RunInspectorEventSummary[]): RunInspectorEventSummary | undefined =>
+  [...events].sort((left, right) => Number(left.id ?? 0) - Number(right.id ?? 0)).at(-1)
+
+const renderRunInspectorEventSummary = (
+  events: RunInspectorEventSummary[] | undefined,
+  filtered: RunInspectorEventSummary[],
+  filter: InspectorEventFilter
+): [string, string][] => {
+  const source = events ?? []
+  const latest = latestRunInspectorEvent(source)
+  const latestType = latest ? clipInspectorText(latest.type, 'event', 64) : 'none'
+  const latestId = latest?.id === undefined ? '?' : String(latest.id)
+
+  return [
+    ['Fetched', String(source.length)],
+    ['Showing', filter === 'all' ? String(filtered.length) : `${filtered.length} ${filter}`],
+    ['Attention', String(source.filter(isAttentionRunInspectorEvent).length)],
+    ['Failed', String(source.filter(isFailedRunInspectorEvent).length)],
+    ['Latest', latest ? `#${latestId} ${latestType}` : 'none']
+  ]
+}
+
 const filterRunInspectorEvents = (
   events: RunInspectorEventSummary[] | undefined,
   filter: InspectorEventFilter
@@ -654,6 +688,10 @@ export const opsCommands: SlashCommand[] = [
           ctx.guarded<RunInspectorEventsResponse>(r => {
             const filtered = filterRunInspectorEvents(r?.events, parsed.filter)
             ctx.transcript.panel('Run Inspector Events', [
+              {
+                rows: renderRunInspectorEventSummary(r?.events, filtered, parsed.filter),
+                title: 'Summary'
+              },
               {
                 rows: renderRunInspectorEvents(filtered, r?.error),
                 title:
