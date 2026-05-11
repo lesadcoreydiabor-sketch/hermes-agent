@@ -382,6 +382,9 @@ skills, write provider memory, mutate config, or mutate `.hermes/task.yaml`.
 The Run Inspector memory workbench can surface these requests as read-only
 diagnostics with ready and blocked counts; blocked requests must list missing
 requirements instead of guessing or silently filling review evidence.
+Operator views should render this as status and evidence readiness only. They
+must not add approve, promote, export, mark-covered, retry, spawn, or config
+mutation controls until a separate reviewed mutation contract exists.
 
 ### Phase 6: Agent-Ready Work Distribution
 

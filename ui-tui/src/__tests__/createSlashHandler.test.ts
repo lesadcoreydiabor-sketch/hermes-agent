@@ -1403,6 +1403,26 @@ describe('createSlashHandler', () => {
               privacy_class: 'redacted_summary'
             }
           },
+          learning_review: {
+            status: 'blocked',
+            ready_count: 1,
+            blocked_count: 1,
+            requests: [
+              {
+                action: 'promote_queue_to_skills_journal',
+                state: 'needs_review_evidence',
+                source_queue_id: 'queue-1',
+                target_type: 'skill_update',
+                target_ref: 'product-manager',
+                missing_requirements: ['verification', 'rollback_note'],
+                requested_effect: 'append_skills_journal_after_review',
+                blocked_effects: ['edit_skill_files'],
+                privacy_class: 'redacted_summary'
+              }
+            ],
+            degraded_reason: null,
+            privacy_class: 'redacted_summary'
+          },
           agent_assignments: {
             summary: {
               total_count: 3,
@@ -1485,6 +1505,7 @@ describe('createSlashHandler', () => {
               ['Conflicts', '0 scoped / 0 pairs'],
               ['Handoff', '1 ready / 0 verify / 1 review'],
               ['Recovery', '1 completed / 1 blocked / 1 monitoring'],
+              ['Review', '1 ready / 1 blocked'],
               ['Memory', 'available / 1 providers'],
               ['Persistence', 'disabled / 0 enabled'],
               ['Privacy', 'redacted_summary']
@@ -1531,6 +1552,15 @@ describe('createSlashHandler', () => {
               ['Blockers', 'delegate child failed']
             ]),
             title: 'Recovery'
+          }),
+          expect.objectContaining({
+            rows: expect.arrayContaining([
+              ['Status', 'blocked / 1 ready / 1 blocked'],
+              ['Action', 'promote_queue_to_skills_journal'],
+              ['Missing', 'verification / rollback_note'],
+              ['Effect', 'append_skills_journal_after_review']
+            ]),
+            title: 'Review'
           })
         ])
       )

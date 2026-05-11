@@ -315,3 +315,49 @@ export function describeDelegateRecoveryGateState(
     tone: "muted",
   };
 }
+
+export function describeLearningReviewState(
+  workbench: RunInspectorMemoryWorkbench | null,
+): MemoryWorkbenchDisplay {
+  const review = workbench?.learning_review ?? null;
+  if (!review) {
+    return {
+      label: "Review unknown",
+      message: "No learning review summary",
+      tone: "muted",
+    };
+  }
+  if (review.degraded_reason) {
+    return {
+      label: "Review degraded",
+      message: review.degraded_reason,
+      tone: "warning",
+    };
+  }
+  if (review.blocked_count > 0) {
+    return {
+      label: "Review blocked",
+      message: `${review.blocked_count} blocked / ${review.ready_count} ready`,
+      tone: "warning",
+    };
+  }
+  if (review.ready_count > 0) {
+    return {
+      label: "Review ready",
+      message: `${review.ready_count} pending review`,
+      tone: "primary",
+    };
+  }
+  if (review.status === "unavailable") {
+    return {
+      label: "Review unavailable",
+      message: "Learning review summary unavailable",
+      tone: "warning",
+    };
+  }
+  return {
+    label: "Review quiet",
+    message: "No pending learning review requests",
+    tone: "muted",
+  };
+}

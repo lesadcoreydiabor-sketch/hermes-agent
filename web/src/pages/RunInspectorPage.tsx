@@ -11,6 +11,7 @@ import {
   AlertTriangle,
   Bell,
   CheckCircle2,
+  ClipboardCheck,
   Clock,
   Database,
   FileWarning,
@@ -93,6 +94,7 @@ import {
   describeAgentAssignmentState,
   describeDelegateRecoveryGateState,
   describeHandoffProtocolState,
+  describeLearningReviewState,
   describeMemoryWorkbenchState,
   describeParallelAssignmentPlanState,
   describeRuntimePersistenceState,
@@ -696,9 +698,11 @@ function MultiAgentMemoryWorkbenchCard({
   const handoffProtocol = workbench?.agent_assignments?.handoff_protocol ?? null;
   const parallelPlan = workbench?.agent_assignments?.parallel_plan ?? null;
   const recoveryGates = workbench?.action_ledger?.recovery_gates ?? null;
+  const learningReview = workbench?.learning_review ?? null;
   const runtimePersistenceDisplay = describeRuntimePersistenceState(workbench);
   const assignmentDisplay = describeAgentAssignmentState(workbench);
   const recoveryDisplay = describeDelegateRecoveryGateState(workbench);
+  const learningReviewDisplay = describeLearningReviewState(workbench);
   const handoffDisplay = describeHandoffProtocolState(workbench);
   const parallelPlanDisplay = describeParallelAssignmentPlanState(workbench);
   const runtimePersistenceFlags = runtimePersistence?.flags ?? [];
@@ -744,7 +748,7 @@ function MultiAgentMemoryWorkbenchCard({
           </div>
         ) : null}
 
-        <div className="grid min-w-0 gap-2 sm:grid-cols-2 xl:grid-cols-9">
+        <div className="grid min-w-0 gap-2 sm:grid-cols-2 lg:grid-cols-5 2xl:grid-cols-10">
           <Metric
             icon={<Activity className="h-4 w-4" />}
             label="Work"
@@ -785,6 +789,12 @@ function MultiAgentMemoryWorkbenchCard({
             label="Recovery"
             tone={recoveryDisplay.tone}
             value={recoveryDisplay.label}
+          />
+          <Metric
+            icon={<ClipboardCheck className="h-4 w-4" />}
+            label="Review"
+            tone={learningReviewDisplay.tone}
+            value={learningReviewDisplay.label}
           />
           <Metric
             icon={<Handshake className="h-4 w-4" />}
@@ -886,6 +896,30 @@ function MultiAgentMemoryWorkbenchCard({
             <DetailRow
               label="Next"
               value={formatDisplayValue(recoveryGates.next_steps[0], "No next step")}
+            />
+          </div>
+        ) : null}
+
+        {learningReview ? (
+          <div className="flex min-w-0 flex-col divide-y divide-border/70 border border-border">
+            <DetailRow
+              label="Review"
+              value={`${learningReview.ready_count} ready / ${learningReview.blocked_count} blocked`}
+            />
+            <DetailRow
+              label="Action"
+              value={formatDisplayValue(learningReview.requests[0]?.action, "None")}
+            />
+            <DetailRow
+              label="Missing"
+              value={formatLearningReviewMissing(learningReview.requests[0])}
+            />
+            <DetailRow
+              label="Effect"
+              value={formatDisplayValue(
+                learningReview.requests[0]?.requested_effect,
+                "None",
+              )}
             />
           </div>
         ) : null}
@@ -2024,6 +2058,15 @@ function formatRecoveryLatest(
     recoveryGates.latest_timestamp,
   ].filter(Boolean);
   return parts.length ? parts.join(" / ") : "none";
+}
+
+function formatLearningReviewMissing(
+  request?: NonNullable<
+    RunInspectorMemoryWorkbench["learning_review"]
+  >["requests"][number],
+): string {
+  const missing = request?.missing_requirements ?? [];
+  return missing.length ? missing.join(" / ") : "None";
 }
 
 function HealthSummary({

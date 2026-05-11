@@ -487,6 +487,7 @@ const renderRunInspectorMemoryWorkbenchSummary = (
   const plan = assignments?.parallel_plan
   const handoff = assignments?.handoff_protocol
   const recovery = workbench?.action_ledger?.recovery_gates
+  const review = workbench?.learning_review
   const plannedTasks = plannedInspectorTaskCount(plan)
   const rows: [string, string][] = [
     [
@@ -533,6 +534,12 @@ const renderRunInspectorMemoryWorkbenchSummary = (
         : 'unknown'
     ],
     [
+      'Review',
+      review
+        ? `${review.ready_count ?? 0} ready / ${review.blocked_count ?? 0} blocked`
+        : 'unknown'
+    ],
+    [
       'Memory',
       `${workbench?.memory?.status ?? 'unknown'} / ${workbench?.memory?.provider_count ?? 0} providers`
     ],
@@ -549,6 +556,7 @@ const renderRunInspectorMemoryWorkbenchSummary = (
     plan?.degraded_reason ||
     handoff?.degraded_reason ||
     recovery?.degraded_reason ||
+    review?.degraded_reason ||
     workbench?.memory?.degraded_reason ||
     workbench?.runtime_persistence?.degraded_reason
   if (degraded) {
@@ -556,6 +564,30 @@ const renderRunInspectorMemoryWorkbenchSummary = (
   }
   if (workbench?.privacy_class) {
     rows.push(['Privacy', clipInspectorText(workbench.privacy_class, '', 48)])
+  }
+  return rows
+}
+
+const renderRunInspectorLearningReviewRows = (
+  workbench?: null | RunInspectorMemoryWorkbench
+): [string, string][] => {
+  const review = workbench?.learning_review
+  if (!review) {
+    return [['Review', 'none']]
+  }
+
+  const first = review.requests?.[0]
+  const rows: [string, string][] = [
+    [
+      'Status',
+      `${clipInspectorText(review.status, 'unknown', 48)} / ${review.ready_count ?? 0} ready / ${review.blocked_count ?? 0} blocked`
+    ],
+    ['Action', clipInspectorText(first?.action, 'none', 96)],
+    ['Missing', inspectorListCount(first?.missing_requirements) ? (first?.missing_requirements ?? []).join(' / ') : 'none'],
+    ['Effect', clipInspectorText(first?.requested_effect, 'none', 96)]
+  ]
+  if (review.degraded_reason) {
+    rows.push(['Review degraded', clipInspectorText(review.degraded_reason)])
   }
   return rows
 }
@@ -1117,7 +1149,11 @@ export const opsCommands: SlashCommand[] = [
                 title: 'Recovery'
               },
               {
-                text: 'read-only memory workbench; no agent spawn, tool dispatch, memory write, skill edit, config edit, or task mutation'
+                rows: renderRunInspectorLearningReviewRows(r?.workbench),
+                title: 'Review'
+              },
+              {
+                text: 'read-only memory workbench; no review action, agent spawn, tool dispatch, memory write, skill edit, config edit, or task mutation'
               }
             ])
           })

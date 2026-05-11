@@ -1418,6 +1418,14 @@ def test_run_inspector_memory_workbench_describes_all_states() -> None:
                 degraded_reason: null,
               },
               long_term_queue: { entries: [], unresolved_count: 0, degraded_reason: null },
+              learning_review: {
+                status: "empty",
+                ready_count: 0,
+                blocked_count: 0,
+                requests: [],
+                degraded_reason: null,
+                privacy_class: "redacted_summary",
+              },
               skills_journal: { entries: [], degraded_reason: null },
               degraded_reason: null,
               privacy_class: "redacted_summary",
@@ -1595,6 +1603,26 @@ def test_run_inspector_memory_workbench_describes_all_states() -> None:
                   },
                 },
               }).tone,
+              reviewQuiet: workbench.describeLearningReviewState(base).label,
+              reviewReady: workbench.describeLearningReviewState({
+                ...base,
+                learning_review: {
+                  ...base.learning_review,
+                  status: "ready",
+                  ready_count: 2,
+                  blocked_count: 0,
+                },
+              }).message,
+              reviewBlocked: workbench.describeLearningReviewState({
+                ...base,
+                learning_review: {
+                  ...base.learning_review,
+                  status: "blocked",
+                  ready_count: 1,
+                  blocked_count: 3,
+                },
+              }).message,
+              reviewMissing: workbench.describeLearningReviewState(null).tone,
               recoveryMissing: workbench.describeDelegateRecoveryGateState(null).tone,
               handoffMissing: workbench.describeHandoffProtocolState(null).tone,
               planMissing: workbench.describeParallelAssignmentPlanState(null).tone,
@@ -1630,6 +1658,10 @@ def test_run_inspector_memory_workbench_describes_all_states() -> None:
     assert payload["recoveryQuiet"] == "Recovery quiet"
     assert payload["recoveryBlocked"] == "2 blocked / 1 completed"
     assert payload["recoveryActive"] == "primary"
+    assert payload["reviewQuiet"] == "Review quiet"
+    assert payload["reviewReady"] == "2 pending review"
+    assert payload["reviewBlocked"] == "3 blocked / 1 ready"
+    assert payload["reviewMissing"] == "muted"
     assert payload["recoveryMissing"] == "muted"
     assert payload["handoffMissing"] == "muted"
     assert payload["planMissing"] == "muted"
@@ -1657,9 +1689,11 @@ def test_run_inspector_memory_workbench_uses_readonly_api() -> None:
     assert "describeHandoffProtocolState" in page_source
     assert "describeParallelAssignmentPlanState" in page_source
     assert "describeDelegateRecoveryGateState" in page_source
+    assert "describeLearningReviewState" in page_source
     assert 'label="Persistence"' in page_source
     assert 'label="Assignments"' in page_source
     assert 'label="Recovery"' in page_source
+    assert 'label="Review"' in page_source
     assert 'label="Sources"' in page_source
     assert 'label="Types"' in page_source
     assert 'label="Statuses"' in page_source
@@ -1693,6 +1727,9 @@ def test_run_inspector_memory_workbench_uses_readonly_api() -> None:
         ROOT / "web" / "src" / "pages" / "runInspectorMemoryWorkbench.ts"
     ).read_text(encoding="utf-8")
     assert "describeDelegateRecoveryGateState" in (
+        ROOT / "web" / "src" / "pages" / "runInspectorMemoryWorkbench.ts"
+    ).read_text(encoding="utf-8")
+    assert "describeLearningReviewState" in (
         ROOT / "web" / "src" / "pages" / "runInspectorMemoryWorkbench.ts"
     ).read_text(encoding="utf-8")
     assert "/api/run-inspector/memory-workbench?limit=" in api_source

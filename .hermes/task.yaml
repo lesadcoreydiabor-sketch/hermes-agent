@@ -1816,6 +1816,28 @@ tasks:
     status: completed
     risk: medium
 
+  - id: HMAMO-28
+    title: Render learning review diagnostics in operator views
+    description: Show read-only learning review readiness in Run Inspector and TUI memory workbench views without adding mutation controls.
+    depends_on:
+      - HMAMO-27
+    acceptance:
+      - Run Inspector Multi-Agent Memory card shows a compact Review signal derived from learning_review status/counts.
+      - Run Inspector renders safe Review detail rows for ready/blocked counts, first action, missing requirements, and requested effect.
+      - TUI /inspector-memory summary includes Review ready/blocked counts and a Review section with status, action, missing requirements, and requested effect.
+      - View-model and slash command tests cover quiet, ready, blocked, and missing review states.
+      - UI/TUI does not add approve, promote, export, mark-covered, retry, spawn, write memory, edit skill, edit config, or task mutation controls.
+    verify:
+      - venv/Scripts/python.exe -m pytest tests/web/test_run_inspector_status_policy.py -q -o addopts=
+      - cd ui-tui; npm.cmd test -- createSlashHandler.test.ts
+      - cd ui-tui; npm.cmd run type-check
+      - cd ui-tui; npm.cmd run build
+      - cd web; npm.cmd run build
+      - venv/Scripts/python.exe -c "import yaml; yaml.safe_load(open('.hermes/task.yaml', encoding='utf-8'))"
+      - git diff --check -- web/src/pages/RunInspectorPage.tsx web/src/pages/runInspectorMemoryWorkbench.ts tests/web/test_run_inspector_status_policy.py ui-tui/src/app/slash/commands/ops.ts ui-tui/src/__tests__/createSlashHandler.test.ts docs/plans/hermes-multi-agent-memory-prd.md .hermes/task.yaml
+    status: completed
+    risk: medium
+
 risk_flags:
   destructive_file_change:
     pause: true
@@ -2938,6 +2960,19 @@ progress_report:
       verification_result: "passed: venv/Scripts/python.exe -m pytest tests/runtime/test_multi_agent_memory_workbench.py tests/runtime/test_learning_journal.py tests/runtime/test_failure_review_candidates.py -q -o addopts= (36 passed); passed: venv/Scripts/python.exe -m pytest tests/hermes_cli/test_run_inspector_api.py tests/test_tui_gateway_server.py -q -o addopts= (197 passed); passed: venv/Scripts/python.exe -m pytest tests/web/test_run_inspector_status_policy.py -q -o addopts= (27 passed); passed: cd ui-tui; npm.cmd run type-check; passed: cd ui-tui; npm.cmd run build; passed: cd web; npm.cmd run build; passed: venv/Scripts/python.exe -c yaml.safe_load task.yaml; passed: git diff --check for HMAMO-27 files"
       blockers: []
       next_step: "Continue HERMES Multi-Agent Memory orchestration integration by rendering learning review diagnostics in operator views."
+    - task_id: HMAMO-28
+      status: completed
+      changed_files:
+        - web/src/pages/RunInspectorPage.tsx
+        - web/src/pages/runInspectorMemoryWorkbench.ts
+        - tests/web/test_run_inspector_status_policy.py
+        - ui-tui/src/app/slash/commands/ops.ts
+        - ui-tui/src/__tests__/createSlashHandler.test.ts
+        - docs/plans/hermes-multi-agent-memory-prd.md
+        - .hermes/task.yaml
+      verification_result: "passed: venv/Scripts/python.exe -m pytest tests/web/test_run_inspector_status_policy.py -q -o addopts= (27 passed); passed: cd ui-tui; npm.cmd test -- createSlashHandler.test.ts (100 passed); passed: cd ui-tui; npm.cmd run type-check; passed: cd ui-tui; npm.cmd run build; passed: cd web; npm.cmd run build; passed: Browser smoke at http://127.0.0.1:9142/run-inspector showed Multi-Agent Memory, Review, Action, Missing, Effect, no mutation controls, and no secret/path leak; passed: venv/Scripts/python.exe -c yaml.safe_load task.yaml; passed: git diff --check for HMAMO-28 files"
+      blockers: []
+      next_step: "Continue HERMES Multi-Agent Memory orchestration integration with browser smoke for learning review diagnostics."
 
 failure_review:
   enabled: true
