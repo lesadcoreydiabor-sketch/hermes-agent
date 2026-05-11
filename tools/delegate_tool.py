@@ -130,6 +130,7 @@ MAX_DEPTH = 1  # flat by default: parent (0) -> child (1); grandchild rejected u
 # stays as the default fallback and is still the symbol tests import.
 _MIN_SPAWN_DEPTH = 1
 _MAX_SPAWN_DEPTH_CAP = 3
+_DELEGATE_ACTION_LEDGER_ENV = "HERMES_DELEGATE_ACTION_LEDGER"
 
 
 # ---------------------------------------------------------------------------
@@ -224,6 +225,43 @@ def _safe_str_attr(obj: Any, name: str) -> Optional[str]:
     return value if isinstance(value, str) else None
 
 
+def _delegate_action_ledger_enabled() -> bool:
+    """Return whether delegate lifecycle events may write the action ledger."""
+
+    return is_truthy_value(os.environ.get(_DELEGATE_ACTION_LEDGER_ENV, False))
+
+
+def _append_delegate_action_ledger_event(
+    event: Dict[str, Any],
+    *,
+    task_id: Optional[str] = None,
+) -> None:
+    """Best-effort, opt-in local action ledger append for delegate lifecycle."""
+
+    if not _delegate_action_ledger_enabled():
+        return
+
+    try:
+        from hermes_cli.action_ledger import append_action_ledger_entry
+
+        append_action_ledger_entry(
+            {
+                "event_type": event.get("type"),
+                "run_id": event.get("work_id"),
+                "session_id": event.get("parent_work_id"),
+                "task_id": task_id,
+                "work_id": event.get("work_id"),
+                "agent_id": event.get("agent_id"),
+                "parent_agent_id": event.get("parent_agent_id"),
+                "status": event.get("status"),
+                "summary": event.get("message") or event.get("title"),
+                "privacy_class": "redacted_summary",
+            }
+        )
+    except Exception:
+        logger.debug("delegate action ledger append failed", exc_info=True)
+
+
 def _record_multi_agent_work_event(
     event_type: str,
     *,
@@ -272,6 +310,7 @@ def _record_multi_agent_work_event(
             depth=depth,
             source="delegate_task",
         )
+        _append_delegate_action_ledger_event(event, task_id=parent_work_id)
         record_run_inspector_event(**multi_agent_event_to_run_inspector_kwargs(event))
     except Exception:
         logger.debug("multi-agent work event recording failed", exc_info=True)

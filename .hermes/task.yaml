@@ -1055,6 +1055,24 @@ tasks:
     status: completed
     risk: medium
 
+  - id: HMAMR-01
+    title: Persist opt-in delegate lifecycle action ledger
+    description: Wire delegate child lifecycle events to the local action ledger only when explicitly enabled, preserving default no-write runtime behavior.
+    depends_on:
+      - HMAM-03
+      - HMAM-05
+    acceptance:
+      - Delegate child lifecycle events append redacted action ledger entries only when HERMES_DELEGATE_ACTION_LEDGER is truthy.
+      - Default delegate_task execution does not create .hermes/action_ledger.jsonl.
+      - Ledger append failures are swallowed and do not change delegate_task return structure, depth limits, interruptions, or cost rollup behavior.
+      - Entries exclude raw goal text, raw child summaries, raw tool args, command output, paths, diffs, and secret-looking values.
+    verify:
+      - venv/Scripts/python.exe -m pytest tests/tools/test_delegate.py tests/runtime/test_action_ledger.py tests/runtime/test_multi_agent_work_events.py tests/agent/test_subagent_stop_hook.py -q -o addopts=
+      - venv/Scripts/python.exe -c "import yaml; yaml.safe_load(open('.hermes/task.yaml', encoding='utf-8'))"
+      - git diff --check -- tools/delegate_tool.py tests/tools/test_delegate.py .hermes/task.yaml
+    status: completed
+    risk: high
+
 risk_flags:
   destructive_file_change:
     pause: true
@@ -1788,6 +1806,15 @@ progress_report:
       verification_result: "passed: git diff --check -- docs/plans/hermes-multi-agent-memory-prd.md .hermes/task.yaml; passed: venv/Scripts/python.exe -c yaml.safe_load task.yaml"
       blockers: []
       next_step: "HMAM-01 through HMAM-12 are complete; review the next runtime mutation or provider integration slice before implementation."
+    - task_id: HMAMR-01
+      status: completed
+      changed_files:
+        - tools/delegate_tool.py
+        - tests/tools/test_delegate.py
+        - .hermes/task.yaml
+      verification_result: "passed: venv/Scripts/python.exe -m pytest tests/tools/test_delegate.py tests/runtime/test_action_ledger.py tests/runtime/test_multi_agent_work_events.py tests/agent/test_subagent_stop_hook.py -q -o addopts= (155 passed); passed: venv/Scripts/python.exe -c yaml.safe_load task.yaml"
+      blockers: []
+      next_step: "Review the next runtime integration slice for checkpoint or long-term queue persistence after opt-in delegate action ledger wiring."
 
 failure_review:
   enabled: true

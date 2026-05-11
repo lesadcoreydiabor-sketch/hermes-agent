@@ -11,10 +11,13 @@ Run with:  python -m pytest tests/test_delegate.py -v
 
 import json
 import os
+from pathlib import Path
 import sys
+import tempfile
 import threading
 import time
 import unittest
+from contextlib import contextmanager
 from unittest.mock import MagicMock, patch
 
 from tools.delegate_tool import (
@@ -29,6 +32,7 @@ from tools.delegate_tool import (
     _build_child_agent,
     _build_child_progress_callback,
     _build_child_system_prompt,
+    _record_multi_agent_work_event,
     _strip_blocked_tools,
     _resolve_child_credential_pool,
     _resolve_delegation_credentials,
@@ -56,6 +60,16 @@ def _make_mock_parent(depth=0):
     parent.tool_progress_callback = None
     parent.thinking_callback = None
     return parent
+
+
+@contextmanager
+def _temporary_cwd(path):
+    previous = os.getcwd()
+    os.chdir(path)
+    try:
+        yield
+    finally:
+        os.chdir(previous)
 
 
 class TestDelegateRequirements(unittest.TestCase):
@@ -633,6 +647,136 @@ class TestDelegateRunInspectorEvents(unittest.TestCase):
             result = json.loads(delegate_task(goal="keep working", parent_agent=parent))
 
         self.assertEqual(result["results"][0]["status"], "completed")
+
+    def test_action_ledger_write_is_disabled_by_default(self):
+        parent = _make_mock_parent(depth=0)
+        parent._current_task_id = "parent-work"
+        child = MagicMock()
+        child._subagent_id = "child-work"
+
+        with tempfile.TemporaryDirectory() as tmpdir, _temporary_cwd(tmpdir), patch.dict(
+            os.environ,
+            {},
+            clear=True,
+        ):
+            _record_multi_agent_work_event(
+                "agent.child.running",
+                task_index=0,
+                child=child,
+                parent_agent=parent,
+                message="safe update",
+            )
+
+            self.assertFalse((Path(tmpdir) / ".hermes" / "action_ledger.jsonl").exists())
+
+    def test_delegate_task_can_opt_in_to_action_ledger(self):
+        parent = _make_mock_parent(depth=0)
+        parent._current_task_id = "parent-work"
+        raw_goal = "Investigate token=super-secret C:\\Users\\XQQ\\secret.txt"
+
+        with tempfile.TemporaryDirectory() as tmpdir, _temporary_cwd(tmpdir), patch.dict(
+            os.environ,
+            {"HERMES_DELEGATE_ACTION_LEDGER": "1"},
+            clear=True,
+        ), patch("run_agent.AIAgent") as MockAgent:
+            MockAgent.return_value = self._mock_child(
+                {
+                    "final_response": "done",
+                    "completed": True,
+                    "interrupted": False,
+                    "api_calls": 1,
+                    "messages": [],
+                }
+            )
+
+            result = json.loads(delegate_task(goal=raw_goal, parent_agent=parent))
+
+            entries = [
+                json.loads(line)
+                for line in (Path(tmpdir) / ".hermes" / "action_ledger.jsonl")
+                .read_text(encoding="utf-8")
+                .splitlines()
+            ]
+
+        self.assertEqual(result["results"][0]["status"], "completed")
+        self.assertEqual(
+            [entry["event_type"] for entry in entries],
+            [
+                "agent.child.spawned",
+                "agent.child.running",
+                "agent.child.completed",
+            ],
+        )
+        self.assertTrue(all(entry["session_id"] == "parent-work" for entry in entries))
+        serialized = json.dumps(entries, sort_keys=True)
+        self.assertNotIn("super-secret", serialized)
+        self.assertNotIn("secret.txt", serialized)
+
+    def test_action_ledger_write_is_opt_in_and_redacted(self):
+        parent = _make_mock_parent(depth=0)
+        parent._current_task_id = "parent-work"
+        child = MagicMock()
+        child._subagent_id = "child-work"
+        child._parent_subagent_id = "parent-agent"
+        child._delegate_role = "worker"
+
+        with tempfile.TemporaryDirectory() as tmpdir, _temporary_cwd(tmpdir), patch.dict(
+            os.environ,
+            {"HERMES_DELEGATE_ACTION_LEDGER": "1"},
+            clear=True,
+        ):
+            _record_multi_agent_work_event(
+                "agent.child.completed",
+                task_index=0,
+                child=child,
+                parent_agent=parent,
+                status="completed",
+                message="done token=super-secret C:\\Users\\XQQ\\secret.txt",
+            )
+
+            ledger_path = Path(tmpdir) / ".hermes" / "action_ledger.jsonl"
+            entries = [
+                json.loads(line)
+                for line in ledger_path.read_text(encoding="utf-8").splitlines()
+            ]
+
+        self.assertEqual(len(entries), 1)
+        entry = entries[0]
+        self.assertEqual(entry["event_type"], "agent.child.completed")
+        self.assertEqual(entry["run_id"], "child-work")
+        self.assertEqual(entry["session_id"], "parent-work")
+        self.assertEqual(entry["task_id"], "parent-work")
+        self.assertEqual(entry["agent_id"], "child-work")
+        self.assertEqual(entry["parent_agent_id"], "parent-agent")
+        self.assertEqual(entry["privacy_class"], "redacted_summary")
+        self.assertEqual(entry["summary"], "Redacted")
+        serialized = json.dumps(entry, sort_keys=True)
+        self.assertNotIn("super-secret", serialized)
+        self.assertNotIn("secret.txt", serialized)
+
+    def test_action_ledger_append_failure_does_not_fail_delegation_event(self):
+        parent = _make_mock_parent(depth=0)
+        child = MagicMock()
+        child._subagent_id = "child-work"
+
+        with tempfile.TemporaryDirectory() as tmpdir, _temporary_cwd(tmpdir), patch.dict(
+            os.environ,
+            {"HERMES_DELEGATE_ACTION_LEDGER": "1"},
+            clear=True,
+        ), patch(
+            "hermes_cli.action_ledger.append_action_ledger_entry",
+            side_effect=RuntimeError("ledger unavailable"),
+        ):
+            _record_multi_agent_work_event(
+                "agent.child.failed",
+                task_index=0,
+                child=child,
+                parent_agent=parent,
+                status="failed",
+                message="failed safely",
+            )
+
+            self.assertFalse((Path(tmpdir) / ".hermes" / "action_ledger.jsonl").exists())
 
 
 class TestDelegateObservability(unittest.TestCase):
