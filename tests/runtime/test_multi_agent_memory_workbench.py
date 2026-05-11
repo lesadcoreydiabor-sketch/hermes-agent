@@ -178,8 +178,74 @@ def test_multi_agent_memory_workbench_reads_runtime_persisted_files(tmp_path) ->
     assert checkpoint_path.exists()
     assert workbench["checkpoint"]["current_task_id"] == "HMAMR-06"
     assert workbench["action_ledger"]["entries"][0]["work_id"] == "work-1"
+    assert workbench["action_ledger"]["recovery_gates"]["status"] == "monitoring"
+    assert workbench["action_ledger"]["recovery_gates"]["monitoring_count"] == 1
+    assert workbench["action_ledger"]["recovery_gates"]["monitoring_task_ids"] == [
+        "HMAMR-06"
+    ]
     assert workbench["long_term_queue"]["unresolved_count"] == 1
     assert workbench["long_term_queue"]["entries"][0]["category"] == "recurring_failure"
+    rendered = json.dumps(workbench, sort_keys=True)
+    assert "super-secret" not in rendered
+    assert "C:\\Users" not in rendered
+
+
+def test_multi_agent_memory_workbench_summarizes_delegate_recovery_gates(
+    tmp_path,
+) -> None:
+    hermes_dir = tmp_path / ".hermes"
+    hermes_dir.mkdir()
+    (hermes_dir / "task.yaml").write_text(
+        yaml.safe_dump({"capability": "hermes-multi-agent-memory"}, sort_keys=False),
+        encoding="utf-8",
+    )
+    ledger_path = hermes_dir / "action_ledger.jsonl"
+    append_action_ledger_entry(
+        {
+            "event_type": "agent.child.completed",
+            "task_id": "HMAMO-14",
+            "run_id": "child-complete",
+            "status": "completed",
+            "summary": "delegate child completed",
+            "verification": "delegate child completed",
+            "next_step": "Review delegate child handoff summary.",
+        },
+        ledger_path=ledger_path,
+    )
+    append_action_ledger_entry(
+        {
+            "event_type": "agent.child.failed",
+            "task_id": "HMAMO-15",
+            "run_id": "child-failed",
+            "status": "failed",
+            "summary": "failed token=super-secret C:\\Users\\XQQ\\secret.txt",
+            "blockers": ["token=super-secret C:\\Users\\XQQ\\secret.txt"],
+            "next_step": "Review delegate failure and decide retry, reassignment, or handoff.",
+        },
+        ledger_path=ledger_path,
+    )
+    (hermes_dir / "long_term_queue.jsonl").write_text("", encoding="utf-8")
+    (hermes_dir / "skills_journal.jsonl").write_text("", encoding="utf-8")
+
+    workbench = build_multi_agent_memory_workbench(
+        tmp_path,
+        events=[],
+        memory_diagnostics={"providers": [], "degraded_reason": None},
+        generated_at="2026-05-11T00:01:00Z",
+    )
+
+    gates = workbench["action_ledger"]["recovery_gates"]
+    assert gates["status"] == "blocked"
+    assert gates["completed_count"] == 1
+    assert gates["blocked_count"] == 1
+    assert gates["monitoring_count"] == 0
+    assert gates["verification_task_ids"] == ["HMAMO-14"]
+    assert gates["blocked_task_ids"] == ["HMAMO-15"]
+    assert gates["next_steps"] == [
+        "Review delegate child handoff summary.",
+        "Review delegate failure and decide retry, reassignment, or handoff.",
+    ]
+    assert gates["blockers"] == ["Redacted"]
     rendered = json.dumps(workbench, sort_keys=True)
     assert "super-secret" not in rendered
     assert "C:\\Users" not in rendered

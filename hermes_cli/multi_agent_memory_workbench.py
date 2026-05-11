@@ -146,6 +146,10 @@ def build_multi_agent_memory_workbench(
         "checkpoint": checkpoint,
         "action_ledger": {
             "entries": action_entries,
+            "recovery_gates": _delegate_recovery_gate_summary(
+                action_entries,
+                limit=safe_limit,
+            ),
             "degraded_reason": action_degraded,
         },
         "long_term_queue": {
@@ -201,7 +205,11 @@ def empty_multi_agent_memory_workbench(
             "degraded_reason": reason,
             "privacy_class": WORKBENCH_PRIVACY_CLASS,
         },
-        "action_ledger": {"entries": [], "degraded_reason": reason},
+        "action_ledger": {
+            "entries": [],
+            "recovery_gates": _delegate_recovery_gate_summary([], limit=ENTRY_LIMIT),
+            "degraded_reason": reason,
+        },
         "long_term_queue": {
             "entries": [],
             "unresolved_count": 0,
@@ -337,6 +345,84 @@ def _runtime_persistence_summary(workspace: Path) -> Dict[str, Any]:
         "status": "enabled" if enabled_count else "disabled",
         "enabled_count": enabled_count,
         "flags": flags,
+        "degraded_reason": None,
+        "privacy_class": WORKBENCH_PRIVACY_CLASS,
+    }
+
+
+def _delegate_recovery_gate_summary(
+    entries: Iterable[Dict[str, Any]],
+    *,
+    limit: int,
+) -> Dict[str, Any]:
+    completed_count = 0
+    blocked_count = 0
+    monitoring_count = 0
+    verification_task_ids: list[str] = []
+    blocked_task_ids: list[str] = []
+    monitoring_task_ids: list[str] = []
+    next_steps: list[str] = []
+    blockers: list[str] = []
+
+    for entry in entries:
+        if not isinstance(entry, dict):
+            continue
+        event_type = _safe_label(entry.get("event_type"), fallback="", limit=LABEL_LIMIT)
+        if not event_type.startswith("agent.child."):
+            continue
+
+        status = _safe_status(entry.get("status")) or "unknown"
+        task_id = (
+            _safe_identifier(entry.get("task_id"))
+            or _safe_identifier(entry.get("work_id"))
+            or _safe_identifier(entry.get("run_id"))
+        )
+        if status in TERMINAL_STATUSES or event_type == "agent.child.completed":
+            completed_count += 1
+            if entry.get("verification") and task_id:
+                _append_unique(verification_task_ids, task_id, limit=limit)
+        elif status in FAILED_STATUSES or event_type in {
+            "agent.child.failed",
+            "agent.child.timeout",
+            "agent.child.interrupted",
+        }:
+            blocked_count += 1
+            if task_id:
+                _append_unique(blocked_task_ids, task_id, limit=limit)
+        elif status in ACTIVE_STATUSES or event_type in {
+            "agent.child.spawned",
+            "agent.child.running",
+        }:
+            monitoring_count += 1
+            if task_id:
+                _append_unique(monitoring_task_ids, task_id, limit=limit)
+
+        next_step = _safe_summary(entry.get("next_step"), fallback=None)
+        if next_step:
+            _append_unique(next_steps, next_step, limit=limit)
+        for blocker in entry.get("blockers") or []:
+            safe = _safe_summary(blocker, fallback=None)
+            if safe:
+                _append_unique(blockers, safe, limit=limit)
+
+    status = "empty"
+    if blocked_count:
+        status = "blocked"
+    elif monitoring_count:
+        status = "monitoring"
+    elif completed_count:
+        status = "ready"
+
+    return {
+        "status": status,
+        "completed_count": completed_count,
+        "blocked_count": blocked_count,
+        "monitoring_count": monitoring_count,
+        "verification_task_ids": verification_task_ids,
+        "blocked_task_ids": blocked_task_ids,
+        "monitoring_task_ids": monitoring_task_ids,
+        "next_steps": next_steps,
+        "blockers": blockers,
         "degraded_reason": None,
         "privacy_class": WORKBENCH_PRIVACY_CLASS,
     }
@@ -519,6 +605,12 @@ def _dedupe(values: Iterable[str]) -> list[str]:
         if value not in deduped:
             deduped.append(value)
     return deduped
+
+
+def _append_unique(values: list[str], value: str, *, limit: int) -> None:
+    if value in values or len(values) >= limit:
+        return
+    values.append(value)
 
 
 def _join_reasons(reasons: Iterable[Any]) -> Optional[str]:

@@ -826,6 +826,20 @@ export interface RunInspectorMemoryWorkbenchEntry {
   timestamp?: string | null;
 }
 
+export interface RunInspectorMemoryWorkbenchRecoveryGates {
+  status: string;
+  completed_count: number;
+  blocked_count: number;
+  monitoring_count: number;
+  verification_task_ids: string[];
+  blocked_task_ids: string[];
+  monitoring_task_ids: string[];
+  next_steps: string[];
+  blockers: string[];
+  degraded_reason: string | null;
+  privacy_class: string;
+}
+
 export interface RunInspectorMemoryWorkbench {
   schema_version: number;
   generated_at: string;
@@ -838,6 +852,7 @@ export interface RunInspectorMemoryWorkbench {
   checkpoint: RunInspectorMemoryWorkbenchCheckpoint;
   action_ledger: {
     entries: RunInspectorMemoryWorkbenchEntry[];
+    recovery_gates?: RunInspectorMemoryWorkbenchRecoveryGates;
     degraded_reason: string | null;
   };
   long_term_queue: {

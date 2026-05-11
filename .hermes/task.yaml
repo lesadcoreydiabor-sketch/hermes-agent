@@ -1550,6 +1550,26 @@ tasks:
     status: completed
     risk: high
 
+  - id: HMAMO-15
+    title: Summarize delegate recovery gates in memory workbench
+    description: Add a read-only Run Inspector workbench summary for delegate lifecycle recovery gates derived from action ledger entries.
+    depends_on:
+      - HMAMO-13
+      - HMAMO-14
+    acceptance:
+      - Workbench action_ledger payload includes bounded recovery_gates for completed, blocked, and monitoring delegate child events.
+      - Recovery gates expose only safe task ids, counts, next steps, blockers, status, degraded metadata, and privacy class.
+      - Secret-looking values, absolute paths, raw child output, prompts, logs, tool args, diffs, and file contents remain excluded or redacted.
+      - Empty and unavailable workbench payloads include a safe empty recovery_gates object.
+      - Slice remains read-only and does not spawn agents, dispatch tools, write ledgers, mutate memory, edit skills, edit config, or mutate task ownership.
+    verify:
+      - venv/Scripts/python.exe -m pytest tests/runtime/test_multi_agent_memory_workbench.py tests/hermes_cli/test_run_inspector_api.py -q -o addopts=
+      - cd web; npm.cmd run build
+      - venv/Scripts/python.exe -c "import yaml; yaml.safe_load(open('.hermes/task.yaml', encoding='utf-8'))"
+      - git diff --check -- hermes_cli/multi_agent_memory_workbench.py tests/runtime/test_multi_agent_memory_workbench.py web/src/lib/api.ts .hermes/task.yaml
+    status: completed
+    risk: medium
+
 risk_flags:
   destructive_file_change:
     pause: true
@@ -2533,6 +2553,16 @@ progress_report:
       verification_result: "passed: venv/Scripts/python.exe -m pytest tests/tools/test_delegate.py tests/agent/test_subagent_stop_hook.py -q -o addopts= (149 passed); passed: venv/Scripts/python.exe -c yaml.safe_load task.yaml"
       blockers: []
       next_step: "Continue HERMES Multi-Agent Memory orchestration integration after verifying delegate recovery gates."
+    - task_id: HMAMO-15
+      status: completed
+      changed_files:
+        - hermes_cli/multi_agent_memory_workbench.py
+        - tests/runtime/test_multi_agent_memory_workbench.py
+        - web/src/lib/api.ts
+        - .hermes/task.yaml
+      verification_result: "passed: venv/Scripts/python.exe -m pytest tests/runtime/test_multi_agent_memory_workbench.py tests/hermes_cli/test_run_inspector_api.py -q -o addopts= (22 passed); passed: cd web; npm.cmd run build; passed: venv/Scripts/python.exe -c yaml.safe_load task.yaml"
+      blockers: []
+      next_step: "Render delegate recovery gates in Run Inspector and TUI memory workbench views."
 
 failure_review:
   enabled: true
