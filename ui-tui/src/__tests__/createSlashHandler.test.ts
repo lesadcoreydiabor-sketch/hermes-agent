@@ -358,9 +358,11 @@ describe('createSlashHandler', () => {
     ['/inspector-events', 'run_inspector.events', { limit: 12 }],
     ['/inspector-events failed', 'run_inspector.events', { limit: 12 }],
     ['/inspector-health', 'run_inspector.status', { port: 9119 }],
+    ['/inspector-snapshot', 'run_inspector.status', { port: 9119 }],
     ['/run-inspector-attention 9222', 'run_inspector.status', { port: 9222 }],
     ['/run-inspector-desktop 9222', 'run_inspector.status', { port: 9222 }],
     ['/run-inspector-health 9222', 'run_inspector.status', { port: 9222 }],
+    ['/run-inspector-snapshot 9222', 'run_inspector.status', { port: 9222 }],
     ['/run-inspector-events 7', 'run_inspector.events', { limit: 7 }],
     ['/run-inspector-events 7 failed', 'run_inspector.events', { limit: 7 }],
     ['/run-inspector 9222', 'run_inspector.status', { port: 9222 }],
@@ -563,6 +565,75 @@ describe('createSlashHandler', () => {
     expect(rpc).not.toHaveBeenCalled()
     expect(ctx.gateway.gw.request).not.toHaveBeenCalled()
     expect(ctx.transcript.sys).toHaveBeenCalledWith('usage: /inspector-attention [port]')
+  })
+
+  it('/inspector-snapshot renders read-only run snapshot without slash worker fallback', async () => {
+    const rpc = vi.fn(() =>
+      Promise.resolve({
+        ok: true,
+        snapshot: {
+          active_tool: {
+            name: 'shell',
+            status: 'running',
+            summary: 'pytest tests/runtime'
+          },
+          degraded_reason: 'tool_timeout',
+          last_activity_at: '2026-05-11T04:10:00Z',
+          mcp_health: [{ name: 'gitnexus', status: 'connected' }],
+          privacy_flags: ['safe_summary'],
+          recovery_hint: 'Review failed tool',
+          run_id: 'run_snapshot',
+          session_id: 'sid_snapshot',
+          source: 'gateway',
+          status: 'running',
+          tool_health: [
+            { name: 'shell', status: 'running' },
+            { name: 'browser', status: 'unavailable' }
+          ]
+        }
+      })
+    )
+    const ctx = buildCtx({ gateway: { ...buildGateway(), rpc } })
+
+    expect(createSlashHandler(ctx)('/inspector-snapshot 9222')).toBe(true)
+
+    expect(rpc).toHaveBeenCalledWith('run_inspector.status', { port: 9222 })
+    expect(ctx.gateway.gw.request).not.toHaveBeenCalled()
+    await vi.waitFor(() => {
+      expect(ctx.transcript.panel).toHaveBeenCalledWith(
+        'Run Inspector Snapshot',
+        expect.arrayContaining([
+          expect.objectContaining({
+            rows: expect.arrayContaining([
+              ['Run', 'running / gateway'],
+              ['Run ID', 'run_snapshot'],
+              ['Session', 'sid_snapshot'],
+              ['Last activity', '2026-05-11T04:10:00Z'],
+              ['Active tool', 'shell (running) - pytest tests/runtime'],
+              ['Tools', '1/2 ok, 1 attention'],
+              ['MCP', '1/1 ok'],
+              ['Degraded', 'tool_timeout'],
+              ['Recovery', 'Review failed tool'],
+              ['Privacy', 'safe_summary']
+            ]),
+            title: 'Run Snapshot'
+          }),
+          expect.objectContaining({
+            text: 'read-only snapshot summary; raw prompts, tool args, and secrets are not shown'
+          })
+        ])
+      )
+    })
+  })
+
+  it('/inspector-snapshot rejects invalid ports before hitting the gateway', () => {
+    const rpc = vi.fn(() => Promise.resolve({}))
+    const ctx = buildCtx({ gateway: { ...buildGateway(), rpc } })
+
+    expect(createSlashHandler(ctx)('/inspector-snapshot nope')).toBe(true)
+    expect(rpc).not.toHaveBeenCalled()
+    expect(ctx.gateway.gw.request).not.toHaveBeenCalled()
+    expect(ctx.transcript.sys).toHaveBeenCalledWith('usage: /inspector-snapshot [port]')
   })
 
   it('/inspector-desktop renders read-only desktop shell status without slash worker fallback', async () => {

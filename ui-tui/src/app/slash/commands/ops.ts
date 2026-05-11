@@ -643,6 +643,35 @@ export const opsCommands: SlashCommand[] = [
   },
 
   {
+    aliases: ['run-inspector-snapshot'],
+    help: 'show read-only Run Inspector run snapshot [/inspector-snapshot [port]]',
+    name: 'inspector-snapshot',
+    run: (arg, ctx) => {
+      const port = parseInspectorPort(arg)
+      if (port === null) {
+        return ctx.transcript.sys('usage: /inspector-snapshot [port]')
+      }
+
+      ctx.gateway
+        .rpc<RunInspectorStatusResponse>('run_inspector.status', { port })
+        .then(
+          ctx.guarded<RunInspectorStatusResponse>(r => {
+            ctx.transcript.panel('Run Inspector Snapshot', [
+              {
+                rows: renderRunInspectorSnapshot(r?.snapshot),
+                title: 'Run Snapshot'
+              },
+              {
+                text: 'read-only snapshot summary; raw prompts, tool args, and secrets are not shown'
+              }
+            ])
+          })
+        )
+        .catch(ctx.guardedErr)
+    }
+  },
+
+  {
     aliases: ['run-inspector-desktop'],
     help: 'show read-only Run Inspector desktop shell status [/inspector-desktop [port]]',
     name: 'inspector-desktop',
