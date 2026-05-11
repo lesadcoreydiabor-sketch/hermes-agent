@@ -9117,6 +9117,11 @@ def _print_desktop_status(args) -> int:
         else f"unavailable ({payload['health_reason']})"
     )
     print(f"  Health: {health}")
+    next_action = payload.get("next_action")
+    next_command = payload.get("next_command")
+    if next_action:
+        suffix = f": {next_command}" if next_command else ""
+        print(f"  Next: {next_action}{suffix}")
     if payload["compatible_dashboard"]:
         print(f"  Compatible dashboard reachable: {url}")
         print(f"  Reuse: {payload['reuse_command']}")
