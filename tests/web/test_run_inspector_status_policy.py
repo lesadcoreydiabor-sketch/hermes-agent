@@ -1677,6 +1677,9 @@ def test_run_inspector_memory_workbench_uses_readonly_api() -> None:
     assert "event_type_counts" in api_source
     assert "status_counts" in api_source
     assert "latest_event_type" in api_source
+    assert "learning_review" in api_source
+    assert "missing_requirements" in api_source
+    assert "requested_effect" in api_source
     assert "describeRuntimePersistenceState" in (
         ROOT / "web" / "src" / "pages" / "runInspectorMemoryWorkbench.ts"
     ).read_text(encoding="utf-8")

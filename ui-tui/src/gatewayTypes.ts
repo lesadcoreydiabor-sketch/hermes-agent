@@ -570,6 +570,35 @@ export interface RunInspectorRecoveryGates {
   verification_task_ids?: string[]
 }
 
+export interface RunInspectorLearningReviewRequest {
+  action?: string
+  blocked_effects?: string[]
+  evidence?: string[]
+  missing_requirements?: string[]
+  privacy_class?: string
+  proposed_change?: null | string
+  request_id?: null | string
+  requested_effect?: string
+  requires_review?: boolean
+  rollback_note?: null | string
+  source_candidate_id?: null | string
+  source_queue_id?: null | string
+  state?: string
+  target_ref?: null | string
+  target_type?: null | string
+  title?: null | string
+  verification?: null | string
+}
+
+export interface RunInspectorLearningReviewSummary {
+  blocked_count?: number
+  degraded_reason?: null | string
+  privacy_class?: string
+  ready_count?: number
+  requests?: RunInspectorLearningReviewRequest[]
+  status?: string
+}
+
 export interface RunInspectorMemoryWorkbench {
   active_work?: unknown[]
   action_ledger?: {
@@ -586,6 +615,7 @@ export interface RunInspectorMemoryWorkbench {
   }
   degraded_reason?: null | string
   generated_at?: string
+  learning_review?: RunInspectorLearningReviewSummary
   memory?: RunInspectorMemorySummary
   privacy_class?: string
   runtime_persistence?: RunInspectorRuntimePersistenceSummary

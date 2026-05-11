@@ -487,6 +487,73 @@ def test_multi_agent_memory_workbench_reports_runtime_persistence_flags(
     assert "token=secret" not in rendered
 
 
+def test_multi_agent_memory_workbench_summarizes_learning_review_requests(
+    tmp_path,
+) -> None:
+    hermes_dir = tmp_path / ".hermes"
+    hermes_dir.mkdir()
+    (hermes_dir / "task.yaml").write_text(
+        yaml.safe_dump({"capability": "hermes-multi-agent-memory"}, sort_keys=False),
+        encoding="utf-8",
+    )
+    (hermes_dir / "action_ledger.jsonl").write_text("", encoding="utf-8")
+    (hermes_dir / "skills_journal.jsonl").write_text("", encoding="utf-8")
+    _write_jsonl(
+        hermes_dir / "long_term_queue.jsonl",
+        [
+            {
+                "entry_id": "queue-ready",
+                "category": "missing_test",
+                "state": "candidate",
+                "title": "Cover redaction badcase",
+                "source_event_id": "failure-1",
+                "evidence": ["reviewed failure candidate"],
+                "target_type": "regression_test",
+                "target_ref": "tests/runtime/test_learning_journal.py",
+                "acceptance_criteria": [
+                    "Verification command covered: pytest tests/runtime/test_learning_journal.py"
+                ],
+                "timestamp": "2026-05-11T00:00:00Z",
+            },
+            {
+                "entry_id": "queue-blocked",
+                "category": "skill_improvement",
+                "state": "needs_evidence",
+                "title": "Promote PM skill checklist",
+                "evidence": ["needs reviewer"],
+                "proposed_change": "Add checklist",
+                "target_type": "skill_update",
+                "target_ref": "product-manager",
+                "timestamp": "2026-05-11T00:01:00Z",
+            },
+        ],
+    )
+
+    workbench = build_multi_agent_memory_workbench(
+        tmp_path,
+        events=[],
+        memory_diagnostics={"providers": [], "degraded_reason": None},
+        generated_at="2026-05-11T00:02:00Z",
+    )
+
+    review = workbench["learning_review"]
+    assert review["status"] == "blocked"
+    assert review["ready_count"] == 1
+    assert review["blocked_count"] == 1
+    ready = review["requests"][0]
+    blocked = review["requests"][1]
+    assert ready["action"] == "mark_badcase_covered"
+    assert ready["state"] == "pending_review"
+    assert ready["requested_effect"] == "record_badcase_coverage_after_review"
+    assert ready["verification"] == "pytest tests/runtime/test_learning_journal.py"
+    assert blocked["action"] == "promote_queue_to_skills_journal"
+    assert blocked["state"] == "needs_review_evidence"
+    assert blocked["missing_requirements"] == ["verification", "rollback_note"]
+    assert "edit_skill_files" in blocked["blocked_effects"]
+    rendered = json.dumps(review, sort_keys=True)
+    assert "token=secret" not in rendered
+
+
 def test_multi_agent_memory_workbench_summarizes_agent_assignments(tmp_path) -> None:
     hermes_dir = tmp_path / ".hermes"
     hermes_dir.mkdir()
@@ -783,6 +850,8 @@ def test_empty_multi_agent_memory_workbench_is_safe_unavailable_payload() -> Non
     assert workbench["memory"]["status"] == "unavailable"
     assert workbench["agent_assignments"]["parallel_plan"]["status"] == "empty"
     assert workbench["agent_assignments"]["handoff_protocol"]["status"] == "empty"
+    assert workbench["learning_review"]["status"] == "unavailable"
+    assert workbench["learning_review"]["requests"] == []
     assert (
         workbench["agent_assignments"]["handoff_protocol"]["degraded_reason"]
         == "Redacted"

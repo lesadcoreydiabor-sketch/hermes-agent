@@ -379,6 +379,9 @@ queue or candidate id, target type, target reference, evidence, verification,
 rollback note, requested effect, and blocked effects. Building this payload must
 not append the skills journal, mark a badcase covered, export a file, edit
 skills, write provider memory, mutate config, or mutate `.hermes/task.yaml`.
+The Run Inspector memory workbench can surface these requests as read-only
+diagnostics with ready and blocked counts; blocked requests must list missing
+requirements instead of guessing or silently filling review evidence.
 
 ### Phase 6: Agent-Ready Work Distribution
 

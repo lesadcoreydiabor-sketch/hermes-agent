@@ -24,6 +24,9 @@ from hermes_cli.agent_task_assignment import (
 from hermes_cli.learning_journal import (
     LONG_TERM_QUEUE_PATH,
     SKILLS_JOURNAL_PATH,
+    REVIEW_ACTION_EFFECTS,
+    REVIEW_ACTION_TARGET_TYPES,
+    build_learning_review_request,
     normalize_long_term_queue_entry,
     normalize_skills_journal_entry,
 )
@@ -123,6 +126,11 @@ def build_multi_agent_memory_workbench(
     memory = _memory_summary(memory_diagnostics)
     runtime_persistence = _runtime_persistence_summary(workspace)
     agent_assignments = _agent_assignment_summary(workspace, limit=safe_limit)
+    learning_review = _learning_review_request_summary(
+        queue_entries,
+        degraded_reason=queue_degraded,
+        limit=safe_limit,
+    )
 
     degraded_reasons = [
         checkpoint.get("degraded_reason"),
@@ -165,6 +173,7 @@ def build_multi_agent_memory_workbench(
             "unresolved_count": _unresolved_queue_count(queue_entries),
             "degraded_reason": queue_degraded,
         },
+        "learning_review": learning_review,
         "skills_journal": {
             "entries": journal_entries,
             "degraded_reason": journal_degraded,
@@ -223,6 +232,11 @@ def empty_multi_agent_memory_workbench(
             "unresolved_count": 0,
             "degraded_reason": reason,
         },
+        "learning_review": _learning_review_request_summary(
+            [],
+            degraded_reason=reason,
+            limit=ENTRY_LIMIT,
+        ),
         "skills_journal": {"entries": [], "degraded_reason": reason},
         "degraded_reason": reason,
         "privacy_class": WORKBENCH_PRIVACY_CLASS,
@@ -356,6 +370,207 @@ def _runtime_persistence_summary(workspace: Path) -> Dict[str, Any]:
         "degraded_reason": None,
         "privacy_class": WORKBENCH_PRIVACY_CLASS,
     }
+
+
+def _learning_review_request_summary(
+    queue_entries: Iterable[Dict[str, Any]],
+    *,
+    degraded_reason: Optional[str],
+    limit: int,
+) -> Dict[str, Any]:
+    requests: list[Dict[str, Any]] = []
+    ready_count = 0
+    blocked_count = 0
+
+    for entry in queue_entries:
+        if not isinstance(entry, dict):
+            continue
+        review_request = _learning_review_request_from_queue_entry(entry)
+        if not review_request:
+            continue
+        if review_request.get("state") == "pending_review":
+            ready_count += 1
+        else:
+            blocked_count += 1
+        requests.append(review_request)
+        if len(requests) >= limit:
+            break
+
+    status = "empty"
+    if blocked_count:
+        status = "blocked"
+    elif ready_count:
+        status = "ready"
+    elif degraded_reason:
+        status = "unavailable"
+
+    return {
+        "status": status,
+        "ready_count": ready_count,
+        "blocked_count": blocked_count,
+        "requests": requests,
+        "degraded_reason": degraded_reason,
+        "privacy_class": WORKBENCH_PRIVACY_CLASS,
+    }
+
+
+def _learning_review_request_from_queue_entry(
+    entry: Dict[str, Any],
+) -> Optional[Dict[str, Any]]:
+    state = _safe_status(entry.get("state")) or "candidate"
+    if state in {"accepted", "applied", "rejected", "superseded"}:
+        return None
+
+    action = _learning_review_action_for_queue_entry(entry)
+    if not action:
+        return None
+
+    source_queue_id = _safe_identifier(entry.get("entry_id"))
+    source_candidate_id = _safe_identifier(entry.get("source_event_id"))
+    target_type = REVIEW_ACTION_TARGET_TYPES[action]
+    target_ref = _safe_summary(entry.get("target_ref"), fallback=None)
+    evidence = entry.get("evidence") if isinstance(entry.get("evidence"), list) else []
+    proposed_change = _safe_summary(entry.get("proposed_change"), fallback=None)
+    verification = _review_verification_from_queue_entry(entry)
+    rollback_note = _review_rollback_note_from_queue_entry(entry)
+    missing = _learning_review_missing_requirements(
+        action,
+        source_queue_id=source_queue_id,
+        source_candidate_id=source_candidate_id,
+        target_ref=target_ref,
+        evidence=evidence,
+        proposed_change=proposed_change,
+        verification=verification,
+        rollback_note=rollback_note,
+    )
+
+    if missing:
+        return {
+            "schema_version": WORKBENCH_SCHEMA_VERSION,
+            "request_id": _learning_review_request_id(
+                source_queue_id,
+                source_candidate_id,
+            ),
+            "action": action,
+            "state": "needs_review_evidence",
+            "requires_review": True,
+            "source_queue_id": source_queue_id,
+            "source_candidate_id": source_candidate_id,
+            "target_type": target_type,
+            "target_ref": target_ref,
+            "title": _safe_summary(
+                entry.get("title"),
+                fallback="Untitled learning candidate",
+            ),
+            "missing_requirements": missing,
+            "requested_effect": REVIEW_ACTION_EFFECTS[action],
+            "blocked_effects": [
+                "edit_skill_files",
+                "write_memory_provider_data",
+                "mutate_config",
+                "mutate_task_yaml",
+                "dispatch_tools_without_review",
+            ],
+            "privacy_class": WORKBENCH_PRIVACY_CLASS,
+        }
+
+    try:
+        return build_learning_review_request(
+            action,
+            request_id=_learning_review_request_id(
+                source_queue_id,
+                source_candidate_id,
+            ),
+            timestamp=entry.get("timestamp"),
+            source_queue_id=source_queue_id,
+            source_candidate_id=source_candidate_id,
+            target_type=target_type,
+            target_ref=target_ref,
+            proposed_change=proposed_change,
+            evidence=evidence,
+            verification=verification,
+            rollback_note=rollback_note,
+        )
+    except ValueError:
+        return None
+
+
+def _learning_review_action_for_queue_entry(entry: Dict[str, Any]) -> Optional[str]:
+    target_type = _safe_status(entry.get("target_type"))
+    category = _safe_status(entry.get("category"))
+    if target_type == "skill_update" or category == "skill_improvement":
+        return "promote_queue_to_skills_journal"
+    if target_type == "regression_test" or category == "missing_test":
+        return "mark_badcase_covered"
+    if target_type == "documentation_update" or category in {
+        "recurring_failure",
+        "recovery_pattern",
+        "documentation_gap",
+    }:
+        return "export_failure_review_summary"
+    return None
+
+
+def _learning_review_missing_requirements(
+    action: str,
+    *,
+    source_queue_id: Optional[str],
+    source_candidate_id: Optional[str],
+    target_ref: Optional[str],
+    evidence: Iterable[Any],
+    proposed_change: Optional[str],
+    verification: Optional[str],
+    rollback_note: Optional[str],
+) -> list[str]:
+    missing: list[str] = []
+    if not source_queue_id and not source_candidate_id:
+        missing.append("source_queue_id_or_candidate_id")
+    if not target_ref:
+        missing.append("target_ref")
+    if not list(evidence):
+        missing.append("evidence")
+    if action in {
+        "promote_queue_to_skills_journal",
+        "export_failure_review_summary",
+    } and not proposed_change:
+        missing.append("proposed_change")
+    if action in {
+        "promote_queue_to_skills_journal",
+        "mark_badcase_covered",
+    } and not verification:
+        missing.append("verification")
+    if action == "promote_queue_to_skills_journal" and not rollback_note:
+        missing.append("rollback_note")
+    return missing
+
+
+def _review_verification_from_queue_entry(entry: Dict[str, Any]) -> Optional[str]:
+    for item in entry.get("acceptance_criteria") or []:
+        safe = _safe_summary(item, fallback=None)
+        if not safe:
+            continue
+        prefix = "Verification command covered: "
+        if safe.startswith(prefix):
+            return safe[len(prefix) :]
+    return _safe_summary(entry.get("verification"), fallback=None)
+
+
+def _review_rollback_note_from_queue_entry(entry: Dict[str, Any]) -> Optional[str]:
+    for item in entry.get("acceptance_criteria") or []:
+        safe = _safe_summary(item, fallback=None)
+        if not safe:
+            continue
+        prefix = "Rollback note: "
+        if safe.startswith(prefix):
+            return safe[len(prefix) :]
+    return _safe_summary(entry.get("rollback_note"), fallback=None)
+
+
+def _learning_review_request_id(
+    source_queue_id: Optional[str],
+    source_candidate_id: Optional[str],
+) -> str:
+    return f"review-{source_queue_id or source_candidate_id or 'unknown'}"
 
 
 def _delegate_recovery_gate_summary(

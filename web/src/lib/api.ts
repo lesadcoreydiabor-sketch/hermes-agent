@@ -847,6 +847,36 @@ export interface RunInspectorMemoryWorkbenchRecoveryGates {
   privacy_class: string;
 }
 
+export interface RunInspectorMemoryWorkbenchLearningReviewRequest {
+  [key: string]: unknown;
+  request_id?: string | null;
+  action: string;
+  state: string;
+  requires_review: boolean;
+  source_queue_id?: string | null;
+  source_candidate_id?: string | null;
+  target_type?: string | null;
+  target_ref?: string | null;
+  title?: string | null;
+  proposed_change?: string | null;
+  evidence?: string[];
+  verification?: string | null;
+  rollback_note?: string | null;
+  missing_requirements?: string[];
+  requested_effect: string;
+  blocked_effects: string[];
+  privacy_class: string;
+}
+
+export interface RunInspectorMemoryWorkbenchLearningReview {
+  status: string;
+  ready_count: number;
+  blocked_count: number;
+  requests: RunInspectorMemoryWorkbenchLearningReviewRequest[];
+  degraded_reason: string | null;
+  privacy_class: string;
+}
+
 export interface RunInspectorMemoryWorkbench {
   schema_version: number;
   generated_at: string;
@@ -867,6 +897,7 @@ export interface RunInspectorMemoryWorkbench {
     unresolved_count: number;
     degraded_reason: string | null;
   };
+  learning_review?: RunInspectorMemoryWorkbenchLearningReview;
   skills_journal: {
     entries: RunInspectorMemoryWorkbenchEntry[];
     degraded_reason: string | null;
