@@ -1386,6 +1386,25 @@ tasks:
     status: completed
     risk: medium
 
+  - id: HMAMO-07
+    title: Expose parallel assignment plan in workbench
+    description: Add the dependency-aware parallel assignment plan to the read-only Multi-Agent Memory workbench backend payload.
+    depends_on:
+      - HMAMO-04
+      - HMAMO-06
+    acceptance:
+      - Workbench agent_assignments payload includes parallel_plan with safe batches, active tasks, waiting tasks, conflicts, and degraded metadata.
+      - Parallel plan is derived from task-contract assignments and does not schedule or spawn agents.
+      - Running assignments are reported as active metadata and are not re-added to future planned batches.
+      - API regression covers the parallel_plan field and fallback payload remains safe.
+      - Integration remains read-only and does not dispatch tools, write ledgers, mutate memory, edit skills, or mutate task.yaml.
+    verify:
+      - venv/Scripts/python.exe -m pytest tests/runtime/test_multi_agent_memory_workbench.py tests/runtime/test_agent_task_assignment.py tests/hermes_cli/test_run_inspector_api.py -q -o addopts=
+      - venv/Scripts/python.exe -c "import yaml; yaml.safe_load(open('.hermes/task.yaml', encoding='utf-8'))"
+      - git diff --check -- hermes_cli/multi_agent_memory_workbench.py tests/runtime/test_multi_agent_memory_workbench.py tests/hermes_cli/test_run_inspector_api.py .hermes/task.yaml
+    status: completed
+    risk: low
+
 risk_flags:
   destructive_file_change:
     pause: true
@@ -2282,6 +2301,16 @@ progress_report:
       blockers:
         - "RunInspectorPage.tsx and runInspectorEventTimeline.ts still have unrelated dirty active-event filter changes, so this slice stays in pure orchestration helpers."
       next_step: "Expose parallel assignment plan summaries through the read-only workbench payload."
+    - task_id: HMAMO-07
+      status: completed
+      changed_files:
+        - hermes_cli/multi_agent_memory_workbench.py
+        - tests/runtime/test_multi_agent_memory_workbench.py
+        - tests/hermes_cli/test_run_inspector_api.py
+        - .hermes/task.yaml
+      verification_result: "passed: venv/Scripts/python.exe -m pytest tests/runtime/test_multi_agent_memory_workbench.py tests/runtime/test_agent_task_assignment.py tests/hermes_cli/test_run_inspector_api.py -q -o addopts= (32 passed); passed: venv/Scripts/python.exe -c yaml.safe_load task.yaml; passed: git diff --check for HMAMO-07 files"
+      blockers: []
+      next_step: "Add frontend API typing and view-model helpers for parallel assignment plan summaries."
 
 failure_review:
   enabled: true
@@ -2450,4 +2479,12 @@ failure_review:
       what_changed: "Changed the smoke harness to use dynamic import('playwright') and to return the browser assertion exit code while keeping PID-scoped dashboard cleanup best-effort."
       how_it_was_verified: "Re-ran the temporary dashboard smoke on port 9134; desktop 1440x1000 and narrow 390x900 both passed."
       added_eval_or_badcase: "HMAMR-12 browser smoke checks Multi-Agent Memory persistence labels, secret-like env value absence, and horizontal overflow."
+      blocker: false
+    - trigger: failed_verification
+      task_id: HMAMO-07
+      what_happened: "Initial workbench parallel-plan test expected a running assignment to appear in a future planned batch."
+      why_it_failed: "The planner intentionally treats running assignments as active metadata, not ready work to schedule again."
+      what_changed: "Updated the test to assert the running task appears in active_task_ids while planned ready work appears in batches."
+      how_it_was_verified: "Re-ran tests/runtime/test_multi_agent_memory_workbench.py tests/runtime/test_agent_task_assignment.py tests/hermes_cli/test_run_inspector_api.py and all 32 tests passed."
+      added_eval_or_badcase: "tests/runtime/test_multi_agent_memory_workbench.py::test_multi_agent_memory_workbench_summarizes_agent_assignments now covers active_task_ids."
       blocker: false

@@ -277,10 +277,14 @@ def test_multi_agent_memory_workbench_summarizes_agent_assignments(tmp_path) -> 
 
     assignments = workbench["agent_assignments"]
     summary = assignments["summary"]
+    plan = assignments["parallel_plan"]
     assert summary["status"] == "conflict"
     assert summary["total_count"] == 3
     assert summary["ready_task_ids"] == ["HMAMO-02"]
     assert summary["conflicts"][0]["task_ids"] == ["HMAMO-02", "HMAMO-03"]
+    assert plan["batches"][0]["task_ids"] == ["HMAMO-02"]
+    assert plan["active_task_ids"] == ["HMAMO-03"]
+    assert plan["conflict_task_ids"] == ["HMAMO-02", "HMAMO-03"]
     assert assignments["assignments"][1]["verification"]["command"] == (
         "pytest assignment summary"
     )
@@ -323,6 +327,9 @@ def test_multi_agent_memory_workbench_redacts_agent_assignment_payloads(tmp_path
     assert "diff --git" not in rendered
     assert "token=secret" not in rendered
     assert "api_key=hidden" not in rendered
+    assert workbench["agent_assignments"]["parallel_plan"]["privacy_class"] == (
+        "redacted_summary"
+    )
 
 
 def test_multi_agent_memory_workbench_degrades_when_sources_are_missing(tmp_path) -> None:
@@ -469,6 +476,7 @@ def test_empty_multi_agent_memory_workbench_is_safe_unavailable_payload() -> Non
     assert workbench["status"] == "unavailable"
     assert workbench["degraded_reason"] == "Redacted"
     assert workbench["memory"]["status"] == "unavailable"
+    assert workbench["agent_assignments"]["parallel_plan"]["status"] == "empty"
 
 
 def _write_jsonl(path, entries) -> None:

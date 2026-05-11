@@ -368,6 +368,32 @@ def test_run_inspector_memory_workbench_api_returns_safe_readonly_summary(
                     "degraded_reason": None,
                     "privacy_class": "redacted_summary",
                 },
+                "parallel_plan": {
+                    "schema_version": 1,
+                    "status": "ready",
+                    "max_parallel_workers": 16,
+                    "batches": [
+                        {
+                            "index": 1,
+                            "task_ids": ["HMAM-08"],
+                            "roles": {
+                                "observer": 0,
+                                "orchestrator": 0,
+                                "planner": 0,
+                                "reviewer": 0,
+                                "worker": 1,
+                            },
+                            "privacy_class": "redacted_summary",
+                        }
+                    ],
+                    "blocked_task_ids": [],
+                    "active_task_ids": [],
+                    "waiting_task_ids": [],
+                    "conflict_task_ids": [],
+                    "conflicts": [],
+                    "degraded_reason": None,
+                    "privacy_class": "redacted_summary",
+                },
                 "assignments": [
                     {
                         "schema_version": 1,
@@ -456,6 +482,7 @@ def test_run_inspector_memory_workbench_api_returns_safe_readonly_summary(
     assert runtime["flags"][0]["path"] == ".hermes/action_ledger.jsonl"
     assignments = payload["workbench"]["agent_assignments"]
     assert assignments["summary"]["ready_task_ids"] == ["HMAM-08"]
+    assert assignments["parallel_plan"]["batches"][0]["task_ids"] == ["HMAM-08"]
     assert assignments["assignments"][0]["task_id"] == "HMAM-08"
     assert "token=" not in json.dumps(payload)
 
