@@ -939,7 +939,7 @@ tasks:
       - No runtime path writes to the ledger until a later explicit wiring slice.
     verify:
       - venv/Scripts/python.exe -m pytest tests/runtime/test_action_ledger.py -q -o addopts=
-    status: pending
+    status: completed
     risk: medium
 
   - id: HMAM-06
@@ -1712,6 +1712,15 @@ progress_report:
       verification_result: "passed: venv/Scripts/python.exe -m pytest tests/agent/test_memory_provider.py tests/run_agent/test_memory_sync_interrupted.py -q -o addopts= (81 passed); GitNexus MemoryManager upstream impact MEDIUM and reviewed as additive read-only diagnostics with no provider content exposure"
       blockers: []
       next_step: "Implement HMAM-05 local action_ledger schema and append helper with strict redaction before wiring runtime writes."
+    - task_id: HMAM-05
+      status: completed
+      changed_files:
+        - hermes_cli/action_ledger.py
+        - tests/runtime/test_action_ledger.py
+        - .hermes/task.yaml
+      verification_result: "passed: venv/Scripts/python.exe -m pytest tests/runtime/test_action_ledger.py -q -o addopts= (8 passed); append helper writes .hermes/action_ledger.jsonl only when explicitly called and redacts secret-like values before write"
+      blockers: []
+      next_step: "Implement HMAM-06 working checkpoint generation from safe task and ledger summaries."
 
 failure_review:
   enabled: true
