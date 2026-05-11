@@ -251,6 +251,63 @@ def test_multi_agent_memory_workbench_summarizes_delegate_recovery_gates(
     assert "C:\\Users" not in rendered
 
 
+def test_multi_agent_memory_workbench_derives_recovery_gates_from_events(
+    tmp_path,
+) -> None:
+    hermes_dir = tmp_path / ".hermes"
+    hermes_dir.mkdir()
+    (hermes_dir / "task.yaml").write_text(
+        yaml.safe_dump({"capability": "hermes-multi-agent-memory"}, sort_keys=False),
+        encoding="utf-8",
+    )
+    (hermes_dir / "long_term_queue.jsonl").write_text("", encoding="utf-8")
+    (hermes_dir / "skills_journal.jsonl").write_text("", encoding="utf-8")
+
+    workbench = build_multi_agent_memory_workbench(
+        tmp_path,
+        events=[
+            {
+                "id": 1,
+                "type": "agent.child.running",
+                "source": "multi_agent",
+                "run_id": "child-running",
+                "session_id": "HMAMO-18",
+                "status": "running",
+                "message": "child running",
+                "timestamp": "2026-05-11T00:00:00Z",
+            },
+            {
+                "id": 2,
+                "type": "agent.child.failed",
+                "source": "multi_agent",
+                "run_id": "child-failed",
+                "session_id": "HMAMO-18",
+                "status": "failed",
+                "message": "failed token=super-secret C:\\Users\\XQQ\\secret.txt",
+                "timestamp": "2026-05-11T00:01:00Z",
+            },
+        ],
+        memory_diagnostics={"providers": [], "degraded_reason": None},
+        generated_at="2026-05-11T00:02:00Z",
+    )
+
+    assert workbench["action_ledger"]["degraded_reason"] == "action_ledger_missing"
+    gates = workbench["action_ledger"]["recovery_gates"]
+    assert gates["status"] == "blocked"
+    assert gates["blocked_count"] == 1
+    assert gates["monitoring_count"] == 1
+    assert gates["blocked_task_ids"] == ["HMAMO-18"]
+    assert gates["monitoring_task_ids"] == ["HMAMO-18"]
+    assert gates["next_steps"] == [
+        "Monitor delegate child lifecycle.",
+        "Review delegate failure and decide retry, reassignment, or handoff.",
+    ]
+    assert gates["blockers"] == ["Redacted"]
+    rendered = json.dumps(workbench, sort_keys=True)
+    assert "super-secret" not in rendered
+    assert "C:\\Users" not in rendered
+
+
 def test_multi_agent_memory_workbench_reports_runtime_persistence_flags(
     tmp_path,
     monkeypatch,

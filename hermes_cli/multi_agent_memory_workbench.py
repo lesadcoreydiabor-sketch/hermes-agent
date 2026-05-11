@@ -88,6 +88,7 @@ def build_multi_agent_memory_workbench(
 
     workspace = Path(root)
     safe_limit = _safe_limit(limit)
+    recent_events = list(events or [])
     checkpoint = build_working_checkpoint_from_files(
         workspace / ".hermes" / "task.yaml",
         workspace / ACTION_LEDGER_PATH,
@@ -111,7 +112,14 @@ def build_multi_agent_memory_workbench(
         missing_reason="skills_journal_missing",
         limit=safe_limit,
     )
-    active_work = _active_work_from_events(events or [], limit=safe_limit)
+    active_work = _active_work_from_events(recent_events, limit=safe_limit)
+    recovery_entries = _dedupe_recovery_gate_entries(
+        [
+            *action_entries,
+            *_delegate_recovery_entries_from_events(recent_events, limit=safe_limit),
+        ],
+        limit=safe_limit,
+    )
     memory = _memory_summary(memory_diagnostics)
     runtime_persistence = _runtime_persistence_summary(workspace)
     agent_assignments = _agent_assignment_summary(workspace, limit=safe_limit)
@@ -147,7 +155,7 @@ def build_multi_agent_memory_workbench(
         "action_ledger": {
             "entries": action_entries,
             "recovery_gates": _delegate_recovery_gate_summary(
-                action_entries,
+                recovery_entries,
                 limit=safe_limit,
             ),
             "degraded_reason": action_degraded,
@@ -426,6 +434,142 @@ def _delegate_recovery_gate_summary(
         "degraded_reason": None,
         "privacy_class": WORKBENCH_PRIVACY_CLASS,
     }
+
+
+def _delegate_recovery_entries_from_events(
+    events: Iterable[Dict[str, Any]],
+    *,
+    limit: int,
+) -> list[Dict[str, Any]]:
+    entries: list[Dict[str, Any]] = []
+    for event in events:
+        if not isinstance(event, dict):
+            continue
+        event_type = _safe_label(
+            event.get("type") or event.get("event_type"),
+            fallback="",
+            limit=LABEL_LIMIT,
+        )
+        if not event_type.startswith("agent.child."):
+            continue
+        status = _safe_status(event.get("status")) or _status_from_delegate_event_type(
+            event_type
+        )
+        message = event.get("message") or event.get("summary") or event.get("title")
+        entries.append(
+            {
+                "event_id": _safe_identifier(event.get("event_id") or event.get("id")),
+                "event_type": event_type,
+                "timestamp": _safe_summary(event.get("timestamp"), fallback=None),
+                "run_id": _safe_identifier(event.get("run_id") or event.get("work_id")),
+                "session_id": _safe_identifier(
+                    event.get("session_id") or event.get("parent_work_id")
+                ),
+                "task_id": _safe_identifier(
+                    event.get("task_id")
+                    or event.get("session_id")
+                    or event.get("parent_work_id")
+                ),
+                "work_id": _safe_identifier(event.get("work_id") or event.get("run_id")),
+                "status": status,
+                "summary": _safe_summary(message, fallback=""),
+                "verification": _delegate_recovery_verification(event_type, status),
+                "blockers": _delegate_recovery_blockers(event_type, status, message),
+                "next_step": _delegate_recovery_next_step(event_type, status),
+                "privacy_class": WORKBENCH_PRIVACY_CLASS,
+            }
+        )
+        if len(entries) >= limit:
+            break
+    return entries
+
+
+def _dedupe_recovery_gate_entries(
+    entries: Iterable[Dict[str, Any]],
+    *,
+    limit: int,
+) -> list[Dict[str, Any]]:
+    deduped: list[Dict[str, Any]] = []
+    seen: set[tuple[Optional[str], ...]] = set()
+    for entry in entries:
+        if not isinstance(entry, dict):
+            continue
+        key = (
+            _safe_identifier(entry.get("event_id")),
+            _safe_label(entry.get("event_type"), fallback=None, limit=LABEL_LIMIT),
+            _safe_identifier(entry.get("run_id") or entry.get("work_id")),
+            _safe_identifier(entry.get("task_id") or entry.get("session_id")),
+            _safe_status(entry.get("status")),
+            _safe_summary(entry.get("timestamp"), fallback=None),
+        )
+        if key in seen:
+            continue
+        seen.add(key)
+        deduped.append(entry)
+        if len(deduped) >= limit:
+            break
+    return deduped
+
+
+def _status_from_delegate_event_type(event_type: str) -> str:
+    if event_type == "agent.child.completed":
+        return "completed"
+    if event_type == "agent.child.failed":
+        return "failed"
+    if event_type == "agent.child.timeout":
+        return "timeout"
+    if event_type == "agent.child.interrupted":
+        return "interrupted"
+    if event_type == "agent.child.spawned":
+        return "queued"
+    if event_type == "agent.child.running":
+        return "running"
+    return "unknown"
+
+
+def _delegate_recovery_verification(
+    event_type: str,
+    status: Optional[str],
+) -> Optional[str]:
+    if status == "completed" or event_type == "agent.child.completed":
+        return "delegate child completed"
+    return None
+
+
+def _delegate_recovery_blockers(
+    event_type: str,
+    status: Optional[str],
+    message: Any,
+) -> list[str]:
+    if status in FAILED_STATUSES or event_type in {
+        "agent.child.failed",
+        "agent.child.timeout",
+        "agent.child.interrupted",
+    }:
+        blocker = _safe_summary(message, fallback=event_type)
+        return [blocker] if blocker else []
+    return []
+
+
+def _delegate_recovery_next_step(
+    event_type: str,
+    status: Optional[str],
+) -> Optional[str]:
+    if status == "completed" or event_type == "agent.child.completed":
+        return "Review delegate child handoff summary."
+    if status in {"failed", "error", "timeout"} or event_type in {
+        "agent.child.failed",
+        "agent.child.timeout",
+    }:
+        return "Review delegate failure and decide retry, reassignment, or handoff."
+    if status == "interrupted" or event_type == "agent.child.interrupted":
+        return "Resume or reassign interrupted delegate work."
+    if status in ACTIVE_STATUSES or event_type in {
+        "agent.child.spawned",
+        "agent.child.running",
+    }:
+        return "Monitor delegate child lifecycle."
+    return None
 
 
 def _active_work_from_events(
