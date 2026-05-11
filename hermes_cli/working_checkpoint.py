@@ -8,7 +8,9 @@ dispatch tools, mutate memory providers, or inspect provider content.
 from __future__ import annotations
 
 import json
+import os
 import re
+import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, Iterable, Optional
@@ -16,6 +18,7 @@ from typing import Any, Dict, Iterable, Optional
 import yaml
 
 from hermes_cli.action_ledger import normalize_action_ledger_entry
+from utils import atomic_replace
 
 
 WORKING_CHECKPOINT_SCHEMA_VERSION = 1
@@ -155,6 +158,48 @@ def build_working_checkpoint_from_files(
         generated_at=generated_at,
         degraded_reason=reasons,
     )
+
+
+def write_working_checkpoint_from_files(
+    task_yaml_path: str | Path = Path(".hermes") / "task.yaml",
+    ledger_path: str | Path = Path(".hermes") / "action_ledger.jsonl",
+    checkpoint_path: str | Path = WORKING_CHECKPOINT_PATH,
+    *,
+    source: Any = "generated",
+    generated_at: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Explicitly write a safe working checkpoint generated from local files."""
+
+    checkpoint = build_working_checkpoint_from_files(
+        task_yaml_path=task_yaml_path,
+        ledger_path=ledger_path,
+        source=source,
+        generated_at=generated_at,
+    )
+    _atomic_write_json(Path(checkpoint_path), checkpoint)
+    return checkpoint
+
+
+def _atomic_write_json(path: Path, payload: Dict[str, Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fd, tmp_path = tempfile.mkstemp(
+        dir=str(path.parent),
+        prefix=f".{path.stem}_",
+        suffix=".tmp",
+    )
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+            json.dump(payload, handle, ensure_ascii=False, indent=2, sort_keys=True)
+            handle.write("\n")
+            handle.flush()
+            os.fsync(handle.fileno())
+        atomic_replace(tmp_path, path)
+    except BaseException:
+        try:
+            os.unlink(tmp_path)
+        except OSError:
+            pass
+        raise
 
 
 def _read_task_contract(path: Path, reasons: list[str]) -> Dict[str, Any]:

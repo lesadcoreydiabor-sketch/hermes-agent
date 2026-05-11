@@ -6,6 +6,7 @@ from hermes_cli.working_checkpoint import (
     build_working_checkpoint,
     build_working_checkpoint_from_files,
     default_working_checkpoint_path,
+    write_working_checkpoint_from_files,
 )
 
 
@@ -163,6 +164,7 @@ def test_build_working_checkpoint_from_files_degrades_when_ledger_missing(tmp_pa
     assert checkpoint["degraded_reason"] == "ledger_missing"
     assert checkpoint["current_task_id"] == "HMAM-06"
     assert checkpoint["pending_tasks"][0]["task_id"] == "HMAM-06"
+    assert not (tmp_path / ".hermes" / "working_checkpoint.json").exists()
 
 
 def test_build_working_checkpoint_from_files_keeps_valid_ledger_lines_after_parse_error(
@@ -248,3 +250,77 @@ def test_default_working_checkpoint_path_is_workspace_local() -> None:
     assert default_working_checkpoint_path("workspace").as_posix() == (
         "workspace/.hermes/working_checkpoint.json"
     )
+
+
+def test_write_working_checkpoint_from_files_explicitly_persists_safe_json(
+    tmp_path,
+) -> None:
+    hermes_dir = tmp_path / ".hermes"
+    hermes_dir.mkdir()
+    task_path = hermes_dir / "task.yaml"
+    ledger_path = hermes_dir / "action_ledger.jsonl"
+    checkpoint_path = hermes_dir / "working_checkpoint.json"
+    task_path.write_text(
+        yaml.safe_dump(
+            {
+                "capability": "hermes-multi-agent-memory",
+                "tasks": [
+                    {
+                        "id": "HMAMR-02",
+                        "title": "Persist checkpoint",
+                        "status": "running",
+                    }
+                ],
+            },
+            sort_keys=False,
+        ),
+        encoding="utf-8",
+    )
+    ledger_path.write_text(
+        json.dumps(
+            {
+                "event_type": "task.started",
+                "task_id": "HMAMR-02",
+                "status": "running",
+                "summary": "token=super-secret C:\\Users\\XQQ\\secret.txt",
+                "next_step": "diff --git a/secret b/secret\n+sk-secret123456",
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    checkpoint = write_working_checkpoint_from_files(
+        task_yaml_path=task_path,
+        ledger_path=ledger_path,
+        checkpoint_path=checkpoint_path,
+        generated_at="2026-05-11T00:00:00Z",
+    )
+
+    persisted = json.loads(checkpoint_path.read_text(encoding="utf-8"))
+    assert persisted == checkpoint
+    assert persisted["current_task_id"] == "HMAMR-02"
+    assert persisted["privacy_class"] == "redacted_summary"
+    rendered = json.dumps(persisted, sort_keys=True)
+    assert "super-secret" not in rendered
+    assert "C:\\Users" not in rendered
+    assert "diff --git" not in rendered
+    assert "sk-secret123456" not in rendered
+
+
+def test_write_working_checkpoint_from_files_persists_degraded_checkpoint(
+    tmp_path,
+) -> None:
+    checkpoint_path = tmp_path / ".hermes" / "working_checkpoint.json"
+
+    checkpoint = write_working_checkpoint_from_files(
+        task_yaml_path=tmp_path / ".hermes" / "missing-task.yaml",
+        ledger_path=tmp_path / ".hermes" / "missing-ledger.jsonl",
+        checkpoint_path=checkpoint_path,
+        generated_at="2026-05-11T00:00:00Z",
+    )
+
+    persisted = json.loads(checkpoint_path.read_text(encoding="utf-8"))
+    assert persisted == checkpoint
+    assert persisted["active_capability"] == "unknown"
+    assert persisted["degraded_reason"] == "task_contract_missing;ledger_missing"

@@ -1073,6 +1073,24 @@ tasks:
     status: completed
     risk: high
 
+  - id: HMAMR-02
+    title: Add explicit working checkpoint persistence helper
+    description: Add an explicit helper that writes a safe working_checkpoint.json from task.yaml and action_ledger summaries without runtime auto-wiring.
+    depends_on:
+      - HMAM-06
+      - HMAMR-01
+    acceptance:
+      - Helper writes .hermes/working_checkpoint.json only when explicitly called by code.
+      - Persisted checkpoint is generated through the existing redacted checkpoint builder.
+      - Missing or broken task or ledger inputs produce a degraded checkpoint file instead of raising.
+      - The existing build_working_checkpoint_from_files path remains read-only.
+    verify:
+      - venv/Scripts/python.exe -m pytest tests/runtime/test_working_checkpoint.py tests/runtime/test_action_ledger.py -q -o addopts=
+      - venv/Scripts/python.exe -c "import yaml; yaml.safe_load(open('.hermes/task.yaml', encoding='utf-8'))"
+      - git diff --check -- hermes_cli/working_checkpoint.py tests/runtime/test_working_checkpoint.py .hermes/task.yaml
+    status: completed
+    risk: medium
+
 risk_flags:
   destructive_file_change:
     pause: true
@@ -1815,6 +1833,15 @@ progress_report:
       verification_result: "passed: venv/Scripts/python.exe -m pytest tests/tools/test_delegate.py tests/runtime/test_action_ledger.py tests/runtime/test_multi_agent_work_events.py tests/agent/test_subagent_stop_hook.py -q -o addopts= (155 passed); passed: venv/Scripts/python.exe -c yaml.safe_load task.yaml"
       blockers: []
       next_step: "Review the next runtime integration slice for checkpoint or long-term queue persistence after opt-in delegate action ledger wiring."
+    - task_id: HMAMR-02
+      status: completed
+      changed_files:
+        - hermes_cli/working_checkpoint.py
+        - tests/runtime/test_working_checkpoint.py
+        - .hermes/task.yaml
+      verification_result: "passed: venv/Scripts/python.exe -m pytest tests/runtime/test_working_checkpoint.py tests/runtime/test_action_ledger.py -q -o addopts= (17 passed); passed: venv/Scripts/python.exe -c yaml.safe_load task.yaml; passed: git diff --check for HMAMR-02 files"
+      blockers: []
+      next_step: "Wire checkpoint refresh to delegate lifecycle only behind an explicit opt-in after reviewing delegate impact."
 
 failure_review:
   enabled: true
