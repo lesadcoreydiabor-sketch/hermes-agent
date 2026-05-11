@@ -6,6 +6,7 @@ import hermes_cli.learning_journal as learning_journal
 from hermes_cli.learning_journal import (
     append_long_term_queue_entry,
     append_skills_journal_entry,
+    build_failure_review_export_preview,
     build_learning_review_request,
     build_long_term_queue_entry,
     build_skills_journal_entry,
@@ -364,6 +365,137 @@ def test_learning_review_request_build_only_does_not_write_files(
 
     assert not (tmp_path / ".hermes").exists()
     assert not (tmp_path / "skills").exists()
+
+
+def test_failure_review_export_preview_summarizes_queue_entries_safely() -> None:
+    preview = build_failure_review_export_preview(
+        [
+            {
+                "entry_id": "queue-1",
+                "timestamp": "2026-05-11T00:00:00Z",
+                "category": "recurring_failure",
+                "state": "needs_evidence",
+                "title": "Delegate timeout repeated",
+                "source_task_id": "HMAMO-29",
+                "evidence": ["occurrences=3", "delegate child timed out"],
+                "proposed_change": "Add timeout recovery regression",
+                "acceptance_criteria": ["Candidate is reviewed before export"],
+            },
+            {
+                "entry_id": "queue-2",
+                "category": "missing_test",
+                "state": "candidate",
+                "title": "Redaction badcase missing",
+                "evidence": ["redaction candidate reviewed"],
+                "proposed_change": "Add redaction regression",
+                "target_type": "regression_test",
+                "target_ref": "tests/runtime/test_learning_journal.py",
+            },
+            {
+                "entry_id": "queue-ignored",
+                "category": "documentation_gap",
+                "state": "rejected",
+                "title": "Rejected item",
+            },
+        ],
+        preview_id="export-1",
+        timestamp="2026-05-11T00:01:00Z",
+    )
+
+    assert preview["state"] == "preview_only"
+    assert preview["requires_review"] is True
+    assert preview["output_kind"] == "failure_review_summary"
+    assert preview["entry_count"] == 2
+    assert preview["category_counts"] == {
+        "missing_test": 1,
+        "recurring_failure": 1,
+    }
+    assert preview["state_counts"] == {"candidate": 1, "needs_evidence": 1}
+    assert preview["entries"][0]["entry_id"] == "queue-1"
+    assert preview["entries"][0]["evidence"] == [
+        "occurrences=3",
+        "delegate child timed out",
+    ]
+    assert preview["entries"][1]["target_type"] == "regression_test"
+    assert preview["summary_lines"] == [
+        "recurring_failure/needs_evidence: Delegate timeout repeated -> Add timeout recovery regression",
+        "missing_test/candidate: Redaction badcase missing -> Add redaction regression",
+    ]
+    assert "write_export_file_without_review" in preview["blocked_effects"]
+    assert "mark_queue_entries_applied" in preview["blocked_effects"]
+
+
+def test_failure_review_export_preview_redacts_and_bounds_entries() -> None:
+    preview = build_failure_review_export_preview(
+        [
+            {
+                "entry_id": "queue-ghp_1234567890",
+                "category": "recurring_failure",
+                "state": "needs_evidence",
+                "title": "C:\\Users\\XQQ\\secret\\failure.txt",
+                "source_event_id": "event-token=secret",
+                "evidence": [
+                    "api_key=hidden",
+                    "safe evidence",
+                    *[f"extra-{index}" for index in range(10)],
+                ],
+                "proposed_change": "diff --git a/secret b/secret\n+sk-secret123456",
+                "acceptance_criteria": ["password=hidden", "safe criterion"],
+                "target_ref": "/Users/xqq/secret.md",
+            },
+            *[
+                {
+                    "entry_id": f"queue-extra-{index}",
+                    "category": "missing_test",
+                    "state": "candidate",
+                    "title": f"extra {index}",
+                }
+                for index in range(10)
+            ],
+        ],
+        preview_id="export-token=secret",
+        timestamp="token=secret",
+        title="Review sk-secret123456",
+        limit=3,
+    )
+
+    rendered = json.dumps(preview, sort_keys=True)
+    assert preview["entry_count"] == 3
+    assert preview["preview_id"] == "Redacted"
+    assert preview["title"] == "Redacted"
+    assert preview["entries"][0]["entry_id"] == "Redacted"
+    assert preview["entries"][0]["source_event_id"] == "Redacted"
+    assert preview["entries"][0]["target_ref"] == "Redacted"
+    assert len(preview["entries"][0]["evidence"]) == 8
+    assert "safe evidence" in preview["entries"][0]["evidence"]
+    assert "token=secret" not in rendered
+    assert "api_key=hidden" not in rendered
+    assert "ghp_1234567890" not in rendered
+    assert "C:\\Users" not in rendered
+    assert "/Users/xqq" not in rendered
+    assert "diff --git" not in rendered
+    assert "sk-secret123456" not in rendered
+
+
+def test_failure_review_export_preview_build_only_does_not_write_files(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+
+    preview = build_failure_review_export_preview(
+        [
+            {
+                "category": "documentation_gap",
+                "state": "candidate",
+                "title": "Document repeated recovery",
+            }
+        ]
+    )
+
+    assert preview["entry_count"] == 1
+    assert not (tmp_path / ".hermes").exists()
+    assert not (tmp_path / "failure-review.md").exists()
 
 
 def test_learning_journal_default_paths_are_workspace_local() -> None:

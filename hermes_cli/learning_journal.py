@@ -81,6 +81,11 @@ REVIEW_BLOCKED_EFFECTS = (
     "mutate_task_yaml",
     "dispatch_tools_without_review",
 )
+EXPORT_PREVIEW_BLOCKED_EFFECTS = (
+    *REVIEW_BLOCKED_EFFECTS,
+    "write_export_file_without_review",
+    "mark_queue_entries_applied",
+)
 
 _SECRET_RE = re.compile(
     r"\b(?:api[_-]?key|token|secret|password|credential)\s*[:=]\s*[^,\s;]+"
@@ -362,6 +367,50 @@ def build_learning_review_request(
     }
 
 
+def build_failure_review_export_preview(
+    entries: Iterable[Dict[str, Any]],
+    *,
+    preview_id: Any = None,
+    timestamp: Optional[str] = None,
+    title: Any = "Failure review summary preview",
+    limit: Any = LIST_LIMIT,
+    privacy_class: Any = LEARNING_PRIVACY_CLASS,
+) -> Dict[str, Any]:
+    """Build a redacted failure-review summary preview without exporting a file."""
+
+    safe_limit = _safe_entry_limit(limit)
+    normalized_entries: list[Dict[str, Any]] = []
+    for entry in entries:
+        if not isinstance(entry, dict):
+            continue
+        try:
+            normalized = normalize_long_term_queue_entry(entry)
+        except (TypeError, ValueError):
+            continue
+        if normalized.get("state") in {"rejected", "superseded"}:
+            continue
+        normalized_entries.append(_failure_review_export_entry(normalized))
+        if len(normalized_entries) >= safe_limit:
+            break
+
+    return {
+        "schema_version": LEARNING_SCHEMA_VERSION,
+        "preview_id": _safe_identifier(preview_id) or _new_entry_id("export"),
+        "timestamp": _safe_timestamp(timestamp) or _utc_now_iso(),
+        "title": _safe_summary(title, fallback="Failure review summary preview"),
+        "state": "preview_only",
+        "requires_review": True,
+        "output_kind": "failure_review_summary",
+        "entry_count": len(normalized_entries),
+        "category_counts": _count_entries_by_key(normalized_entries, "category"),
+        "state_counts": _count_entries_by_key(normalized_entries, "state"),
+        "entries": normalized_entries,
+        "summary_lines": _failure_review_summary_lines(normalized_entries),
+        "blocked_effects": list(EXPORT_PREVIEW_BLOCKED_EFFECTS),
+        "privacy_class": _safe_privacy_class(privacy_class),
+    }
+
+
 def _atomic_append_jsonl(path: Path, entry: Dict[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     existing = ""
@@ -428,6 +477,69 @@ def _safe_review_action(value: Any) -> Optional[str]:
     if action in REVIEW_ACTIONS:
         return action
     return None
+
+
+def _failure_review_export_entry(entry: Dict[str, Any]) -> Dict[str, Any]:
+    return {
+        "entry_id": _safe_identifier(entry.get("entry_id")),
+        "timestamp": _safe_timestamp(entry.get("timestamp")),
+        "category": _safe_category(entry.get("category")) or "code_issue",
+        "state": _safe_queue_state(entry.get("state")),
+        "title": _safe_summary(entry.get("title"), fallback="Untitled learning candidate"),
+        "source_task_id": _safe_identifier(entry.get("source_task_id")),
+        "source_event_id": _safe_identifier(entry.get("source_event_id")),
+        "evidence": _safe_list(
+            entry.get("evidence") if isinstance(entry.get("evidence"), list) else []
+        ),
+        "proposed_change": _safe_summary(entry.get("proposed_change"), fallback=None),
+        "acceptance_criteria": _safe_list(
+            entry.get("acceptance_criteria")
+            if isinstance(entry.get("acceptance_criteria"), list)
+            else []
+        ),
+        "target_type": _safe_target_type(entry.get("target_type")),
+        "target_ref": _safe_summary(entry.get("target_ref"), fallback=None),
+        "privacy_class": _safe_privacy_class(entry.get("privacy_class")),
+    }
+
+
+def _failure_review_summary_lines(entries: list[Dict[str, Any]]) -> list[str]:
+    lines = []
+    for entry in entries:
+        title = _safe_summary(entry.get("title"), fallback="Untitled learning candidate")
+        category = _safe_category(entry.get("category")) or "code_issue"
+        state = _safe_queue_state(entry.get("state"))
+        line = f"{category}/{state}: {title}"
+        if entry.get("proposed_change"):
+            line = f"{line} -> {entry['proposed_change']}"
+        safe = _safe_summary(line, fallback=None)
+        if safe:
+            _append_unique(lines, safe, limit=LIST_LIMIT)
+    return lines
+
+
+def _count_entries_by_key(
+    entries: Iterable[Dict[str, Any]],
+    key: str,
+) -> Dict[str, int]:
+    counts: Dict[str, int] = {}
+    for entry in entries:
+        safe_key = _safe_status(entry.get(key)) or "unknown"
+        counts[safe_key] = counts.get(safe_key, 0) + 1
+    return counts
+
+
+def _safe_entry_limit(value: Any) -> int:
+    try:
+        count = int(value)
+    except (TypeError, ValueError):
+        return LIST_LIMIT
+    return max(1, min(count, LIST_LIMIT))
+
+
+def _append_unique(values: list[str], value: str, *, limit: int) -> None:
+    if value and value not in values and len(values) < limit:
+        values.append(value)
 
 
 def _safe_summary(value: Any, *, fallback: Optional[str]) -> Optional[str]:

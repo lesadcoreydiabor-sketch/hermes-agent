@@ -385,6 +385,10 @@ requirements instead of guessing or silently filling review evidence.
 Operator views should render this as status and evidence readiness only. They
 must not add approve, promote, export, mark-covered, retry, spawn, or config
 mutation controls until a separate reviewed mutation contract exists.
+The export path starts with a preview helper that turns reviewable queue entries
+into a bounded, redacted failure review summary payload. The preview may contain
+counts, safe entry summaries, and blocked effects, but it must not write an
+export file, mark queue entries applied, or mutate any durable learning state.
 
 ### Phase 6: Agent-Ready Work Distribution
 
