@@ -1,8 +1,9 @@
 version: 1
 project: hermes-agent
-capability: hermes-run-inspector
-source_prd: docs/plans/hermes-run-inspector-prd.md
+capability: hermes-multi-agent-memory
+source_prd: docs/plans/hermes-multi-agent-memory-prd.md
 related_prds:
+  - docs/plans/hermes-multi-agent-memory-prd.md
   - docs/plans/hermes-run-inspector-prd.md
   - docs/plans/hermes-run-inspector-desktop-panel-requirements.md
   - docs/plans/hermes-run-inspector-desktop-panel-prd.md
@@ -865,6 +866,195 @@ tasks:
     status: completed
     risk: low
 
+  - id: HMAM-01
+    title: Define multi-agent memory PRD and execution contract
+    description: Ground the next HERMES capability line in current delegation, memory, checkpoint, and Run Inspector code before modifying runtime behavior.
+    depends_on:
+      - HRIDR-05
+    acceptance:
+      - PRD maps current HERMES code evidence for AIAgent, delegate_task, MemoryManager, checkpoints, Run Inspector events, and task.yaml.
+      - PRD maps GitNexus, phoenix-immortal, abtop, anthropics/skills, addyosmani/agent-skills, mattpocock/skills, openai/symphony, hermes-web-ui, hermes-desktop, and Kami patterns into HERMES-specific decisions.
+      - Task contract separates multi-agent event schema, delegation mirroring, memory diagnostics, action ledger, working checkpoint, queue/journal, and UI slices.
+      - PRD defines a GitNexus source-bundle reading standard that includes code structure, docs, Issues, PRs, and missing-source reporting.
+      - Scope explicitly blocks automatic self-modification, raw memory exposure, raw logs, raw prompts, raw tool args, and unreviewed skill mutation.
+    verify:
+      - manual review of docs/plans/hermes-multi-agent-memory-prd.md
+      - venv/Scripts/python.exe -c "import yaml; yaml.safe_load(open('.hermes/task.yaml', encoding='utf-8'))"
+      - git diff --check -- docs/plans/hermes-multi-agent-memory-prd.md .hermes/task.yaml
+    status: completed
+    risk: low
+
+  - id: HMAM-02
+    title: Add multi-agent work event schema helpers
+    description: Add pure schema and redaction helpers for parent/child agent lifecycle events without wiring runtime emitters yet.
+    depends_on:
+      - HMAM-01
+    acceptance:
+      - Helpers normalize parent started, child spawned, child running, child completed, child failed, child interrupted, and child timeout events.
+      - Secret-like identifiers, long strings, raw prompts, raw outputs, raw tool args, file contents, diffs, and environment values are redacted or omitted.
+      - Helpers are pure and do not write files, dispatch tools, mutate memory providers, or affect delegation behavior.
+    verify:
+      - venv/Scripts/python.exe -m pytest tests/runtime/test_multi_agent_work_events.py -q -o addopts=
+    status: completed
+    risk: medium
+
+  - id: HMAM-03
+    title: Mirror delegate child lifecycle into Run Inspector events
+    description: Emit best-effort safe multi-agent lifecycle events from the existing delegate_task path into the Run Inspector event ledger.
+    depends_on:
+      - HMAM-02
+    acceptance:
+      - Existing delegate_task behavior, depth limits, toolset restrictions, child interruption, and cost rollup remain unchanged.
+      - Child lifecycle events are recorded as redacted summaries only.
+      - Event recording failures never fail or slow the delegated child task.
+      - Tests cover successful child, failed child, interrupted child, and recorder failure.
+    verify:
+      - venv/Scripts/python.exe -m pytest tests/tools/test_delegate.py tests/runtime/test_multi_agent_work_events.py -q -o addopts=
+    status: pending
+    risk: high
+
+  - id: HMAM-04
+    title: Add read-only memory lifecycle diagnostics
+    description: Expose safe provider-level memory diagnostics for Run Inspector without exposing recalled memory content or provider payloads.
+    depends_on:
+      - HMAM-02
+    acceptance:
+      - Diagnostics include provider names, tool names, initialized/unavailable state, and last lifecycle status when known.
+      - Diagnostics exclude memory contents, prompts, raw provider responses, credentials, and user profile payloads.
+      - Memory provider failures return degraded diagnostics instead of blocking the agent.
+    verify:
+      - venv/Scripts/python.exe -m pytest tests/agent/test_memory_provider.py tests/run_agent/test_memory_sync_interrupted.py -q -o addopts=
+    status: pending
+    risk: medium
+
+  - id: HMAM-05
+    title: Add local action ledger schema and append helper
+    description: Add local-only action_ledger JSONL schema helpers with strict redaction before enabling runtime writes.
+    depends_on:
+      - HMAM-02
+    acceptance:
+      - Ledger entries include safe work id, agent id, event type, status, verification, blockers, next step, and privacy class.
+      - Append helper writes atomically to .hermes/action_ledger.jsonl when explicitly called.
+      - Helper rejects or redacts secret-like content and truncates long values.
+      - No runtime path writes to the ledger until a later explicit wiring slice.
+    verify:
+      - venv/Scripts/python.exe -m pytest tests/runtime/test_action_ledger.py -q -o addopts=
+    status: pending
+    risk: medium
+
+  - id: HMAM-06
+    title: Generate working checkpoint from safe task and ledger data
+    description: Add a pure working checkpoint generator that summarizes active work, completed work, blockers, verification, and next step.
+    depends_on:
+      - HMAM-05
+    acceptance:
+      - Generator reads safe task and ledger summaries and returns a bounded checkpoint object.
+      - Output excludes raw prompts, raw logs, tool args, file contents, diffs, and secrets.
+      - Broken or missing ledger data returns a degraded checkpoint instead of raising.
+    verify:
+      - venv/Scripts/python.exe -m pytest tests/runtime/test_working_checkpoint.py -q -o addopts=
+    status: pending
+    risk: medium
+
+  - id: HMAM-07
+    title: Add long-term queue and skills journal schema helpers
+    description: Add review-gated schemas for improvement candidates and accepted skill learnings without mutating skills automatically.
+    depends_on:
+      - HMAM-05
+    acceptance:
+      - Long-term queue entries can represent recurring failures, missing tests, recovery patterns, and skill improvement candidates.
+      - Skills journal entries require source evidence, accepted change, eval coverage, and rollback note.
+      - No helper edits SKILL.md, config, prompts, or provider state automatically.
+    verify:
+      - venv/Scripts/python.exe -m pytest tests/runtime/test_learning_journal.py -q -o addopts=
+    status: pending
+    risk: medium
+
+  - id: HMAM-08
+    title: Add Run Inspector multi-agent memory workbench
+    description: Render read-only multi-agent work, memory diagnostics, action ledger, checkpoint, queue, and skills journal summaries in Run Inspector.
+    depends_on:
+      - HMAM-03
+      - HMAM-04
+      - HMAM-06
+      - HMAM-07
+    acceptance:
+      - Workbench shows empty, active, failed, degraded, and unavailable states.
+      - UI remains read-only and does not approve, deny, stop, spawn, write memory, edit skills, or mutate config.
+      - Long ids and summaries do not overflow on desktop or narrow viewports.
+    verify:
+      - venv/Scripts/python.exe -m pytest tests/web/test_run_inspector_status_policy.py -q -o addopts=
+      - cd web; npm.cmd run build
+      - Playwright smoke for /run-inspector desktop and narrow viewports
+    status: pending
+    risk: high
+
+  - id: HMAM-09
+    title: Generate failure-review and long-term queue candidates
+    description: Convert failed verification, repeated tool errors, repeated unknown states, and redaction failures into reviewable local candidates without marking them accepted.
+    depends_on:
+      - HMAM-05
+      - HMAM-07
+    acceptance:
+      - Failed verification can create a long-term queue candidate with what happened, likely cause, verification command, and proposed badcase.
+      - Repeated runtime errors dedupe into one candidate instead of flooding the queue.
+      - Redaction failures remain blockers and do not expose raw leaked content in the candidate.
+      - No candidate edits skills, memory provider data, tests, or task.yaml automatically.
+    verify:
+      - venv/Scripts/python.exe -m pytest tests/runtime/test_failure_review_candidates.py tests/runtime/test_learning_journal.py -q -o addopts=
+    status: pending
+    risk: high
+
+  - id: HMAM-10
+    title: Define GitNexus source-bundle research template
+    description: Add a reusable PM research artifact for reading external projects through code graph, docs, Issues, PRs, and Discussions/changelog evidence.
+    depends_on:
+      - HMAM-01
+    acceptance:
+      - Template records repository, code evidence, docs read, Issues read, PRs read, Discussions or changelog read, missing source classes, transferable patterns, and non-transferable risks.
+      - Template explicitly records stale GitNexus indexes, missing credentials, network failures, and rate limits as evidence gaps.
+      - Template does not require GitHub writes or remote issue mutation.
+    verify:
+      - git diff --check -- docs/plans/hermes-multi-agent-memory-prd.md .hermes/task.yaml
+      - venv/Scripts/python.exe -c "import yaml; yaml.safe_load(open('.hermes/task.yaml', encoding='utf-8'))"
+    status: pending
+    risk: low
+
+  - id: HMAM-11
+    title: Define agent-ready task ownership and handoff policy
+    description: Add the policy layer that maps planner, orchestrator, worker, reviewer, and observer roles to task ownership, allowed write scopes, dependencies, and handoff payloads.
+    depends_on:
+      - HMAM-06
+      - HMAM-07
+    acceptance:
+      - Policy defines role, task id, owner, write scope, dependencies, allowed tools or toolsets, verification command, and handoff payload fields.
+      - Policy aligns with existing delegate_task role/depth/concurrency limits and Kanban task ownership.
+      - Conflict policy requires disjoint write scopes for parallel workers and review before shared contract changes.
+      - Policy is documentation/schema only and does not change scheduler behavior.
+    verify:
+      - git diff --check -- docs/plans/hermes-multi-agent-memory-prd.md .hermes/task.yaml
+      - venv/Scripts/python.exe -c "import yaml; yaml.safe_load(open('.hermes/task.yaml', encoding='utf-8'))"
+    status: pending
+    risk: medium
+
+  - id: HMAM-12
+    title: Add rollout docs and review gates for memory learning
+    description: Document local-only storage, redaction, review gates, queue states, skills journal acceptance, rollback notes, and current migration limits.
+    depends_on:
+      - HMAM-09
+      - HMAM-10
+      - HMAM-11
+    acceptance:
+      - Docs explain action_ledger, working_checkpoint, long_term_queue, skills_journal, and failure_review ownership.
+      - Docs explain that long-term memory and skill changes require review and are never silently applied.
+      - Docs explain how Run Inspector displays degraded or missing memory data.
+      - Docs include a migration limit note for multi-process gateway and CLI ledger merging.
+    verify:
+      - git diff --check -- docs/plans/hermes-multi-agent-memory-prd.md .hermes/task.yaml
+      - venv/Scripts/python.exe -c "import yaml; yaml.safe_load(open('.hermes/task.yaml', encoding='utf-8'))"
+    status: pending
+    risk: medium
+
 risk_flags:
   destructive_file_change:
     pause: true
@@ -920,6 +1110,24 @@ risk_flags:
       - rendering raw logs
       - rendering full tool arguments
       - rendering secret-looking environment values
+  unreviewed_memory_or_skill_mutation:
+    pause: true
+    examples:
+      - automatically editing SKILL.md
+      - silently writing accepted long-term memory facts
+      - applying skills_journal entries without review
+  multi_agent_ownership_conflict:
+    pause: true
+    examples:
+      - parallel workers writing the same file set
+      - changing shared API contracts without a coordinating owner
+      - child agents mutating sibling task state
+  ledger_or_checkpoint_privacy_leak:
+    pause: true
+    examples:
+      - recording raw transcripts
+      - recording command output or diffs
+      - recording provider memory payloads
 
 progress_report:
   enabled: true
@@ -1469,6 +1677,23 @@ progress_report:
       verification_result: "passed: venv/Scripts/python.exe -m pytest tests/web/test_run_inspector_status_policy.py -q -o addopts= (25 passed); passed: cd web; npm.cmd run build; passed: Playwright smoke for /run-inspector desktop and narrow viewports with compact Desktop header signal visible on desktop and no horizontal overflow; passed: GitNexus detect_changes staged risk low with no affected processes"
       blockers: []
       next_step: "HRIDR-05 desktop shell header signal implemented locally; run YAML/diff/GitNexus checks, stage, commit, push, then continue lifecycle reliability hardening."
+    - task_id: HMAM-01
+      status: completed
+      changed_files:
+        - docs/plans/hermes-multi-agent-memory-prd.md
+        - .hermes/task.yaml
+      verification_result: "passed: manual review of docs/plans/hermes-multi-agent-memory-prd.md; passed: venv/Scripts/python.exe -c yaml.safe_load task.yaml; passed: git diff --check for HMAM-01/HMAM-02 files; passed: GitNexus detect_changes staged risk low with no affected processes"
+      blockers: []
+      next_step: "Implement HMAM-02 pure multi-agent work event schema helpers before touching delegate_task or MemoryManager runtime paths."
+    - task_id: HMAM-02
+      status: completed
+      changed_files:
+        - hermes_cli/multi_agent_work_events.py
+        - tests/runtime/test_multi_agent_work_events.py
+        - .hermes/task.yaml
+      verification_result: "passed: venv/Scripts/python.exe -m pytest tests/runtime/test_multi_agent_work_events.py -q -o addopts= (5 passed); passed: venv/Scripts/python.exe -c yaml.safe_load task.yaml; passed: git diff --check for HMAM-01/HMAM-02 files; passed: GitNexus detect_changes staged risk low with no affected processes"
+      blockers: []
+      next_step: "Implement HMAM-03 delegate_task lifecycle mirroring only after impact review and delegate regression tests."
 
 failure_review:
   enabled: true
@@ -1613,4 +1838,12 @@ failure_review:
       what_changed: "Reran the smoke with explicit process cleanup that ignores already-exited process state."
       how_it_was_verified: "Re-ran Playwright smoke against a fresh temporary dashboard on port 9123; desktop and narrow viewports passed with no horizontal overflow."
       added_eval_or_badcase: "HRIDR-04 browser smoke now separates page assertions from best-effort temporary process cleanup."
+      blocker: false
+    - trigger: failed_verification
+      task_id: HMAM-02
+      what_happened: "Initial multi-agent work event tests showed GitHub-style ghp_ tokens were not redacted in agent_id fields."
+      why_it_failed: "The first secret regex covered ghp- style prefixes but missed the underscore form used by GitHub personal access tokens."
+      what_changed: "Expanded the token regex to match both hyphen and underscore separators for sk and ghp-style token prefixes."
+      how_it_was_verified: "Re-ran tests/runtime/test_multi_agent_work_events.py after the regex change."
+      added_eval_or_badcase: "tests/runtime/test_multi_agent_work_events.py::test_build_multi_agent_work_event_redacts_sensitive_values covers ghp_ identifiers."
       blocker: false
