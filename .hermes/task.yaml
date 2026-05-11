@@ -1405,6 +1405,26 @@ tasks:
     status: completed
     risk: low
 
+  - id: HMAMO-08
+    title: Add parallel plan frontend model helpers
+    description: Add API typing and pure view-model helpers for parallel assignment plan summaries without rendering new UI controls.
+    depends_on:
+      - HMAMO-05
+      - HMAMO-07
+    acceptance:
+      - Frontend API types include agent_assignments.parallel_plan batches, max parallel workers, active tasks, waiting tasks, blocked tasks, conflicts, and degraded metadata.
+      - View-model helper summarizes unknown, degraded, sequenced-conflict, waiting, ready, active, and quiet parallel plan states.
+      - Helper exposes only safe counts and labels and does not render raw assignment payloads.
+      - Slice does not add start, stop, spawn, approve, write memory, edit skill, edit config, or task mutation controls.
+      - Existing dirty RunInspectorPage and event timeline files remain untouched.
+    verify:
+      - venv/Scripts/python.exe -m pytest tests/web/test_run_inspector_status_policy.py -q -o addopts=
+      - cd web; npm.cmd run build
+      - venv/Scripts/python.exe -c "import yaml; yaml.safe_load(open('.hermes/task.yaml', encoding='utf-8'))"
+      - git diff --check -- web/src/lib/api.ts web/src/pages/runInspectorMemoryWorkbench.ts tests/web/test_run_inspector_status_policy.py .hermes/task.yaml
+    status: completed
+    risk: low
+
 risk_flags:
   destructive_file_change:
     pause: true
@@ -2311,6 +2331,17 @@ progress_report:
       verification_result: "passed: venv/Scripts/python.exe -m pytest tests/runtime/test_multi_agent_memory_workbench.py tests/runtime/test_agent_task_assignment.py tests/hermes_cli/test_run_inspector_api.py -q -o addopts= (32 passed); passed: venv/Scripts/python.exe -c yaml.safe_load task.yaml; passed: git diff --check for HMAMO-07 files"
       blockers: []
       next_step: "Add frontend API typing and view-model helpers for parallel assignment plan summaries."
+    - task_id: HMAMO-08
+      status: completed
+      changed_files:
+        - web/src/lib/api.ts
+        - web/src/pages/runInspectorMemoryWorkbench.ts
+        - tests/web/test_run_inspector_status_policy.py
+        - .hermes/task.yaml
+      verification_result: "passed: venv/Scripts/python.exe -m pytest tests/web/test_run_inspector_status_policy.py -q -o addopts= (27 passed); passed: cd web; npm.cmd run build; passed: venv/Scripts/python.exe -c yaml.safe_load task.yaml; passed: git diff --check for HMAMO-08 files"
+      blockers:
+        - "RunInspectorPage.tsx and runInspectorEventTimeline.ts still have unrelated dirty active-event filter changes, so this slice stops at model helpers."
+      next_step: "Render assignment and parallel plan summaries in Run Inspector after coordinating existing dirty page files."
 
 failure_review:
   enabled: true

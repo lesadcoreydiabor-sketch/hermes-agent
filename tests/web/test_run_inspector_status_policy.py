@@ -628,6 +628,7 @@ def test_run_inspector_event_timeline_describes_event_and_stream_states():
               cancelled: timeline.filterRunInspectorEvents(events, "cancelled").map((event) => event.id),
               completed: timeline.filterRunInspectorEvents(events, "completed").map((event) => event.id),
               failed: timeline.filterRunInspectorEvents(events, "failed").map((event) => event.id),
+              terminal: timeline.filterRunInspectorEvents(events, "terminal").map((event) => event.id),
               gateway: timeline.filterRunInspectorEvents(events, "gateway").map((event) => event.id),
               run: timeline.filterRunInspectorEvents(events, "run").map((event) => event.id),
               tool: timeline.filterRunInspectorEvents(events, "tool").map((event) => event.id),
@@ -660,6 +661,7 @@ def test_run_inspector_event_timeline_describes_event_and_stream_states():
         "cancelled": [9],
         "completed": [10],
         "failed": [7],
+        "terminal": [7, 9, 10],
         "gateway": [6, 7, 8, 9, 10],
         "run": [7, 9, 10],
         "tool": [5],
@@ -1318,6 +1320,19 @@ def test_run_inspector_memory_workbench_describes_all_states() -> None:
                   degraded_reason: null,
                   privacy_class: "redacted_summary",
                 },
+                parallel_plan: {
+                  schema_version: 1,
+                  status: "empty",
+                  max_parallel_workers: 16,
+                  batches: [],
+                  blocked_task_ids: [],
+                  active_task_ids: [],
+                  waiting_task_ids: [],
+                  conflict_task_ids: [],
+                  conflicts: [],
+                  degraded_reason: null,
+                  privacy_class: "redacted_summary",
+                },
                 assignments: [],
                 degraded_reason: null,
                 privacy_class: "redacted_summary",
@@ -1399,6 +1414,37 @@ def test_run_inspector_memory_workbench_describes_all_states() -> None:
                 },
               }).tone,
               assignmentsMissing: workbench.describeAgentAssignmentState(null).tone,
+              planQuiet: workbench.describeParallelAssignmentPlanState(base).label,
+              planReady: workbench.describeParallelAssignmentPlanState({
+                ...base,
+                agent_assignments: {
+                  ...base.agent_assignments,
+                  parallel_plan: {
+                    ...base.agent_assignments.parallel_plan,
+                    status: "ready",
+                    batches: [
+                      {
+                        index: 1,
+                        task_ids: ["HMAMO-01", "HMAMO-02"],
+                        roles: { worker: 2 },
+                        privacy_class: "redacted_summary",
+                      },
+                    ],
+                  },
+                },
+              }).message,
+              planSequenced: workbench.describeParallelAssignmentPlanState({
+                ...base,
+                agent_assignments: {
+                  ...base.agent_assignments,
+                  parallel_plan: {
+                    ...base.agent_assignments.parallel_plan,
+                    status: "sequenced_conflicts",
+                    conflict_task_ids: ["HMAMO-01", "HMAMO-02"],
+                  },
+                },
+              }).tone,
+              planMissing: workbench.describeParallelAssignmentPlanState(null).tone,
               persistenceMissing: workbench.describeRuntimePersistenceState(null).tone,
               offlineTone: workbench.describeMemoryWorkbenchState("offline", null).tone,
               providerTone: workbench.memoryProviderTone("available"),
@@ -1419,6 +1465,10 @@ def test_run_inspector_memory_workbench_describes_all_states() -> None:
     assert payload["assignmentsActive"] == "1 ready / 1 active"
     assert payload["assignmentsConflict"] == "destructive"
     assert payload["assignmentsMissing"] == "muted"
+    assert payload["planQuiet"] == "Plan quiet"
+    assert payload["planReady"] == "2 tasks / 1 batches"
+    assert payload["planSequenced"] == "warning"
+    assert payload["planMissing"] == "muted"
     assert payload["persistenceMissing"] == "muted"
     assert payload["offlineTone"] == "destructive"
     assert payload["providerTone"] == "success"
@@ -1443,10 +1493,14 @@ def test_run_inspector_memory_workbench_uses_readonly_api() -> None:
     assert "api.getRunInspectorMemoryWorkbench" in hook_source
     assert "runtime_persistence" in api_source
     assert "agent_assignments" in api_source
+    assert "parallel_plan" in api_source
     assert "describeRuntimePersistenceState" in (
         ROOT / "web" / "src" / "pages" / "runInspectorMemoryWorkbench.ts"
     ).read_text(encoding="utf-8")
     assert "describeAgentAssignmentState" in (
+        ROOT / "web" / "src" / "pages" / "runInspectorMemoryWorkbench.ts"
+    ).read_text(encoding="utf-8")
+    assert "describeParallelAssignmentPlanState" in (
         ROOT / "web" / "src" / "pages" / "runInspectorMemoryWorkbench.ts"
     ).read_text(encoding="utf-8")
     assert "/api/run-inspector/memory-workbench?limit=" in api_source

@@ -159,3 +159,60 @@ export function describeAgentAssignmentState(
     tone: "muted",
   };
 }
+
+export function describeParallelAssignmentPlanState(
+  workbench: RunInspectorMemoryWorkbench | null,
+): MemoryWorkbenchDisplay {
+  const plan = workbench?.agent_assignments?.parallel_plan ?? null;
+  if (!plan) {
+    return {
+      label: "Plan unknown",
+      message: "No parallel plan",
+      tone: "muted",
+    };
+  }
+  if (plan.degraded_reason) {
+    return {
+      label: "Plan degraded",
+      message: plan.degraded_reason,
+      tone: "warning",
+    };
+  }
+  if (plan.conflict_task_ids.length > 0) {
+    return {
+      label: "Plan sequenced",
+      message: `${plan.conflict_task_ids.length} scoped conflicts`,
+      tone: "warning",
+    };
+  }
+  if (plan.waiting_task_ids.length > 0 || plan.blocked_task_ids.length > 0) {
+    return {
+      label: "Plan waiting",
+      message: `${plan.waiting_task_ids.length} waiting / ${plan.blocked_task_ids.length} blocked`,
+      tone: "warning",
+    };
+  }
+  const plannedTasks = plan.batches.reduce(
+    (count, batch) => count + batch.task_ids.length,
+    0,
+  );
+  if (plannedTasks > 0) {
+    return {
+      label: "Plan ready",
+      message: `${plannedTasks} tasks / ${plan.batches.length} batches`,
+      tone: "primary",
+    };
+  }
+  if (plan.active_task_ids.length > 0) {
+    return {
+      label: "Plan active",
+      message: `${plan.active_task_ids.length} running`,
+      tone: "primary",
+    };
+  }
+  return {
+    label: "Plan quiet",
+    message: "No planned parallel work",
+    tone: "muted",
+  };
+}

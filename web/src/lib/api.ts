@@ -764,8 +764,35 @@ export interface RunInspectorMemoryWorkbenchAgentAssignment {
   privacy_class: string;
 }
 
+export interface RunInspectorMemoryWorkbenchAgentAssignmentBatch {
+  index: number;
+  task_ids: string[];
+  roles: Record<string, number>;
+  privacy_class: string;
+}
+
+export interface RunInspectorMemoryWorkbenchAgentAssignmentPlan {
+  schema_version: number;
+  status: string;
+  max_parallel_workers: number;
+  batches: RunInspectorMemoryWorkbenchAgentAssignmentBatch[];
+  blocked_task_ids: string[];
+  active_task_ids: string[];
+  waiting_task_ids: string[];
+  conflict_task_ids: string[];
+  conflicts: Array<{
+    task_ids: string[];
+    overlap: string[];
+    resolution: string;
+    privacy_class: string;
+  }>;
+  degraded_reason: string | null;
+  privacy_class: string;
+}
+
 export interface RunInspectorMemoryWorkbenchAgentAssignments {
   summary: RunInspectorMemoryWorkbenchAgentAssignmentSummary;
+  parallel_plan?: RunInspectorMemoryWorkbenchAgentAssignmentPlan;
   assignments: RunInspectorMemoryWorkbenchAgentAssignment[];
   degraded_reason: string | null;
   privacy_class: string;
