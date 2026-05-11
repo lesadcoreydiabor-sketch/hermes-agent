@@ -639,6 +639,24 @@ tasks:
     status: completed
     risk: medium
 
+  - id: HRIDS-03
+    title: Add desktop shell-owned status and stop
+    description: Record the dashboard process started by hermes desktop and let status/stop target only that shell-owned runtime.
+    depends_on:
+      - HRIDS-02
+    acceptance:
+      - hermes desktop writes a local runtime record with pid, host, port, route, URL, and started_at before starting the dashboard.
+      - hermes desktop --status reports runtime PID, URL, route, started_at, and health without importing dashboard runtime dependencies.
+      - hermes desktop --status clears stale runtime records instead of reporting them as live.
+      - hermes desktop --stop only attempts to stop the verified runtime PID from the desktop shell record.
+      - hermes desktop --stop clears stale runtime records without killing unrelated processes.
+      - Stop failure keeps the runtime record for inspection and exits nonzero.
+    verify:
+      - venv/Scripts/python.exe -m pytest tests/hermes_cli/test_desktop_shell.py tests/hermes_cli/test_dashboard_lifecycle_flags.py tests/hermes_cli/test_update_stale_dashboard.py -q -o addopts=
+      - git diff --check -- hermes_cli/main.py tests/hermes_cli/test_desktop_shell.py .hermes/task.yaml
+    status: completed
+    risk: medium
+
 risk_flags:
   destructive_file_change:
     pause: true
@@ -1109,6 +1127,15 @@ progress_report:
       verification_result: "passed: venv/Scripts/python.exe -m pytest tests/hermes_cli/test_desktop_shell.py tests/hermes_cli/test_dashboard_lifecycle_flags.py tests/hermes_cli/test_update_stale_dashboard.py -q -o addopts= (33 passed, 5 skipped); passed: venv/Scripts/python.exe -c yaml.safe_load task.yaml; passed: git diff --check for HRIDS-02 files; smoke passed: venv/Scripts/python.exe -m hermes_cli.main desktop --status; GitNexus impact for _find_stale_dashboard_pids and _report_dashboard_status LOW"
       blockers: []
       next_step: "HRIDS-02 local dashboard shell command complete; stage/commit/push, then decide whether HRIDS-03 status/stop needs a shell-owned runtime file."
+    - task_id: HRIDS-03
+      status: completed
+      changed_files:
+        - hermes_cli/main.py
+        - tests/hermes_cli/test_desktop_shell.py
+        - .hermes/task.yaml
+      verification_result: "passed: venv/Scripts/python.exe -m pytest tests/hermes_cli/test_desktop_shell.py tests/hermes_cli/test_dashboard_lifecycle_flags.py tests/hermes_cli/test_update_stale_dashboard.py -q -o addopts= (39 passed, 5 skipped); passed: venv/Scripts/python.exe -c yaml.safe_load task.yaml; passed: git diff --check for HRIDS-03 files; smoke passed: venv/Scripts/python.exe -m hermes_cli.main desktop --status; GitNexus detect_changes risk low; cmd_dashboard upstream impact MEDIUM and covered by dashboard lifecycle tests"
+      blockers: []
+      next_step: "HRIDS-03 shell-owned status/stop complete; run YAML/diff/GitNexus checks, stage/commit/push, then evaluate whether HRIDS-04 runtime packaging decision memo should stay browser-launcher-first."
 
 failure_review:
   enabled: true

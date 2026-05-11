@@ -8937,6 +8937,7 @@ def _report_dashboard_status(process_label: str = "hermes dashboard") -> int:
 
 
 _DESKTOP_DEFAULT_PATH = "/run-inspector"
+_DESKTOP_RUNTIME_FILE = "desktop_shell.json"
 
 
 def _desktop_dashboard_url(
@@ -8947,6 +8948,98 @@ def _desktop_dashboard_url(
     """Build the local dashboard URL opened by ``hermes desktop``."""
     safe_path = path if path.startswith("/") else f"/{path}"
     return f"http://{host}:{port}{safe_path}"
+
+
+def _desktop_runtime_path() -> Path:
+    """Return the local runtime record path for the desktop shell."""
+    return get_hermes_home() / _DESKTOP_RUNTIME_FILE
+
+
+def _coerce_int(value, default: int = 0) -> int:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def _read_desktop_runtime_record() -> dict | None:
+    path = _desktop_runtime_path()
+    try:
+        if not path.exists():
+            return None
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+    return payload if isinstance(payload, dict) else None
+
+
+def _write_desktop_runtime_record(record: dict) -> None:
+    path = _desktop_runtime_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp_path = path.with_suffix(path.suffix + ".tmp")
+    tmp_path.write_text(
+        json.dumps(record, indent=2, sort_keys=True),
+        encoding="utf-8",
+    )
+    tmp_path.replace(path)
+
+
+def _remove_desktop_runtime_record() -> None:
+    try:
+        _desktop_runtime_path().unlink()
+    except FileNotFoundError:
+        pass
+    except OSError:
+        pass
+
+
+def _clear_desktop_runtime_if_owned(pid: int) -> None:
+    record = _read_desktop_runtime_record()
+    if _coerce_int((record or {}).get("pid")) == pid:
+        _remove_desktop_runtime_record()
+
+
+def _desktop_runtime_record(
+    *,
+    host: str,
+    port: int,
+    route: str = _DESKTOP_DEFAULT_PATH,
+) -> dict:
+    url = _desktop_dashboard_url(host, port, route)
+    return {
+        "version": 1,
+        "pid": os.getpid(),
+        "host": host,
+        "port": port,
+        "route": route,
+        "url": url,
+        "started_at": datetime.utcnow().replace(microsecond=0).isoformat() + "Z",
+        "command": "hermes desktop",
+    }
+
+
+def _desktop_record_url(record: dict | None, *, fallback_port: int) -> tuple[str, int, str, str]:
+    payload = record or {}
+    host = str(payload.get("host") or "127.0.0.1")
+    port = _coerce_int(payload.get("port"), fallback_port)
+    route = str(payload.get("route") or _DESKTOP_DEFAULT_PATH)
+    url = str(payload.get("url") or _desktop_dashboard_url(host, port, route))
+    return host, port, route, url
+
+
+def _desktop_runtime_pid_status(record: dict | None) -> tuple[int, bool, str]:
+    pid = _coerce_int((record or {}).get("pid"))
+    if pid <= 0:
+        return 0, False, "invalid_pid"
+    if pid == os.getpid():
+        return pid, True, "current_process"
+    try:
+        pids = _find_stale_dashboard_pids()
+    except Exception:
+        return pid, False, "process_scan_failed"
+    if pid in pids:
+        return pid, True, "running"
+    return pid, False, "not_found"
 
 
 def _probe_dashboard_status(
@@ -8979,6 +9072,34 @@ def _probe_dashboard_status(
     return False, "non_hermes_status_payload"
 
 
+def _print_desktop_status(args) -> int:
+    record = _read_desktop_runtime_record()
+    host, port, route, url = _desktop_record_url(record, fallback_port=args.port)
+
+    if record:
+        pid, running, pid_reason = _desktop_runtime_pid_status(record)
+        status = "running" if running else f"stale ({pid_reason})"
+        print("Hermes desktop shell:")
+        print(f"  PID: {pid or 'unknown'} ({status})")
+        print(f"  URL: {url}")
+        print(f"  Route: {route}")
+        if record.get("started_at"):
+            print(f"  Started: {record['started_at']}")
+        if not running:
+            _remove_desktop_runtime_record()
+            print("  Runtime record was stale and has been cleared.")
+    else:
+        print("No Hermes desktop shell runtime recorded.")
+        print(f"  Requested route: {_desktop_dashboard_url(host, port, route)}")
+
+    reachable, reason = _probe_dashboard_status(host, port)
+    health = "ok" if reachable else f"unavailable ({reason})"
+    print(f"  Health: {health}")
+    if not record and reachable:
+        print(f"  Compatible dashboard reachable: {url}")
+    return 0
+
+
 def _port_accepts_connections(
     host: str,
     port: int,
@@ -9005,6 +9126,86 @@ def _open_browser_url(url: str, *, delay: float = 1.0) -> None:
         webbrowser.open(url)
 
     threading.Thread(target=_open, daemon=True).start()
+
+
+def _terminate_desktop_pid(pid: int) -> tuple[bool, str]:
+    if pid <= 0 or pid == os.getpid():
+        return False, "invalid_pid"
+
+    if sys.platform == "win32":
+        try:
+            result = subprocess.run(
+                ["taskkill", "/PID", str(pid), "/F"],
+                capture_output=True,
+                text=True,
+                timeout=10,
+            )
+        except (FileNotFoundError, subprocess.TimeoutExpired, OSError) as exc:
+            return False, str(exc)
+        if result.returncode == 0:
+            return True, "stopped"
+        return False, (result.stderr or result.stdout or "taskkill failed").strip()
+
+    import signal as _signal
+    import time as _time_local
+
+    try:
+        os.kill(pid, _signal.SIGTERM)
+    except ProcessLookupError:
+        return True, "already_stopped"
+    except (PermissionError, OSError) as exc:
+        return False, str(exc)
+
+    try:
+        from gateway.status import _pid_exists
+    except Exception:
+        _pid_exists = None
+
+    if _pid_exists is None:
+        return True, "sigterm_sent"
+
+    deadline = _time_local.monotonic() + 3.0
+    while _time_local.monotonic() < deadline:
+        if not _pid_exists(pid):
+            return True, "stopped"
+        _time_local.sleep(0.1)
+
+    try:
+        os.kill(pid, _signal.SIGKILL)
+        return True, "sigkill_sent"
+    except ProcessLookupError:
+        return True, "already_stopped"
+    except (PermissionError, OSError) as exc:
+        return False, str(exc)
+
+
+def _stop_desktop_shell(args) -> int:
+    record = _read_desktop_runtime_record()
+    if not record:
+        print("No Hermes desktop shell runtime recorded.")
+        return 0
+
+    host, port, route, url = _desktop_record_url(record, fallback_port=args.port)
+    pid, running, pid_reason = _desktop_runtime_pid_status(record)
+    if not running:
+        _remove_desktop_runtime_record()
+        print(
+            f"Hermes desktop runtime for PID {pid or 'unknown'} was stale "
+            f"({pid_reason}) and has been cleared."
+        )
+        print(f"  URL: {url}")
+        return 0
+
+    ok, reason = _terminate_desktop_pid(pid)
+    if ok:
+        _remove_desktop_runtime_record()
+        print(f"Stopped Hermes desktop shell PID {pid}.")
+        print(f"  URL: {_desktop_dashboard_url(host, port, route)}")
+        return 0
+
+    print(f"Failed to stop Hermes desktop shell PID {pid}: {reason}")
+    print("The runtime record was kept for inspection.")
+    return 1
 
 
 def cmd_dashboard(args):
@@ -9063,13 +9264,10 @@ def cmd_desktop(args):
     route_url = _desktop_dashboard_url(host, args.port)
 
     if getattr(args, "status", False):
-        _report_dashboard_status("Hermes dashboard/desktop")
-        reachable, reason = _probe_dashboard_status(host, args.port)
-        if reachable:
-            print(f"Hermes desktop route: {route_url}")
-        else:
-            print(f"Hermes desktop route unavailable: {route_url} ({reason})")
-        sys.exit(0)
+        sys.exit(_print_desktop_status(args))
+
+    if getattr(args, "stop", False):
+        sys.exit(_stop_desktop_shell(args))
 
     reachable, _reason = _probe_dashboard_status(host, args.port)
     if reachable:
@@ -9110,14 +9308,19 @@ def cmd_desktop(args):
     if not args.no_open:
         _open_browser_url(route_url)
 
-    print(f"  Hermes Desktop -> {route_url}")
-    start_server(
-        host=host,
-        port=args.port,
-        open_browser=False,
-        allow_public=False,
-        embedded_chat=False,
-    )
+    record = _desktop_runtime_record(host=host, port=args.port)
+    _write_desktop_runtime_record(record)
+    try:
+        print(f"  Hermes Desktop -> {route_url}")
+        start_server(
+            host=host,
+            port=args.port,
+            open_browser=False,
+            allow_public=False,
+            embedded_chat=False,
+        )
+    finally:
+        _clear_desktop_runtime_if_owned(os.getpid())
 
 
 def cmd_completion(args, parser=None):
@@ -11619,6 +11822,11 @@ Examples:
         "--status",
         action="store_true",
         help="Show local dashboard process and desktop route status",
+    )
+    desktop_parser.add_argument(
+        "--stop",
+        action="store_true",
+        help="Stop the shell-owned Hermes desktop dashboard and exit",
     )
     desktop_parser.set_defaults(func=cmd_desktop)
 

@@ -11,13 +11,14 @@ import pytest
 
 from hermes_cli.main import (
     _desktop_dashboard_url,
+    _desktop_runtime_record,
     _find_stale_dashboard_pids,
     cmd_desktop,
 )
 
 
 def _ns(**kw):
-    defaults = dict(port=9119, no_open=False, status=False)
+    defaults = dict(port=9119, no_open=False, status=False, stop=False)
     defaults.update(kw)
     return argparse.Namespace(**defaults)
 
@@ -46,8 +47,18 @@ def test_desktop_status_reports_route_without_dashboard_deps(capsys):
         return orig_import(name, *a, **kw)
 
     with patch(
-        "hermes_cli.main._find_stale_dashboard_pids",
-        return_value=[12345],
+        "hermes_cli.main._read_desktop_runtime_record",
+        return_value={
+            "pid": 12345,
+            "host": "127.0.0.1",
+            "port": 9119,
+            "route": "/run-inspector",
+            "url": "http://127.0.0.1:9119/run-inspector",
+            "started_at": "2026-05-11T00:00:00Z",
+        },
+    ), patch(
+        "hermes_cli.main._desktop_runtime_pid_status",
+        return_value=(12345, True, "running"),
     ), patch(
         "hermes_cli.main._probe_dashboard_status",
         return_value=(True, "ok"),
@@ -59,9 +70,37 @@ def test_desktop_status_reports_route_without_dashboard_deps(capsys):
 
     assert exc.value.code == 0
     out = capsys.readouterr().out
-    assert "1 Hermes dashboard/desktop process(es) running" in out
-    assert "PID 12345" in out
-    assert "Hermes desktop route: http://127.0.0.1:9119/run-inspector" in out
+    assert "Hermes desktop shell" in out
+    assert "PID: 12345 (running)" in out
+    assert "URL: http://127.0.0.1:9119/run-inspector" in out
+    assert "Health: ok" in out
+
+
+def test_desktop_status_clears_stale_runtime_record(capsys):
+    with patch(
+        "hermes_cli.main._read_desktop_runtime_record",
+        return_value={
+            "pid": 99999,
+            "host": "127.0.0.1",
+            "port": 9119,
+            "route": "/run-inspector",
+        },
+    ), patch(
+        "hermes_cli.main._desktop_runtime_pid_status",
+        return_value=(99999, False, "not_found"),
+    ), patch(
+        "hermes_cli.main._remove_desktop_runtime_record"
+    ) as mock_remove, patch(
+        "hermes_cli.main._probe_dashboard_status",
+        return_value=(False, "URLError"),
+    ), pytest.raises(SystemExit) as exc:
+        cmd_desktop(_ns(status=True))
+
+    assert exc.value.code == 0
+    mock_remove.assert_called_once()
+    out = capsys.readouterr().out
+    assert "PID: 99999 (stale (not_found))" in out
+    assert "Runtime record was stale and has been cleared" in out
 
 
 def test_desktop_reuses_existing_dashboard_and_opens_run_inspector(capsys):
@@ -115,7 +154,11 @@ def test_desktop_start_uses_loopback_dashboard_and_run_inspector(monkeypatch):
         return_value=False,
     ), patch(
         "hermes_cli.main._open_browser_url"
-    ) as mock_open, patch.dict(
+    ) as mock_open, patch(
+        "hermes_cli.main._write_desktop_runtime_record"
+    ) as mock_write, patch(
+        "hermes_cli.main._clear_desktop_runtime_if_owned"
+    ) as mock_clear, patch.dict(
         sys.modules,
         {
             "fastapi": MagicMock(),
@@ -126,6 +169,14 @@ def test_desktop_start_uses_loopback_dashboard_and_run_inspector(monkeypatch):
         cmd_desktop(_ns(port=9333))
 
     mock_open.assert_called_once_with("http://127.0.0.1:9333/run-inspector")
+    assert mock_write.call_count == 1
+    record = mock_write.call_args.args[0]
+    assert record["pid"] == os.getpid()
+    assert record["host"] == "127.0.0.1"
+    assert record["port"] == 9333
+    assert record["route"] == "/run-inspector"
+    assert record["url"] == "http://127.0.0.1:9333/run-inspector"
+    mock_clear.assert_called_once_with(os.getpid())
     assert start_calls == [
         {
             "host": "127.0.0.1",
@@ -151,7 +202,11 @@ def test_desktop_start_respects_no_open(monkeypatch):
         return_value=False,
     ), patch(
         "hermes_cli.main._open_browser_url"
-    ) as mock_open, patch.dict(
+    ) as mock_open, patch(
+        "hermes_cli.main._write_desktop_runtime_record"
+    ), patch(
+        "hermes_cli.main._clear_desktop_runtime_if_owned"
+    ), patch.dict(
         sys.modules,
         {
             "fastapi": MagicMock(),
@@ -162,6 +217,16 @@ def test_desktop_start_respects_no_open(monkeypatch):
         cmd_desktop(_ns(no_open=True))
 
     mock_open.assert_not_called()
+
+
+def test_desktop_runtime_record_is_safe_and_local():
+    record = _desktop_runtime_record(host="127.0.0.1", port=9444)
+    assert record["version"] == 1
+    assert record["pid"] == os.getpid()
+    assert record["host"] == "127.0.0.1"
+    assert record["url"] == "http://127.0.0.1:9444/run-inspector"
+    assert "token" not in record["url"].lower()
+    assert record["command"] == "hermes desktop"
 
 
 def test_desktop_busy_non_dashboard_port_is_degraded(capsys):
@@ -186,6 +251,98 @@ def test_desktop_busy_non_dashboard_port_is_degraded(capsys):
     out = capsys.readouterr().out
     assert "Port 9555 is already in use" in out
     assert "hermes desktop --port <free-port>" in out
+
+
+def test_desktop_stop_without_runtime_record_is_noop(capsys):
+    with patch(
+        "hermes_cli.main._read_desktop_runtime_record",
+        return_value=None,
+    ), patch(
+        "hermes_cli.main._terminate_desktop_pid"
+    ) as mock_terminate, pytest.raises(SystemExit) as exc:
+        cmd_desktop(_ns(stop=True))
+
+    assert exc.value.code == 0
+    mock_terminate.assert_not_called()
+    assert "No Hermes desktop shell runtime recorded" in capsys.readouterr().out
+
+
+def test_desktop_stop_clears_stale_runtime_without_killing(capsys):
+    with patch(
+        "hermes_cli.main._read_desktop_runtime_record",
+        return_value={
+            "pid": 99999,
+            "host": "127.0.0.1",
+            "port": 9119,
+            "route": "/run-inspector",
+        },
+    ), patch(
+        "hermes_cli.main._desktop_runtime_pid_status",
+        return_value=(99999, False, "not_found"),
+    ), patch(
+        "hermes_cli.main._remove_desktop_runtime_record"
+    ) as mock_remove, patch(
+        "hermes_cli.main._terminate_desktop_pid"
+    ) as mock_terminate, pytest.raises(SystemExit) as exc:
+        cmd_desktop(_ns(stop=True))
+
+    assert exc.value.code == 0
+    mock_remove.assert_called_once()
+    mock_terminate.assert_not_called()
+    assert "was stale (not_found) and has been cleared" in capsys.readouterr().out
+
+
+def test_desktop_stop_only_targets_verified_runtime_pid(capsys):
+    with patch(
+        "hermes_cli.main._read_desktop_runtime_record",
+        return_value={
+            "pid": 12345,
+            "host": "127.0.0.1",
+            "port": 9119,
+            "route": "/run-inspector",
+        },
+    ), patch(
+        "hermes_cli.main._desktop_runtime_pid_status",
+        return_value=(12345, True, "running"),
+    ), patch(
+        "hermes_cli.main._terminate_desktop_pid",
+        return_value=(True, "stopped"),
+    ) as mock_terminate, patch(
+        "hermes_cli.main._remove_desktop_runtime_record"
+    ) as mock_remove, pytest.raises(SystemExit) as exc:
+        cmd_desktop(_ns(stop=True))
+
+    assert exc.value.code == 0
+    mock_terminate.assert_called_once_with(12345)
+    mock_remove.assert_called_once()
+    assert "Stopped Hermes desktop shell PID 12345" in capsys.readouterr().out
+
+
+def test_desktop_stop_keeps_record_when_termination_fails(capsys):
+    with patch(
+        "hermes_cli.main._read_desktop_runtime_record",
+        return_value={
+            "pid": 12345,
+            "host": "127.0.0.1",
+            "port": 9119,
+            "route": "/run-inspector",
+        },
+    ), patch(
+        "hermes_cli.main._desktop_runtime_pid_status",
+        return_value=(12345, True, "running"),
+    ), patch(
+        "hermes_cli.main._terminate_desktop_pid",
+        return_value=(False, "access denied"),
+    ), patch(
+        "hermes_cli.main._remove_desktop_runtime_record"
+    ) as mock_remove, pytest.raises(SystemExit) as exc:
+        cmd_desktop(_ns(stop=True))
+
+    assert exc.value.code == 1
+    mock_remove.assert_not_called()
+    out = capsys.readouterr().out
+    assert "Failed to stop Hermes desktop shell PID 12345" in out
+    assert "runtime record was kept" in out
 
 
 def test_posix_process_scan_includes_hermes_desktop(monkeypatch):
