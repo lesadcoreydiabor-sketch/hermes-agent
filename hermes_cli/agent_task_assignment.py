@@ -8,6 +8,7 @@ memory mutations, config changes, or remote calls happen here.
 from __future__ import annotations
 
 import re
+from collections import Counter
 from typing import Any, Dict, Iterable, Optional
 
 
@@ -176,12 +177,92 @@ def find_agent_task_assignment_conflicts(
     return conflicts
 
 
+def summarize_agent_task_assignments(
+    assignments: Iterable[Dict[str, Any]],
+) -> Dict[str, Any]:
+    """Summarize assignment health for read-only operator surfaces."""
+
+    normalized = []
+    invalid_count = 0
+    for assignment in assignments:
+        if not isinstance(assignment, dict):
+            invalid_count += 1
+            continue
+        try:
+            normalized.append(normalize_agent_task_assignment(assignment))
+        except (TypeError, ValueError):
+            invalid_count += 1
+
+    known_task_ids = {item["task_id"] for item in normalized}
+    completed_task_ids = {
+        item["task_id"] for item in normalized if item["status"] == "completed"
+    }
+    role_counts = Counter(item["role"] for item in normalized)
+    status_counts = Counter(item["status"] for item in normalized)
+    conflicts = find_agent_task_assignment_conflicts(normalized)
+
+    ready_task_ids = []
+    dependency_waiting_task_ids = []
+    blocked_task_ids = []
+    for item in normalized:
+        task_id = item["task_id"]
+        status = item["status"]
+        dependencies = item["dependencies"]["task_ids"]
+        missing_dependencies = [dep for dep in dependencies if dep not in known_task_ids]
+        unmet_dependencies = [
+            dep
+            for dep in dependencies
+            if dep in known_task_ids and dep not in completed_task_ids
+        ]
+        if status == "blocked":
+            blocked_task_ids.append(task_id)
+        if status in {"planned", "queued"}:
+            if missing_dependencies or unmet_dependencies:
+                dependency_waiting_task_ids.append(task_id)
+            else:
+                ready_task_ids.append(task_id)
+
+    status = "empty"
+    if normalized:
+        status = "active"
+    if dependency_waiting_task_ids or blocked_task_ids:
+        status = "blocked"
+    if conflicts:
+        status = "conflict"
+    if normalized and len(completed_task_ids) == len(normalized):
+        status = "completed"
+
+    return {
+        "schema_version": AGENT_TASK_ASSIGNMENT_SCHEMA_VERSION,
+        "status": status,
+        "total_count": len(normalized),
+        "active_count": sum(
+            1 for item in normalized if item["status"] in ACTIVE_STATUSES
+        ),
+        "completed_count": len(completed_task_ids),
+        "failed_count": status_counts.get("failed", 0),
+        "blocked_count": len(blocked_task_ids),
+        "ready_task_ids": ready_task_ids[:LIST_LIMIT],
+        "dependency_waiting_task_ids": dependency_waiting_task_ids[:LIST_LIMIT],
+        "blocked_task_ids": blocked_task_ids[:LIST_LIMIT],
+        "role_counts": _counter_payload(role_counts, ROLES),
+        "status_counts": _counter_payload(status_counts, STATUSES),
+        "conflicts": conflicts[:LIST_LIMIT],
+        "degraded_reason": f"invalid_assignments:{invalid_count}" if invalid_count else None,
+        "privacy_class": AGENT_TASK_ASSIGNMENT_PRIVACY_CLASS,
+    }
+
+
 def _safe_owner(value: Dict[str, Any]) -> Dict[str, Optional[str]]:
     return {
         "agent_id": _safe_identifier(value.get("agent_id")),
         "parent_agent_id": _safe_identifier(value.get("parent_agent_id")),
         "human_owner": _safe_identifier(value.get("human_owner")),
     }
+
+
+def _counter_payload(counter: Counter[str], allowed: frozenset[str]) -> Dict[str, int]:
+    return {key: counter.get(key, 0) for key in sorted(allowed)}
 
 
 def _safe_dependencies(value: Dict[str, Any]) -> Dict[str, list[str]]:

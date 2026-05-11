@@ -1292,6 +1292,24 @@ tasks:
     status: completed
     risk: medium
 
+  - id: HMAMO-02
+    title: Add assignment summary helper
+    description: Summarize agent-ready assignments for read-only operator surfaces without scheduling or mutating work.
+    depends_on:
+      - HMAMO-01
+    acceptance:
+      - Summary reports role counts, status counts, active, completed, failed, blocked, ready, and dependency-waiting assignment counts.
+      - Summary includes bounded ready, blocked, and dependency-waiting task ids.
+      - Summary includes direct write-scope conflict summaries from HMAMO-01.
+      - Summary reports invalid assignment payloads as degraded metadata without exposing raw invalid content.
+      - Helper is pure and does not spawn agents, dispatch tools, write files, mutate memory, edit skills, write task.yaml, or call remote APIs.
+    verify:
+      - venv/Scripts/python.exe -m pytest tests/runtime/test_agent_task_assignment.py -q -o addopts=
+      - venv/Scripts/python.exe -c "import yaml; yaml.safe_load(open('.hermes/task.yaml', encoding='utf-8'))"
+      - git diff --check -- hermes_cli/agent_task_assignment.py tests/runtime/test_agent_task_assignment.py .hermes/task.yaml
+    status: completed
+    risk: low
+
 risk_flags:
   destructive_file_change:
     pause: true
@@ -2139,6 +2157,15 @@ progress_report:
       blockers:
         - "TUI parity files currently have unrelated staged approval/failed event summary changes, so HMAMO-01 avoids that write scope."
       next_step: "Expose assignment summaries to Run Inspector only after a read-only assignment source is added."
+    - task_id: HMAMO-02
+      status: completed
+      changed_files:
+        - hermes_cli/agent_task_assignment.py
+        - tests/runtime/test_agent_task_assignment.py
+        - .hermes/task.yaml
+      verification_result: "passed: venv/Scripts/python.exe -m pytest tests/runtime/test_agent_task_assignment.py -q -o addopts= (7 passed); passed: venv/Scripts/python.exe -c yaml.safe_load task.yaml; passed: git diff --check for HMAMO-02 files"
+      blockers: []
+      next_step: "Add a read-only assignment source before exposing assignment summaries through Run Inspector."
 
 failure_review:
   enabled: true

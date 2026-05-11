@@ -6,6 +6,7 @@ from hermes_cli.agent_task_assignment import (
     build_agent_task_assignment,
     find_agent_task_assignment_conflicts,
     normalize_agent_task_assignment,
+    summarize_agent_task_assignments,
 )
 
 
@@ -181,3 +182,79 @@ def test_find_agent_task_assignment_conflicts_ignores_ordered_or_readonly_work()
         find_agent_task_assignment_conflicts([first, dependent, observer, completed])
         == []
     )
+
+
+def test_summarize_agent_task_assignments_reports_ready_waiting_and_conflicts() -> None:
+    completed = build_agent_task_assignment(
+        "HMAMO-00",
+        "Completed prerequisite",
+        role="planner",
+        status="completed",
+    )
+    ready = build_agent_task_assignment(
+        "HMAMO-01",
+        "Ready worker",
+        role="worker",
+        status="queued",
+        dependencies={"task_ids": ["HMAMO-00"]},
+        write_scope={"files": ["hermes_cli/agent_task_assignment.py"]},
+    )
+    waiting = build_agent_task_assignment(
+        "HMAMO-02",
+        "Waiting worker",
+        role="worker",
+        status="planned",
+        dependencies={"task_ids": ["HMAMO-99"]},
+    )
+    blocked = build_agent_task_assignment(
+        "HMAMO-03",
+        "Blocked reviewer",
+        role="reviewer",
+        status="blocked",
+    )
+    conflict = build_agent_task_assignment(
+        "HMAMO-04",
+        "Conflicting worker",
+        role="worker",
+        status="running",
+        write_scope={"directories": ["hermes_cli"]},
+    )
+
+    summary = summarize_agent_task_assignments(
+        [completed, ready, waiting, blocked, conflict, {"title": "invalid"}]
+    )
+
+    assert summary["status"] == "conflict"
+    assert summary["total_count"] == 5
+    assert summary["active_count"] == 4
+    assert summary["completed_count"] == 1
+    assert summary["blocked_count"] == 1
+    assert summary["ready_task_ids"] == ["HMAMO-01"]
+    assert summary["dependency_waiting_task_ids"] == ["HMAMO-02"]
+    assert summary["blocked_task_ids"] == ["HMAMO-03"]
+    assert summary["role_counts"]["worker"] == 3
+    assert summary["status_counts"]["queued"] == 1
+    assert summary["conflicts"][0]["task_ids"] == ["HMAMO-01", "HMAMO-04"]
+    assert summary["degraded_reason"] == "invalid_assignments:1"
+
+
+def test_summarize_agent_task_assignments_redacts_conflict_values() -> None:
+    first = build_agent_task_assignment(
+        "task-token=secret",
+        "Worker A",
+        status="running",
+        write_scope={"files": ["C:\\Users\\XQQ\\secret\\file.txt"]},
+    )
+    second = build_agent_task_assignment(
+        "HMAMO-02",
+        "Worker B",
+        status="running",
+        write_scope={"files": ["C:\\Users\\XQQ\\secret\\file.txt"]},
+    )
+
+    summary = summarize_agent_task_assignments([first, second])
+    rendered = json.dumps(summary, sort_keys=True)
+
+    assert "token=secret" not in rendered
+    assert "C:\\Users" not in rendered
+    assert summary["conflicts"][0]["overlap"] == ["Redacted"]
