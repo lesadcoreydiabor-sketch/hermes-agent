@@ -256,16 +256,28 @@ const renderRunInspectorSnapshot = (snapshot?: null | RunInspectorSnapshotSummar
   return rows
 }
 
-const renderAttentionSignals = (signals?: RunInspectorAttentionSignal[], attentionError?: null | string) => {
+const renderAttentionSignals = (
+  signals?: RunInspectorAttentionSignal[],
+  attentionError?: null | string,
+  maxSignals = 3
+) => {
   const rows: [string, string][] = []
-  const visible = signals?.slice(0, 3) ?? []
+  const visible = signals?.slice(0, maxSignals) ?? []
 
   for (const signal of visible) {
     const title = clipInspectorText(signal.title || signal.kind, 'Attention', 64)
     const severity = clipInspectorText(signal.severity, '', 32)
+    const context = [
+      signal.run_id && `run=${clipInspectorText(signal.run_id, '', 64)}`,
+      signal.session_id && `session=${clipInspectorText(signal.session_id, '', 64)}`,
+      signal.route && `route=${clipInspectorText(signal.route, '', 64)}`
+    ].filter(Boolean)
     rows.push([
       severity ? `${title} (${severity})` : title,
-      clipInspectorText(signal.body || signal.route || signal.kind, 'Open Run Inspector for details')
+      [
+        clipInspectorText(signal.body || signal.route || signal.kind, 'Open Run Inspector for details'),
+        context.join(' / ')
+      ].filter(Boolean).join('\n')
     ])
   }
 
@@ -527,6 +539,35 @@ export const opsCommands: SlashCommand[] = [
               },
               {
                 text: 'read-only status; use hermes desktop to start, stop, or reuse the dashboard'
+              }
+            ])
+          })
+        )
+        .catch(ctx.guardedErr)
+    }
+  },
+
+  {
+    aliases: ['run-inspector-attention'],
+    help: 'show read-only Run Inspector attention signals [/inspector-attention [port]]',
+    name: 'inspector-attention',
+    run: (arg, ctx) => {
+      const port = parseInspectorPort(arg)
+      if (port === null) {
+        return ctx.transcript.sys('usage: /inspector-attention [port]')
+      }
+
+      ctx.gateway
+        .rpc<RunInspectorStatusResponse>('run_inspector.status', { port })
+        .then(
+          ctx.guarded<RunInspectorStatusResponse>(r => {
+            ctx.transcript.panel('Run Inspector Attention', [
+              {
+                rows: renderAttentionSignals(r?.attention, r?.attention_error, 20),
+                title: `Signals ${r?.attention?.length ?? 0}`
+              },
+              {
+                text: 'read-only attention summary; raw logs, prompts, tool args, and secrets are not shown'
               }
             ])
           })

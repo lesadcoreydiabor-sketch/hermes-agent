@@ -353,9 +353,11 @@ describe('createSlashHandler', () => {
     ['/browser status', 'browser.manage', { action: 'status', session_id: null }],
     ['/browser connect', 'browser.manage', { action: 'connect', session_id: null, url: 'http://127.0.0.1:9222' }],
     ['/inspector', 'run_inspector.status', { port: 9119 }],
+    ['/inspector-attention', 'run_inspector.status', { port: 9119 }],
     ['/inspector-events', 'run_inspector.events', { limit: 12 }],
     ['/inspector-events failed', 'run_inspector.events', { limit: 12 }],
     ['/inspector-health', 'run_inspector.status', { port: 9119 }],
+    ['/run-inspector-attention 9222', 'run_inspector.status', { port: 9222 }],
     ['/run-inspector-health 9222', 'run_inspector.status', { port: 9222 }],
     ['/run-inspector-events 7', 'run_inspector.events', { limit: 7 }],
     ['/run-inspector-events 7 failed', 'run_inspector.events', { limit: 7 }],
@@ -476,7 +478,7 @@ describe('createSlashHandler', () => {
             rows: expect.arrayContaining([
               [
                 'Approval waiting (warning)',
-                'A HERMES run is waiting for approval. Open Run Inspector to review safe details.'
+                'A HERMES run is waiting for approval. Open Run Inspector to review safe details.\nroute=/run-inspector'
               ]
             ]),
             title: 'Attention'
@@ -502,6 +504,63 @@ describe('createSlashHandler', () => {
     expect(rpc).not.toHaveBeenCalled()
     expect(ctx.gateway.gw.request).not.toHaveBeenCalled()
     expect(ctx.transcript.sys).toHaveBeenCalledWith('usage: /inspector [port]')
+  })
+
+  it('/inspector-attention renders all safe attention signals without slash worker fallback', async () => {
+    const rpc = vi.fn(() =>
+      Promise.resolve({
+        attention: [
+          {
+            body: 'Approval needs review',
+            kind: 'approval_waiting',
+            route: '/run-inspector',
+            run_id: 'run_wait',
+            session_id: 'sid_wait',
+            severity: 'warning',
+            title: 'Approval waiting'
+          },
+          {
+            body: 'Run failed safely',
+            kind: 'run_failed',
+            route: '/run-inspector',
+            run_id: 'run_failed',
+            severity: 'critical',
+            title: 'Run failed'
+          }
+        ],
+        ok: true
+      })
+    )
+    const ctx = buildCtx({ gateway: { ...buildGateway(), rpc } })
+
+    expect(createSlashHandler(ctx)('/inspector-attention 9222')).toBe(true)
+
+    expect(rpc).toHaveBeenCalledWith('run_inspector.status', { port: 9222 })
+    expect(ctx.gateway.gw.request).not.toHaveBeenCalled()
+    await vi.waitFor(() => {
+      expect(ctx.transcript.panel).toHaveBeenCalledWith(
+        'Run Inspector Attention',
+        expect.arrayContaining([
+          expect.objectContaining({
+            rows: expect.arrayContaining([
+              ['Approval waiting (warning)', 'Approval needs review\nrun=run_wait / session=sid_wait / route=/run-inspector'],
+              ['Run failed (critical)', 'Run failed safely\nrun=run_failed / route=/run-inspector']
+            ]),
+            title: 'Signals 2'
+          })
+        ])
+      )
+    })
+  })
+
+  it('/inspector-attention rejects invalid ports before hitting the gateway', () => {
+    const rpc = vi.fn(() => Promise.resolve({}))
+    const ctx = buildCtx({ gateway: { ...buildGateway(), rpc } })
+
+    expect(createSlashHandler(ctx)('/inspector-attention nope')).toBe(true)
+    expect(rpc).not.toHaveBeenCalled()
+    expect(ctx.gateway.gw.request).not.toHaveBeenCalled()
+    expect(ctx.transcript.sys).toHaveBeenCalledWith('usage: /inspector-attention [port]')
   })
 
   it('/inspector-health renders tool and MCP health details without slash worker fallback', async () => {
