@@ -2,6 +2,7 @@ import type {
   BrowserManageResponse,
   CommandsCatalogResponse,
   DelegationPauseResponse,
+  DesktopStatusResponse,
   ProcessStopResponse,
   ReloadEnvResponse,
   ReloadMcpResponse,
@@ -59,6 +60,63 @@ interface SkillsBrowseResponse {
 
 interface SkillsReloadResponse {
   output?: string
+}
+
+const INSPECTOR_DEFAULT_PORT = 9119
+
+const parseInspectorPort = (arg: string): null | number => {
+  const text = arg.trim()
+  if (!text) {
+    return INSPECTOR_DEFAULT_PORT
+  }
+  if (!/^\d+$/.test(text)) {
+    return null
+  }
+  const port = Number(text)
+  return port >= 1 && port <= 65535 ? port : null
+}
+
+const desktopSummary = (r: DesktopStatusResponse): string => {
+  if (r.record_present) {
+    if (r.pid_status === 'running' && r.health === 'ok') {
+      return 'running'
+    }
+    return `recorded (${r.pid_status || 'unknown'} / ${r.health || 'unknown'})`
+  }
+  if (r.compatible_dashboard) {
+    return 'compatible dashboard'
+  }
+  if (r.ok === false) {
+    return 'status unavailable'
+  }
+  return `not recorded (${r.health || 'unavailable'})`
+}
+
+const renderInspectorStatus = (r: DesktopStatusResponse) => {
+  const rows: [string, string][] = [
+    ['Desktop', desktopSummary(r)],
+    ['Run Inspector', r.url || `http://127.0.0.1:${r.port || INSPECTOR_DEFAULT_PORT}/run-inspector`],
+    ['Health', [r.health || 'unknown', r.health_reason].filter(Boolean).join(' / ')],
+    ['PID', r.pid ? `${r.pid} (${r.pid_status || 'unknown'})` : r.pid_status || 'none']
+  ]
+
+  if (r.started_at) {
+    rows.push(['Started', r.started_at])
+  }
+  if (r.reuse_command) {
+    rows.push(['Reuse', r.reuse_command])
+  }
+  if (r.manual_url) {
+    rows.push(['Open', r.manual_url])
+  }
+  if (r.stop_command) {
+    rows.push(['Stop guidance', r.stop_command])
+  }
+  if (r.error) {
+    rows.push(['Error', r.error])
+  }
+
+  return rows
 }
 
 export const opsCommands: SlashCommand[] = [
@@ -185,6 +243,34 @@ export const opsCommands: SlashCommand[] = [
               ctx.transcript.sys(`Endpoint: ${r.url || '(url unavailable)'}`)
               ctx.transcript.sys('next browser tool call will use this CDP endpoint')
             }
+          })
+        )
+        .catch(ctx.guardedErr)
+    }
+  },
+
+  {
+    aliases: ['run-inspector'],
+    help: 'show read-only Run Inspector desktop status [/inspector [port]]',
+    name: 'inspector',
+    run: (arg, ctx) => {
+      const port = parseInspectorPort(arg)
+      if (port === null) {
+        return ctx.transcript.sys('usage: /inspector [port]')
+      }
+
+      ctx.gateway
+        .rpc<DesktopStatusResponse>('desktop.status', { port })
+        .then(
+          ctx.guarded<DesktopStatusResponse>(r => {
+            ctx.transcript.panel('Run Inspector', [
+              {
+                rows: renderInspectorStatus(r || {})
+              },
+              {
+                text: 'read-only status; use hermes desktop to start, stop, or reuse the dashboard'
+              }
+            ])
           })
         )
         .catch(ctx.guardedErr)

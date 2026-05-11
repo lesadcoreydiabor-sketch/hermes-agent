@@ -6030,6 +6030,49 @@ def _(rid, params: dict) -> dict:
     return _browser_connect(rid, params)
 
 
+@method("desktop.status")
+def _(rid, params: dict) -> dict:
+    raw_port = params.get("port", 9119)
+    try:
+        port = int(raw_port)
+    except (TypeError, ValueError):
+        return _err(rid, 4016, "desktop status port must be an integer")
+    if port < 1 or port > 65535:
+        return _err(rid, 4016, "desktop status port must be between 1 and 65535")
+
+    try:
+        from hermes_cli.desktop_shell_status import build_desktop_status_payload
+
+        payload = build_desktop_status_payload(
+            clear_stale_record=False,
+            port=port,
+        )
+    except Exception:
+        payload = {
+            "ok": False,
+            "record_present": False,
+            "runtime_record_cleared": False,
+            "pid": None,
+            "pid_status": "unknown",
+            "pid_reason": "status_unavailable",
+            "host": "127.0.0.1",
+            "port": port,
+            "route": "/run-inspector",
+            "url": f"http://127.0.0.1:{port}/run-inspector",
+            "started_at": None,
+            "health": "unavailable",
+            "health_reason": "status_unavailable",
+            "compatible_dashboard": False,
+            "reuse_command": None,
+            "manual_url": None,
+            "stop_command": None,
+            "error": "desktop_status_unavailable",
+        }
+
+    payload["runtime_record_cleared"] = False
+    return _ok(rid, payload)
+
+
 def _browser_connect(rid, params: dict) -> dict:
     import platform
 

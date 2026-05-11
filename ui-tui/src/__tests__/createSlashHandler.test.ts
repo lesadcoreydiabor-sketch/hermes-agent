@@ -352,6 +352,8 @@ describe('createSlashHandler', () => {
   it.each([
     ['/browser status', 'browser.manage', { action: 'status', session_id: null }],
     ['/browser connect', 'browser.manage', { action: 'connect', session_id: null, url: 'http://127.0.0.1:9222' }],
+    ['/inspector', 'desktop.status', { port: 9119 }],
+    ['/run-inspector 9222', 'desktop.status', { port: 9222 }],
     ['/reload-mcp', 'reload.mcp', { session_id: null }],
     ['/reload', 'reload.env', {}],
     ['/stop', 'process.stop', {}],
@@ -393,6 +395,55 @@ describe('createSlashHandler', () => {
       )
       expect(ctx.transcript.sys).not.toHaveBeenCalledWith('browser connect failed')
     })
+  })
+
+  it('/inspector renders read-only desktop status without slash worker fallback', async () => {
+    const rpc = vi.fn(() =>
+      Promise.resolve({
+        compatible_dashboard: true,
+        health: 'ok',
+        health_reason: 'ok',
+        manual_url: 'http://127.0.0.1:9222/run-inspector',
+        ok: true,
+        pid: null,
+        pid_status: 'none',
+        port: 9222,
+        record_present: false,
+        reuse_command: 'hermes desktop --port 9222',
+        stop_command: 'hermes dashboard --stop',
+        url: 'http://127.0.0.1:9222/run-inspector'
+      })
+    )
+    const ctx = buildCtx({ gateway: { ...buildGateway(), rpc } })
+
+    expect(createSlashHandler(ctx)('/inspector 9222')).toBe(true)
+
+    expect(rpc).toHaveBeenCalledWith('desktop.status', { port: 9222 })
+    expect(ctx.gateway.gw.request).not.toHaveBeenCalled()
+    await vi.waitFor(() => {
+      expect(ctx.transcript.panel).toHaveBeenCalledWith(
+        'Run Inspector',
+        expect.arrayContaining([
+          expect.objectContaining({
+            rows: expect.arrayContaining([
+              ['Desktop', 'compatible dashboard'],
+              ['Run Inspector', 'http://127.0.0.1:9222/run-inspector'],
+              ['Reuse', 'hermes desktop --port 9222']
+            ])
+          })
+        ])
+      )
+    })
+  })
+
+  it('/inspector rejects invalid ports before hitting the gateway', () => {
+    const rpc = vi.fn(() => Promise.resolve({}))
+    const ctx = buildCtx({ gateway: { ...buildGateway(), rpc } })
+
+    expect(createSlashHandler(ctx)('/inspector nope')).toBe(true)
+    expect(rpc).not.toHaveBeenCalled()
+    expect(ctx.gateway.gw.request).not.toHaveBeenCalled()
+    expect(ctx.transcript.sys).toHaveBeenCalledWith('usage: /inspector [port]')
   })
 
   it('routes /rollback through native RPC when a session is active', () => {

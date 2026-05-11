@@ -3791,6 +3791,75 @@ def test_session_most_recent_handles_db_unavailable(monkeypatch):
 # ── browser.manage ───────────────────────────────────────────────────
 
 
+def test_desktop_status_returns_readonly_shell_payload(monkeypatch):
+    calls = []
+
+    def fake_build(**kwargs):
+        calls.append(kwargs)
+        return {
+            "ok": True,
+            "record_present": False,
+            "runtime_record_cleared": True,
+            "pid": None,
+            "pid_status": "none",
+            "pid_reason": "no_record",
+            "host": "127.0.0.1",
+            "port": 9222,
+            "route": "/run-inspector",
+            "url": "http://127.0.0.1:9222/run-inspector",
+            "started_at": None,
+            "health": "ok",
+            "health_reason": "ok",
+            "compatible_dashboard": True,
+            "reuse_command": "hermes desktop --port 9222",
+            "manual_url": "http://127.0.0.1:9222/run-inspector",
+            "stop_command": "hermes dashboard --stop",
+        }
+
+    monkeypatch.setattr(
+        "hermes_cli.desktop_shell_status.build_desktop_status_payload",
+        fake_build,
+    )
+
+    resp = server.handle_request(
+        {"id": "1", "method": "desktop.status", "params": {"port": 9222}}
+    )
+
+    assert calls == [{"clear_stale_record": False, "port": 9222}]
+    payload = resp["result"]
+    assert payload["runtime_record_cleared"] is False
+    assert payload["url"] == "http://127.0.0.1:9222/run-inspector"
+    assert "token=" not in json.dumps(payload)
+
+
+def test_desktop_status_rejects_invalid_port():
+    resp = server.handle_request(
+        {"id": "1", "method": "desktop.status", "params": {"port": 70000}}
+    )
+
+    assert resp["error"]["code"] == 4016
+
+
+def test_desktop_status_degrades_when_payload_builder_fails(monkeypatch):
+    def fake_build(**_kwargs):
+        raise RuntimeError("token=secret")
+
+    monkeypatch.setattr(
+        "hermes_cli.desktop_shell_status.build_desktop_status_payload",
+        fake_build,
+    )
+
+    resp = server.handle_request(
+        {"id": "1", "method": "desktop.status", "params": {"port": 9222}}
+    )
+
+    payload = resp["result"]
+    assert payload["ok"] is False
+    assert payload["health"] == "unavailable"
+    assert payload["error"] == "desktop_status_unavailable"
+    assert "token=secret" not in json.dumps(payload)
+
+
 def _stub_urlopen(monkeypatch, *, ok: bool):
     """Patch urllib.request.urlopen used by browser.manage to short-circuit probes."""
 

@@ -351,6 +351,27 @@ export interface BrowserManageResponse {
   url?: string
 }
 
+export interface DesktopStatusResponse {
+  compatible_dashboard?: boolean
+  error?: string
+  health?: string
+  health_reason?: string
+  host?: string
+  manual_url?: null | string
+  ok?: boolean
+  pid?: null | number
+  pid_reason?: string
+  pid_status?: string
+  port?: number
+  record_present?: boolean
+  reuse_command?: null | string
+  route?: string
+  runtime_record_cleared?: boolean
+  started_at?: null | string
+  stop_command?: null | string
+  url?: string
+}
+
 export interface RollbackCheckpoint {
   hash: string
   message?: string
