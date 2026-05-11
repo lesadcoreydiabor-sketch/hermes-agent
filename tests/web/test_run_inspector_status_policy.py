@@ -1489,7 +1489,12 @@ def test_run_inspector_memory_workbench_uses_readonly_api() -> None:
     assert "<MultiAgentMemoryWorkbenchCard" in page_source
     assert "Multi-Agent Memory" in page_source
     assert "describeRuntimePersistenceState" in page_source
+    assert "describeAgentAssignmentState" in page_source
+    assert "describeParallelAssignmentPlanState" in page_source
     assert 'label="Persistence"' in page_source
+    assert 'label="Assignments"' in page_source
+    assert 'label="Plan"' in page_source
+    assert "parallelPlan?.batches.length" in page_source
     assert "api.getRunInspectorMemoryWorkbench" in hook_source
     assert "runtime_persistence" in api_source
     assert "agent_assignments" in api_source

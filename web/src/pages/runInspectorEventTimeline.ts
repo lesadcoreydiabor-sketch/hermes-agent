@@ -35,6 +35,7 @@ export const RUN_INSPECTOR_EVENT_FILTERS = [
   "cancelled",
   "completed",
   "failed",
+  "terminal",
   "gateway",
   "run",
   "tool",
@@ -129,6 +130,9 @@ export function filterRunInspectorEvents(
     if (filter === "failed") {
       return event.status === "failed" || event.type.endsWith(".failed");
     }
+    if (filter === "terminal") {
+      return isTerminalRunInspectorEvent(event);
+    }
     if (filter === "gateway") {
       return event.type.startsWith("gateway.") || event.source.includes("gateway");
     }
@@ -200,6 +204,17 @@ function isActiveRunInspectorEvent(event: RunInspectorEvent): boolean {
     event.type === "run.running" ||
     event.type === "tool.started" ||
     event.type === "tool.progress"
+  );
+}
+
+function isTerminalRunInspectorEvent(event: RunInspectorEvent): boolean {
+  return (
+    event.status === "cancelled" ||
+    event.status === "completed" ||
+    event.status === "failed" ||
+    event.type.endsWith(".cancelled") ||
+    event.type.endsWith(".completed") ||
+    event.type.endsWith(".failed")
   );
 }
 

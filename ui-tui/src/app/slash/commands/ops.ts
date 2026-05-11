@@ -71,7 +71,7 @@ interface SkillsReloadResponse {
 const INSPECTOR_DEFAULT_PORT = 9119
 const INSPECTOR_EVENTS_DEFAULT_LIMIT = 12
 const INSPECTOR_TEXT_LIMIT = 140
-const INSPECTOR_EVENT_FILTERS = ['all', 'active', 'attention', 'approval', 'cancelled', 'completed', 'failed', 'gateway', 'run', 'tool'] as const
+const INSPECTOR_EVENT_FILTERS = ['all', 'active', 'attention', 'approval', 'cancelled', 'completed', 'failed', 'terminal', 'gateway', 'run', 'tool'] as const
 
 type InspectorEventFilter = (typeof INSPECTOR_EVENT_FILTERS)[number]
 
@@ -382,6 +382,9 @@ const isCompletedRunInspectorEvent = (event: RunInspectorEventSummary): boolean 
   return status === 'completed' || type.endsWith('.completed')
 }
 
+const isTerminalRunInspectorEvent = (event: RunInspectorEventSummary): boolean =>
+  isCancelledRunInspectorEvent(event) || isCompletedRunInspectorEvent(event) || isFailedRunInspectorEvent(event)
+
 const latestRunInspectorEvent = (events: RunInspectorEventSummary[]): RunInspectorEventSummary | undefined =>
   [...events].sort((left, right) => Number(left.id ?? 0) - Number(right.id ?? 0)).at(-1)
 
@@ -404,6 +407,7 @@ const renderRunInspectorEventSummary = (
     ['Cancelled', String(source.filter(isCancelledRunInspectorEvent).length)],
     ['Completed', String(source.filter(isCompletedRunInspectorEvent).length)],
     ['Failed', String(source.filter(isFailedRunInspectorEvent).length)],
+    ['Terminal', String(source.filter(isTerminalRunInspectorEvent).length)],
     ['Latest', latest ? `#${latestId} ${latestType}` : 'none']
   ]
 }
@@ -439,6 +443,9 @@ const filterRunInspectorEvents = (
     }
     if (filter === 'failed') {
       return type.endsWith('.failed') || status === 'failed'
+    }
+    if (filter === 'terminal') {
+      return isTerminalRunInspectorEvent(event)
     }
     if (filter === 'gateway') {
       return type.startsWith('gateway.') || sourceName.includes('gateway')
@@ -782,12 +789,12 @@ export const opsCommands: SlashCommand[] = [
 
   {
     aliases: ['run-inspector-events'],
-    help: 'show recent read-only Run Inspector events [/inspector-events [limit] [all|active|attention|approval|cancelled|completed|failed|gateway|run|tool]]',
+    help: 'show recent read-only Run Inspector events [/inspector-events [limit] [all|active|attention|approval|cancelled|completed|failed|terminal|gateway|run|tool]]',
     name: 'inspector-events',
     run: (arg, ctx) => {
       const parsed = parseInspectorEventsArgs(arg)
       if (parsed === null) {
-        return ctx.transcript.sys('usage: /inspector-events [limit 1..100] [all|active|attention|approval|cancelled|completed|failed|gateway|run|tool]')
+        return ctx.transcript.sys('usage: /inspector-events [limit 1..100] [all|active|attention|approval|cancelled|completed|failed|terminal|gateway|run|tool]')
       }
 
       ctx.gateway
