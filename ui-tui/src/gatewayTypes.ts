@@ -352,12 +352,15 @@ export interface BrowserManageResponse {
 }
 
 export interface DesktopStatusResponse {
+  attention_level?: string
   compatible_dashboard?: boolean
   error?: string
   health?: string
   health_reason?: string
   host?: string
   manual_url?: null | string
+  next_action?: null | string
+  next_command?: null | string
   ok?: boolean
   pid?: null | number
   pid_reason?: string

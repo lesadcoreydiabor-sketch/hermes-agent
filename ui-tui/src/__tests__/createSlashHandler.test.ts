@@ -457,6 +457,8 @@ describe('createSlashHandler', () => {
           health: 'ok',
           health_reason: 'ok',
           manual_url: 'http://127.0.0.1:9222/run-inspector',
+          next_action: 'Reuse compatible dashboard',
+          next_command: 'hermes desktop --port 9222',
           ok: true,
           pid: null,
           pid_status: 'none',
@@ -503,6 +505,7 @@ describe('createSlashHandler', () => {
             rows: expect.arrayContaining([
               ['Desktop', 'compatible dashboard'],
               ['Run Inspector', 'http://127.0.0.1:9222/run-inspector'],
+              ['Next', 'Reuse compatible dashboard: hermes desktop --port 9222'],
               ['Reuse', 'hermes desktop --port 9222']
             ]),
             title: 'Desktop Shell'
@@ -657,6 +660,8 @@ describe('createSlashHandler', () => {
           health: 'attention',
           health_reason: 'pid_missing',
           manual_url: 'http://127.0.0.1:9222/run-inspector',
+          next_action: 'Restart desktop shell',
+          next_command: 'hermes desktop --port 9222',
           ok: true,
           pid: 1234,
           pid_reason: 'process exited',
@@ -695,6 +700,7 @@ describe('createSlashHandler', () => {
               ['Host', '127.0.0.1'],
               ['Route', '/run-inspector'],
               ['Record', 'cleared stale runtime record'],
+              ['Next', 'Restart desktop shell: hermes desktop --port 9222'],
               ['Reuse', 'hermes desktop --port 9222'],
               ['Stop guidance', 'hermes dashboard --stop']
             ]),

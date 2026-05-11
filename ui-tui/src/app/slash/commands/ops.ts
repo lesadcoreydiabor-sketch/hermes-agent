@@ -182,6 +182,15 @@ const desktopSourceSummary = (r: DesktopStatusResponse): string => {
   return 'no desktop runtime record'
 }
 
+const desktopNextActionSummary = (r: DesktopStatusResponse): string | null => {
+  const action = clipInspectorText(r.next_action, '', 80)
+  const command = clipInspectorText(r.next_command, '', 120)
+  if (action && command) {
+    return `${action}: ${command}`
+  }
+  return action || command || null
+}
+
 const clipInspectorText = (value: unknown, fallback = 'unknown', limit = INSPECTOR_TEXT_LIMIT): string => {
   if (value === null || value === undefined) {
     return fallback
@@ -768,6 +777,10 @@ const renderInspectorStatus = (r: DesktopStatusResponse) => {
   }
   if (r.runtime_record_cleared) {
     rows.push(['Record', 'cleared stale runtime record'])
+  }
+  const nextAction = desktopNextActionSummary(r)
+  if (nextAction) {
+    rows.push(['Next', nextAction])
   }
   if (r.reuse_command) {
     rows.push(['Reuse', r.reuse_command])
