@@ -358,6 +358,7 @@ describe('createSlashHandler', () => {
     ['/inspector-events', 'run_inspector.events', { limit: 12 }],
     ['/inspector-events attention', 'run_inspector.events', { limit: 12 }],
     ['/inspector-events cancelled', 'run_inspector.events', { limit: 12 }],
+    ['/inspector-events completed', 'run_inspector.events', { limit: 12 }],
     ['/inspector-events failed', 'run_inspector.events', { limit: 12 }],
     ['/inspector-health', 'run_inspector.status', { port: 9119 }],
     ['/inspector-snapshot', 'run_inspector.status', { port: 9119 }],
@@ -368,6 +369,7 @@ describe('createSlashHandler', () => {
     ['/run-inspector-events 7', 'run_inspector.events', { limit: 7 }],
     ['/run-inspector-events 7 attention', 'run_inspector.events', { limit: 7 }],
     ['/run-inspector-events 7 cancelled', 'run_inspector.events', { limit: 7 }],
+    ['/run-inspector-events 7 completed', 'run_inspector.events', { limit: 7 }],
     ['/run-inspector-events 7 failed', 'run_inspector.events', { limit: 7 }],
     ['/run-inspector 9222', 'run_inspector.status', { port: 9222 }],
     ['/reload-mcp', 'reload.mcp', { session_id: null }],
@@ -806,6 +808,7 @@ describe('createSlashHandler', () => {
               ['Attention', '1'],
               ['Approval', '1'],
               ['Cancelled', '0'],
+              ['Completed', '0'],
               ['Failed', '0'],
               ['Latest', '#9 approval.request']
             ]),
@@ -865,6 +868,7 @@ describe('createSlashHandler', () => {
               ['Attention', '1'],
               ['Approval', '0'],
               ['Cancelled', '0'],
+              ['Completed', '0'],
               ['Failed', '1'],
               ['Latest', '#11 run.failed']
             ]),
@@ -937,6 +941,7 @@ describe('createSlashHandler', () => {
               ['Attention', '2'],
               ['Approval', '1'],
               ['Cancelled', '0'],
+              ['Completed', '0'],
               ['Failed', '1'],
               ['Latest', '#22 run.failed']
             ]),
@@ -1003,6 +1008,7 @@ describe('createSlashHandler', () => {
               ['Attention', '0'],
               ['Approval', '0'],
               ['Cancelled', '1'],
+              ['Completed', '0'],
               ['Failed', '0'],
               ['Latest', '#31 run.cancelled']
             ]),
@@ -1030,6 +1036,84 @@ describe('createSlashHandler', () => {
     )
   })
 
+  it('/inspector-events filters completed events locally after fetching the bounded timeline', async () => {
+    const rpc = vi.fn(() =>
+      Promise.resolve({
+        events: [
+          {
+            id: 40,
+            message: 'run started',
+            run_id: 'run_active',
+            source: 'gateway_run',
+            status: 'running',
+            type: 'run.running'
+          },
+          {
+            id: 41,
+            message: 'run completed',
+            run_id: 'run_completed',
+            session_id: 'sid_completed',
+            source: 'gateway_run',
+            status: 'completed',
+            type: 'run.completed'
+          },
+          {
+            id: 42,
+            message: 'tool completed',
+            source: 'dashboard_chat',
+            status: 'completed',
+            tool: 'shell',
+            type: 'tool.completed'
+          }
+        ],
+        ok: true
+      })
+    )
+    const ctx = buildCtx({ gateway: { ...buildGateway(), rpc } })
+
+    expect(createSlashHandler(ctx)('/inspector-events completed')).toBe(true)
+
+    expect(rpc).toHaveBeenCalledWith('run_inspector.events', { limit: 12 })
+    await vi.waitFor(() => {
+      expect(ctx.transcript.panel).toHaveBeenCalledWith(
+        'Run Inspector Events',
+        expect.arrayContaining([
+          expect.objectContaining({
+            rows: expect.arrayContaining([
+              ['Fetched', '3'],
+              ['Showing', '2 completed'],
+              ['Attention', '0'],
+              ['Approval', '0'],
+              ['Cancelled', '0'],
+              ['Completed', '2'],
+              ['Failed', '0'],
+              ['Latest', '#42 tool.completed']
+            ]),
+            title: 'Summary'
+          }),
+          expect.objectContaining({
+            rows: expect.arrayContaining([
+              [
+                '#41 run.completed',
+                'status=completed / source=gateway_run / run=run_completed / session=sid_completed\nrun completed'
+              ],
+              ['#42 tool.completed', 'status=completed / tool=shell / source=dashboard_chat\ntool completed']
+            ]),
+            title: 'Recent 2/3 completed'
+          })
+        ])
+      )
+    })
+    expect(ctx.transcript.panel).not.toHaveBeenCalledWith(
+      'Run Inspector Events',
+      expect.arrayContaining([
+        expect.objectContaining({
+          rows: expect.arrayContaining([['#40 run.running', expect.any(String)]])
+        })
+      ])
+    )
+  })
+
   it('/inspector-events rejects invalid limits before hitting the gateway', () => {
     const rpc = vi.fn(() => Promise.resolve({}))
     const ctx = buildCtx({ gateway: { ...buildGateway(), rpc } })
@@ -1038,7 +1122,7 @@ describe('createSlashHandler', () => {
     expect(rpc).not.toHaveBeenCalled()
     expect(ctx.gateway.gw.request).not.toHaveBeenCalled()
     expect(ctx.transcript.sys).toHaveBeenCalledWith(
-      'usage: /inspector-events [limit 1..100] [all|attention|approval|cancelled|failed|gateway|run|tool]'
+      'usage: /inspector-events [limit 1..100] [all|attention|approval|cancelled|completed|failed|gateway|run|tool]'
     )
   })
 

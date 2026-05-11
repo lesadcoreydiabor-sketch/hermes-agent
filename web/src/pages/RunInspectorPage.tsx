@@ -1698,7 +1698,7 @@ function EventTimelineCard({
           </span>
         </div>
 
-        <div className="grid min-w-0 gap-2 sm:grid-cols-2 xl:grid-cols-6">
+        <div className="grid min-w-0 gap-2 sm:grid-cols-2 xl:grid-cols-7">
           <Metric
             icon={<Activity className="h-4 w-4" />}
             label="Recent"
@@ -1724,6 +1724,12 @@ function EventTimelineCard({
             tone={summary.cancelled > 0 ? "warning" : "muted"}
           />
           <Metric
+            icon={<CheckCircle2 className="h-4 w-4" />}
+            label="Completed"
+            value={String(summary.completed)}
+            tone={summary.completed > 0 ? "success" : "muted"}
+          />
+          <Metric
             icon={<XCircle className="h-4 w-4" />}
             label="Failed"
             value={String(summary.failed)}
@@ -1741,7 +1747,7 @@ function EventTimelineCard({
           />
         </div>
 
-        <div className="grid min-w-0 gap-2 sm:grid-cols-4 xl:grid-cols-8">
+        <div className="grid min-w-0 gap-2 sm:grid-cols-3 xl:grid-cols-9">
           {RUN_INSPECTOR_EVENT_FILTERS.map((item) => {
             const selected = filter === item;
             const count = filterRunInspectorEvents(events, item).length;

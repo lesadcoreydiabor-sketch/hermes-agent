@@ -71,7 +71,7 @@ interface SkillsReloadResponse {
 const INSPECTOR_DEFAULT_PORT = 9119
 const INSPECTOR_EVENTS_DEFAULT_LIMIT = 12
 const INSPECTOR_TEXT_LIMIT = 140
-const INSPECTOR_EVENT_FILTERS = ['all', 'attention', 'approval', 'cancelled', 'failed', 'gateway', 'run', 'tool'] as const
+const INSPECTOR_EVENT_FILTERS = ['all', 'attention', 'approval', 'cancelled', 'completed', 'failed', 'gateway', 'run', 'tool'] as const
 
 type InspectorEventFilter = (typeof INSPECTOR_EVENT_FILTERS)[number]
 
@@ -362,6 +362,12 @@ const isCancelledRunInspectorEvent = (event: RunInspectorEventSummary): boolean 
   return status === 'cancelled' || type.endsWith('.cancelled')
 }
 
+const isCompletedRunInspectorEvent = (event: RunInspectorEventSummary): boolean => {
+  const type = String(event.type || '').toLowerCase()
+  const status = String(event.status || '').toLowerCase()
+  return status === 'completed' || type.endsWith('.completed')
+}
+
 const latestRunInspectorEvent = (events: RunInspectorEventSummary[]): RunInspectorEventSummary | undefined =>
   [...events].sort((left, right) => Number(left.id ?? 0) - Number(right.id ?? 0)).at(-1)
 
@@ -381,6 +387,7 @@ const renderRunInspectorEventSummary = (
     ['Attention', String(source.filter(isAttentionRunInspectorEvent).length)],
     ['Approval', String(source.filter(isApprovalRunInspectorEvent).length)],
     ['Cancelled', String(source.filter(isCancelledRunInspectorEvent).length)],
+    ['Completed', String(source.filter(isCompletedRunInspectorEvent).length)],
     ['Failed', String(source.filter(isFailedRunInspectorEvent).length)],
     ['Latest', latest ? `#${latestId} ${latestType}` : 'none']
   ]
@@ -408,6 +415,9 @@ const filterRunInspectorEvents = (
     }
     if (filter === 'cancelled') {
       return isCancelledRunInspectorEvent(event)
+    }
+    if (filter === 'completed') {
+      return isCompletedRunInspectorEvent(event)
     }
     if (filter === 'failed') {
       return type.endsWith('.failed') || status === 'failed'
@@ -754,12 +764,12 @@ export const opsCommands: SlashCommand[] = [
 
   {
     aliases: ['run-inspector-events'],
-    help: 'show recent read-only Run Inspector events [/inspector-events [limit] [all|attention|approval|cancelled|failed|gateway|run|tool]]',
+    help: 'show recent read-only Run Inspector events [/inspector-events [limit] [all|attention|approval|cancelled|completed|failed|gateway|run|tool]]',
     name: 'inspector-events',
     run: (arg, ctx) => {
       const parsed = parseInspectorEventsArgs(arg)
       if (parsed === null) {
-        return ctx.transcript.sys('usage: /inspector-events [limit 1..100] [all|attention|approval|cancelled|failed|gateway|run|tool]')
+        return ctx.transcript.sys('usage: /inspector-events [limit 1..100] [all|attention|approval|cancelled|completed|failed|gateway|run|tool]')
       }
 
       ctx.gateway

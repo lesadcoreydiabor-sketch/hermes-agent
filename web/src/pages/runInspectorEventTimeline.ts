@@ -19,6 +19,7 @@ export interface RunInspectorEventSummary {
   attention: number;
   approval: number;
   cancelled: number;
+  completed: number;
   failed: number;
   latest: RunInspectorEvent | null;
   total: number;
@@ -30,6 +31,7 @@ export const RUN_INSPECTOR_EVENT_FILTERS = [
   "attention",
   "approval",
   "cancelled",
+  "completed",
   "failed",
   "gateway",
   "run",
@@ -116,6 +118,9 @@ export function filterRunInspectorEvents(
     if (filter === "cancelled") {
       return event.status === "cancelled" || event.type.endsWith(".cancelled");
     }
+    if (filter === "completed") {
+      return event.status === "completed" || event.type.endsWith(".completed");
+    }
     if (filter === "failed") {
       return event.status === "failed" || event.type.endsWith(".failed");
     }
@@ -144,6 +149,7 @@ export function summarizeRunInspectorEvents(
     attention: filterRunInspectorEvents(events, "attention").length,
     approval: filterRunInspectorEvents(events, "approval").length,
     cancelled: filterRunInspectorEvents(events, "cancelled").length,
+    completed: filterRunInspectorEvents(events, "completed").length,
     failed,
     latest: ordered.length > 0 ? ordered[ordered.length - 1] : null,
     total: events.length,
