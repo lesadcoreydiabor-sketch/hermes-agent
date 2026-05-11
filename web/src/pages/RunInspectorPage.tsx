@@ -1729,7 +1729,7 @@ function EventTimelineCard({
           />
         </div>
 
-        <div className="grid min-w-0 gap-2 sm:grid-cols-3 lg:grid-cols-6">
+        <div className="grid min-w-0 gap-2 sm:grid-cols-3 xl:grid-cols-7">
           {RUN_INSPECTOR_EVENT_FILTERS.map((item) => {
             const selected = filter === item;
             const count = filterRunInspectorEvents(events, item).length;

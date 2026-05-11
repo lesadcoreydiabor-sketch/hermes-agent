@@ -26,6 +26,7 @@ export const RUN_INSPECTOR_EVENT_LIMIT = 50;
 export const RUN_INSPECTOR_EVENT_FILTERS = [
   "all",
   "attention",
+  "approval",
   "failed",
   "gateway",
   "run",
@@ -105,6 +106,9 @@ export function filterRunInspectorEvents(
         event.status === "failed" ||
         event.type.endsWith(".failed")
       );
+    }
+    if (filter === "approval") {
+      return event.type === "approval.request" || event.status === "waiting";
     }
     if (filter === "failed") {
       return event.status === "failed" || event.type.endsWith(".failed");
