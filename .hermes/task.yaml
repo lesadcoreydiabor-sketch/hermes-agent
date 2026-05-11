@@ -7,6 +7,7 @@ related_prds:
   - docs/plans/hermes-run-inspector-desktop-panel-requirements.md
   - docs/plans/hermes-run-inspector-desktop-panel-prd.md
   - docs/plans/hermes-run-inspector-event-integration-prd.md
+  - docs/plans/hermes-run-inspector-desktop-shell-prd.md
 owner: product-manager
 mode: implementation
 
@@ -603,6 +604,23 @@ tasks:
     status: completed
     risk: medium
 
+  - id: HRIDS-01
+    title: Define desktop shell PRD and execution contract
+    description: Convert the desktop panel direction into a concrete shell PRD that wraps the existing dashboard lifecycle before choosing Tauri, Electron, or another runtime.
+    depends_on:
+      - HRIGF-13
+    acceptance:
+      - PRD explains why the first desktop slice reuses the existing dashboard and Run Inspector panel.
+      - PRD references HERMES dashboard entry points and external desktop/web UI failure lessons.
+      - PRD separates lifecycle shell, process/port ownership, runtime packaging, tray/notification, security, and recovery requirements.
+      - PRD explicitly excludes installer, config editor, gateway config mutation, raw logs/prompts/tool args, and duplicate UI implementation.
+      - The task file records the desktop shell execution contract and next implementation slices.
+    verify:
+      - git diff --check -- docs/plans/hermes-run-inspector-desktop-shell-prd.md .hermes/task.yaml
+      - venv/Scripts/python.exe -c "import yaml; yaml.safe_load(open('.hermes/task.yaml', encoding='utf-8'))"
+    status: completed
+    risk: low
+
 risk_flags:
   destructive_file_change:
     pause: true
@@ -1055,6 +1073,14 @@ progress_report:
       verification_result: "passed: venv/Scripts/python.exe -m pytest tests/web/test_run_inspector_status_policy.py -q -o addopts= (19 passed); passed: cd web; npm.cmd run build; Playwright smoke passed for /run-inspector recent-run filters on desktop and narrow viewports without horizontal overflow"
       blockers: []
       next_step: "Run Inspector P13 recent gateway run focus filters complete; stage/commit/push, or move to desktop shell packaging decision and run-notification behavior."
+    - task_id: HRIDS-01
+      status: completed
+      changed_files:
+        - docs/plans/hermes-run-inspector-desktop-shell-prd.md
+        - .hermes/task.yaml
+      verification_result: "passed: git diff --check -- docs/plans/hermes-run-inspector-desktop-shell-prd.md .hermes/task.yaml; passed: venv/Scripts/python.exe -c yaml.safe_load task.yaml"
+      blockers: []
+      next_step: "Desktop shell decision contract complete; implement HRIDS-02 local dashboard shell command or review packaging runtime decision first."
 
 failure_review:
   enabled: true
@@ -1151,4 +1177,12 @@ failure_review:
       what_changed: "Changed the smoke to target recent-run row buttons by accessible names that include run id and status."
       how_it_was_verified: "Re-ran the Playwright desktop/narrow smoke with mocked recent gateway runs; all filters passed and no horizontal overflow was detected."
       added_eval_or_badcase: "P13 smoke scopes run-list assertions to row buttons instead of body text."
+      blocker: false
+    - trigger: failed_verification
+      task_id: HRIDS-01
+      what_happened: "Initial task.yaml validation failed because one new acceptance bullet started with a backtick-wrapped file path."
+      why_it_failed: "YAML plain sequence items cannot start with that backtick token."
+      what_changed: "Reworded the acceptance bullet to avoid leading backticks while preserving the requirement."
+      how_it_was_verified: "Re-ran venv/Scripts/python.exe -c yaml.safe_load task.yaml and git diff --check; both passed."
+      added_eval_or_badcase: "HRIDS-01 task.yaml parse check"
       blocker: false
