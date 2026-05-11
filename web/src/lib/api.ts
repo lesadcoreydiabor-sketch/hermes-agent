@@ -70,6 +70,11 @@ export const api = {
       `/api/run-inspector/events?limit=${limit}`,
       init,
     ),
+  getRunInspectorAttention: (limit = 20, init?: RequestInit) =>
+    fetchJSON<RunInspectorAttentionResponse>(
+      `/api/run-inspector/attention?limit=${limit}`,
+      init,
+    ),
   getGatewayRuns: (limit = 20, init?: RequestInit) =>
     fetchJSON<RunInspectorGatewayRunsResponse>(
       `/api/run-inspector/gateway-runs?limit=${limit}`,
@@ -528,6 +533,42 @@ export interface RunInspectorEvent {
 export interface RunInspectorEventsResponse {
   ok: boolean;
   events: RunInspectorEvent[];
+  refreshed_at: string;
+}
+
+export type RunInspectorAttentionKind =
+  | "approval_waiting"
+  | "run_failed"
+  | "run_degraded"
+  | "mcp_degraded"
+  | "desktop_shell_degraded"
+  | "recovery_available"
+  | string;
+
+export type RunInspectorAttentionSeverity = "critical" | "warning" | "info";
+
+export type RunInspectorAttentionPrivacyClass =
+  | "safe_summary"
+  | "redacted_summary"
+  | "local_only";
+
+export interface RunInspectorAttentionSignal {
+  kind: RunInspectorAttentionKind;
+  severity: RunInspectorAttentionSeverity;
+  title: string;
+  body: string;
+  route: string;
+  run_id: string | null;
+  session_id: string | null;
+  timestamp: string;
+  dedupe_key: string;
+  ttl_ms: number;
+  privacy_class: RunInspectorAttentionPrivacyClass;
+}
+
+export interface RunInspectorAttentionResponse {
+  ok: boolean;
+  signals: RunInspectorAttentionSignal[];
   refreshed_at: string;
 }
 

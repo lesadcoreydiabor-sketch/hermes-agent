@@ -140,3 +140,80 @@ def test_run_inspector_api_normalizes_and_redacts_payload(
         "command": "string",
         "token": "string",
     }
+
+
+def test_run_inspector_attention_api_returns_safe_signals(
+    monkeypatch,
+    run_inspector_client,
+):
+    from hermes_cli import web_server
+    from hermes_cli.run_inspector_events import (
+        clear_run_inspector_events_for_tests,
+        record_run_inspector_event,
+    )
+
+    clear_run_inspector_events_for_tests()
+    monkeypatch.setattr(
+        web_server,
+        "get_run_inspector_status_payload",
+        lambda: {
+            "version": 1,
+            "run_id": "run-attention",
+            "source": "gateway",
+            "status": "waiting_approval",
+            "reason": "approval command: cat C:/Users/XQQ/private.txt",
+            "session_id": "session-attention",
+            "recovery_hint": "approve after checking token=super-secret",
+            "mcp_health": [
+                {"name": "gitnexus", "status": "degraded"},
+            ],
+            "privacy_flags": ["safe", "redacted", "local_only"],
+        },
+    )
+    record_run_inspector_event(
+        "run.failed",
+        source="gateway_run",
+        run_id="run-event",
+        message="Traceback with OPENAI_API_KEY=sk-secret-1234567890",
+    )
+
+    try:
+        response = run_inspector_client.get("/api/run-inspector/attention?limit=10")
+    finally:
+        clear_run_inspector_events_for_tests()
+
+    assert response.status_code == 200
+    payload = response.json()
+    kinds = {item["kind"] for item in payload["signals"]}
+    assert payload["ok"] is True
+    assert {
+        "approval_waiting",
+        "recovery_available",
+        "mcp_degraded",
+        "run_failed",
+    }.issubset(kinds)
+    assert all(item["route"] == "/run-inspector" for item in payload["signals"])
+    encoded = json.dumps(payload, sort_keys=True)
+    assert "private.txt" not in encoded
+    assert "super-secret" not in encoded
+    assert "sk-secret" not in encoded
+    assert "Traceback" not in encoded
+
+
+def test_run_inspector_attention_api_degrades_when_snapshot_builder_fails(
+    monkeypatch,
+    run_inspector_client,
+):
+    from hermes_cli import web_server
+
+    def fail():
+        raise RuntimeError("snapshot unavailable")
+
+    monkeypatch.setattr(web_server, "get_run_inspector_status_payload", fail)
+
+    response = run_inspector_client.get("/api/run-inspector/attention")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["ok"] is False
+    assert payload["signals"][0]["kind"] == "run_degraded"

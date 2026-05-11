@@ -54,6 +54,7 @@ from hermes_cli.run_inspector_events import (
     subscribe_run_inspector_events,
     unregister_run_inspector_event_subscriber,
 )
+from hermes_cli.run_inspector_attention import build_attention_signals
 from hermes_cli.run_inspector_gateway_forwarder import (
     DEFAULT_GATEWAY_EVENT_TIMEOUT_SECONDS,
     fetch_gateway_run_summaries,
@@ -584,6 +585,27 @@ async def get_run_inspector_events(limit: int = 50):
     return {
         "ok": True,
         "events": get_recent_run_inspector_events(limit=limit),
+        "refreshed_at": _utc_now_iso(),
+    }
+
+
+@app.get("/api/run-inspector/attention")
+async def get_run_inspector_attention(limit: int = 50):
+    """Return notification-safe attention signals for Run Inspector preview."""
+    ok = True
+    try:
+        snapshot = _normalize_run_inspector_snapshot(
+            get_run_inspector_status_payload()
+        )
+    except Exception as exc:
+        ok = False
+        _log.warning("Run Inspector attention snapshot failed: %s", exc)
+        snapshot = _run_inspector_error_snapshot(exc)
+
+    events = get_recent_run_inspector_events(limit=limit)
+    return {
+        "ok": ok,
+        "signals": build_attention_signals(snapshot=snapshot, events=events),
         "refreshed_at": _utc_now_iso(),
     }
 

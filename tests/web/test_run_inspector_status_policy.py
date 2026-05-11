@@ -92,6 +92,34 @@ const timeline = moduleRef.exports;
     return json.loads(completed.stdout)
 
 
+def run_attention_script(script: str) -> dict:
+    node_script = f"""
+const fs = require("node:fs");
+const vm = require("node:vm");
+const ts = require("typescript");
+const source = fs.readFileSync("src/pages/runInspectorAttention.ts", "utf8");
+const output = ts.transpileModule(source, {{
+  compilerOptions: {{
+    module: ts.ModuleKind.CommonJS,
+    target: ts.ScriptTarget.ES2022,
+  }},
+}}).outputText;
+const moduleRef = {{ exports: {{}} }};
+const sandbox = {{ module: moduleRef, exports: moduleRef.exports, require, console }};
+vm.runInNewContext(output, sandbox, {{ filename: "runInspectorAttention.js" }});
+const attention = moduleRef.exports;
+{script}
+"""
+    completed = subprocess.run(
+        ["node", "-e", node_script],
+        cwd=WEB_DIR,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    return json.loads(completed.stdout)
+
+
 def run_gateway_controls_script(script: str) -> dict:
     node_script = f"""
 const fs = require("node:fs");
@@ -525,6 +553,63 @@ def test_run_inspector_event_timeline_describes_event_and_stream_states():
     }
 
 
+def test_run_inspector_attention_preview_describes_states_and_tones():
+    payload = run_attention_script(
+        textwrap.dedent(
+            """
+            const criticalSignal = {
+              kind: "run_failed",
+              severity: "critical",
+              title: "Run failed",
+              body: "Safe failure summary",
+              route: "/run-inspector",
+              run_id: "run_1",
+              session_id: null,
+              timestamp: "2026-05-11T00:00:00Z",
+              dedupe_key: "run_failed:run_1",
+              ttl_ms: 600000,
+              privacy_class: "redacted_summary",
+            };
+            const warningSignal = {
+              ...criticalSignal,
+              kind: "approval_waiting",
+              severity: "warning",
+              title: "Approval waiting",
+              dedupe_key: "approval_waiting:run_1",
+            };
+            const states = {
+              empty: attention.describeAttentionPreview("ready", []),
+              critical: attention.describeAttentionPreview("ready", [warningSignal, criticalSignal]),
+              degraded: attention.describeAttentionPreview("degraded", [], "attention_api_failed"),
+              auth: attention.describeAttentionPreview("auth_failed", []),
+              toneCritical: attention.attentionSignalTone(criticalSignal),
+              toneWarning: attention.attentionSignalTone(warningSignal),
+            };
+            console.log(JSON.stringify(states));
+            """
+        )
+    )
+
+    assert payload["empty"] == {
+        "label": "No signals",
+        "message": "No current attention signals",
+        "tone": "success",
+    }
+    assert payload["critical"] == {
+        "label": "2 signals",
+        "message": "Attention needed",
+        "tone": "destructive",
+    }
+    assert payload["degraded"] == {
+        "label": "Attention degraded",
+        "message": "attention_api_failed",
+        "tone": "warning",
+    }
+    assert payload["auth"]["tone"] == "destructive"
+    assert payload["toneCritical"] == "destructive"
+    assert payload["toneWarning"] == "warning"
+
+
 def test_run_inspector_gateway_controls_follow_run_state_and_events():
     payload = run_gateway_controls_script(
         textwrap.dedent(
@@ -799,3 +884,25 @@ def test_run_inspector_events_hook_uses_tokened_websocket_and_auth_stop() -> Non
     assert "/api/run-inspector/events?token=" in hook_source
     assert 'event.code === 4401' in hook_source
     assert "<EventTimelineCard" in page_source
+
+
+def test_run_inspector_attention_preview_uses_safe_api_without_notifications() -> None:
+    page_source = (
+        ROOT / "web" / "src" / "pages" / "RunInspectorPage.tsx"
+    ).read_text(encoding="utf-8")
+    hook_source = (
+        ROOT / "web" / "src" / "hooks" / "useRunInspectorAttention.ts"
+    ).read_text(encoding="utf-8")
+    api_source = (ROOT / "web" / "src" / "lib" / "api.ts").read_text(
+        encoding="utf-8"
+    )
+
+    assert "useRunInspectorAttention" in page_source
+    assert "<AttentionPreviewCard" in page_source
+    assert "Attention Preview" in page_source
+    assert "api.getRunInspectorAttention" in hook_source
+    assert "/api/run-inspector/attention?limit=" in api_source
+    assert "Notification.requestPermission" not in page_source
+    assert "Notification.requestPermission" not in hook_source
+    assert "new Notification" not in page_source
+    assert "new Notification" not in hook_source

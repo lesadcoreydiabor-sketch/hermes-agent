@@ -9,6 +9,7 @@ import {
 import {
   Activity,
   AlertTriangle,
+  Bell,
   CheckCircle2,
   Clock,
   Database,
@@ -26,9 +27,11 @@ import { Button } from "@nous-research/ui/ui/components/button";
 import { Spinner } from "@nous-research/ui/ui/components/spinner";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { usePageHeader } from "@/contexts/usePageHeader";
+import { useRunInspectorAttention } from "@/hooks/useRunInspectorAttention";
 import { useRunInspectorEvents } from "@/hooks/useRunInspectorEvents";
 import { useRunInspectorStatus } from "@/hooks/useRunInspectorStatus";
 import type {
+  RunInspectorAttentionSignal,
   RunInspectorEvent,
   RunInspectorGatewayForwarder,
   RunInspectorGatewayRun,
@@ -61,6 +64,11 @@ import {
   type RunInspectorEventStreamState,
 } from "@/pages/runInspectorEventTimeline";
 import {
+  attentionSignalTone,
+  describeAttentionPreview,
+  type RunInspectorAttentionState,
+} from "@/pages/runInspectorAttention";
+import {
   describeGatewayRunDetail,
   describeGatewayRunList,
   describeGatewayRunControlState,
@@ -92,6 +100,7 @@ type GatewayRunSelectionMode = "auto" | "manual";
 export default function RunInspectorPage() {
   const inspector = useRunInspectorStatus();
   const eventStream = useRunInspectorEvents();
+  const attention = useRunInspectorAttention();
   const [gatewayRunId, setGatewayRunId] = useState("");
   const [gatewayRunSelectionMode, setGatewayRunSelectionMode] =
     useState<GatewayRunSelectionMode>("auto");
@@ -319,6 +328,10 @@ export default function RunInspectorPage() {
     setGatewayRunId(pendingApprovalRunId);
   }, [gatewayRunId, gatewayRunSelectionMode, pendingApprovalRunId]);
 
+  useEffect(() => {
+    attention.refresh();
+  }, [attention.refresh, eventStream.lastUpdatedAt, inspector.lastUpdatedAt]);
+
   useLayoutEffect(() => {
     setTitle("Run Inspector");
     setAfterTitle(
@@ -386,6 +399,14 @@ export default function RunInspectorPage() {
       ) : (
         <div className="grid min-w-0 gap-4 xl:grid-cols-[minmax(0,1.1fr)_minmax(320px,0.9fr)]">
           <div className="flex min-w-0 flex-col gap-4">
+            <AttentionPreviewCard
+              error={attention.error}
+              isLoading={attention.isLoading}
+              lastUpdatedAt={attention.lastUpdatedAt}
+              onRefresh={attention.refresh}
+              signals={attention.signals}
+              state={attention.state}
+            />
             <OverviewCard
               response={inspector.response}
               snapshot={snapshot}
@@ -439,6 +460,109 @@ export default function RunInspectorPage() {
 
       <PluginSlot name="run-inspector:bottom" />
     </div>
+  );
+}
+
+function AttentionPreviewCard({
+  error,
+  isLoading,
+  lastUpdatedAt,
+  onRefresh,
+  signals,
+  state,
+}: {
+  error: string | null;
+  isLoading: boolean;
+  lastUpdatedAt: string | null;
+  onRefresh: () => void;
+  signals: RunInspectorAttentionSignal[];
+  state: RunInspectorAttentionState;
+}) {
+  const display = describeAttentionPreview(state, signals, error);
+  const newestFirst = [...signals].sort((left, right) =>
+    right.timestamp.localeCompare(left.timestamp),
+  );
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex min-w-0 items-center justify-between gap-2">
+          <span className="flex min-w-0 items-center gap-2">
+            <Bell className="h-4 w-4 shrink-0" />
+            <span className="truncate">Attention Preview</span>
+          </span>
+          <Badge tone={BADGE_TONE[display.tone]} className="shrink-0 text-[10px]">
+            {display.label}
+          </Badge>
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="flex min-w-0 flex-col gap-3">
+        <div className="flex min-w-0 flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
+          <span className="min-w-0 break-words">
+            {formatDisplayValue(error, display.message)}
+          </span>
+          <span className="flex shrink-0 items-center gap-2">
+            <span>{lastUpdatedAt ? formatDateTime(lastUpdatedAt) : "Not refreshed"}</span>
+            <Button
+              type="button"
+              size="sm"
+              outlined
+              disabled={isLoading}
+              onClick={onRefresh}
+              prefix={isLoading ? <Spinner /> : <RefreshCw />}
+            >
+              Refresh
+            </Button>
+          </span>
+        </div>
+
+        {isLoading && newestFirst.length === 0 ? (
+          <div className="flex items-center gap-3 border border-border bg-secondary/20 px-3 py-4 text-sm text-muted-foreground">
+            <Spinner />
+            <span>Loading safe attention signals</span>
+          </div>
+        ) : newestFirst.length === 0 ? (
+          <p className="border border-border bg-secondary/20 px-3 py-4 text-sm text-muted-foreground">
+            No current attention signals
+          </p>
+        ) : (
+          <div className="flex min-w-0 flex-col divide-y divide-border/70 border border-border">
+            {newestFirst.map((signal) => {
+              const tone = attentionSignalTone(signal);
+              return (
+                <div
+                  key={signal.dedupe_key}
+                  className="grid min-w-0 gap-2 px-3 py-2 sm:grid-cols-[minmax(0,1fr)_auto]"
+                >
+                  <div className="min-w-0">
+                    <div className="flex min-w-0 flex-wrap items-center gap-2">
+                      <span className={cn("truncate text-sm font-medium", TONE_CLASSES[tone])}>
+                        {formatDisplayValue(signal.title)}
+                      </span>
+                      <Badge tone={BADGE_TONE[tone]} className="text-[10px]">
+                        {formatDisplayValue(signal.kind.replaceAll("_", " "))}
+                      </Badge>
+                      <Badge tone="outline" className="text-[10px]">
+                        {formatDisplayValue(signal.privacy_class)}
+                      </Badge>
+                    </div>
+                    <p className="mt-1 break-words text-xs text-muted-foreground">
+                      {formatDisplayValue(signal.body, "No details")}
+                    </p>
+                    <p className="mt-1 truncate font-mono-ui text-[10px] text-muted-foreground/80">
+                      {formatDisplayValue(signal.dedupe_key)}
+                    </p>
+                  </div>
+                  <span className="font-mono-ui text-xs text-muted-foreground">
+                    {formatRunInspectorEventTime(signal.timestamp)}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </CardContent>
+    </Card>
   );
 }
 
