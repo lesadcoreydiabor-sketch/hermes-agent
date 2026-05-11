@@ -1408,6 +1408,19 @@ describe('createSlashHandler', () => {
               degraded_reason: null,
               privacy_class: 'redacted_summary'
             },
+            handoff_protocol: {
+              status: 'needs_review',
+              handoff_task_ids: ['HMAMO-11'],
+              ready_task_ids: ['HMAMO-11'],
+              blocked_task_ids: [],
+              verification_missing_task_ids: [],
+              reviewer_required_task_ids: ['HMAMO-12'],
+              human_decision_task_ids: [],
+              conflict_task_ids: [],
+              policy_counts: { pause_and_handoff: 2 },
+              degraded_reason: null,
+              privacy_class: 'redacted_summary'
+            },
             assignments: [
               {
                 task_id: 'HMAMO-11',
@@ -1447,6 +1460,7 @@ describe('createSlashHandler', () => {
               ['Plan', '1 planned / 1 batches / 2 max'],
               ['Waiting', '1 waiting / 0 blocked'],
               ['Conflicts', '0 scoped / 0 pairs'],
+              ['Handoff', '1 ready / 0 verify / 1 review'],
               ['Memory', 'available / 1 providers'],
               ['Persistence', 'disabled / 0 enabled'],
               ['Privacy', 'redacted_summary']
@@ -1468,6 +1482,16 @@ describe('createSlashHandler', () => {
               ['Sequenced', 'none']
             ]),
             title: 'Parallel Plan'
+          }),
+          expect.objectContaining({
+            rows: expect.arrayContaining([
+              ['Status', 'needs_review'],
+              ['Ready', 'HMAMO-11'],
+              ['Needs review', 'HMAMO-12'],
+              ['Human decision', 'none'],
+              ['Conflicts', 'none']
+            ]),
+            title: 'Handoff'
           })
         ])
       )
@@ -1525,6 +1549,19 @@ describe('createSlashHandler', () => {
               degraded_reason: 'memory_workbench_unavailable:RuntimeError',
               privacy_class: 'redacted_summary'
             },
+            handoff_protocol: {
+              status: 'empty',
+              handoff_task_ids: [],
+              ready_task_ids: [],
+              blocked_task_ids: [],
+              verification_missing_task_ids: [],
+              reviewer_required_task_ids: [],
+              human_decision_task_ids: [],
+              conflict_task_ids: [],
+              policy_counts: {},
+              degraded_reason: 'memory_workbench_unavailable:RuntimeError',
+              privacy_class: 'redacted_summary'
+            },
             assignments: [],
             degraded_reason: 'memory_workbench_unavailable:RuntimeError',
             privacy_class: 'redacted_summary'
@@ -1559,6 +1596,13 @@ describe('createSlashHandler', () => {
               ['Plan degraded', 'memory_workbench_unavailable:RuntimeError']
             ]),
             title: 'Parallel Plan'
+          }),
+          expect.objectContaining({
+            rows: expect.arrayContaining([
+              ['Status', 'empty'],
+              ['Handoff degraded', 'memory_workbench_unavailable:RuntimeError']
+            ]),
+            title: 'Handoff'
           })
         ])
       )

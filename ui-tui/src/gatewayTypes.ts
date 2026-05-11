@@ -526,9 +526,24 @@ export interface RunInspectorAssignmentPlan {
   waiting_task_ids?: string[]
 }
 
+export interface RunInspectorHandoffProtocol {
+  blocked_task_ids?: string[]
+  conflict_task_ids?: string[]
+  degraded_reason?: null | string
+  handoff_task_ids?: string[]
+  human_decision_task_ids?: string[]
+  policy_counts?: Record<string, number>
+  privacy_class?: string
+  ready_task_ids?: string[]
+  reviewer_required_task_ids?: string[]
+  status?: string
+  verification_missing_task_ids?: string[]
+}
+
 export interface RunInspectorAssignmentWorkbenchSummary {
   assignments?: RunInspectorAssignment[]
   degraded_reason?: null | string
+  handoff_protocol?: RunInspectorHandoffProtocol
   parallel_plan?: RunInspectorAssignmentPlan
   privacy_class?: string
   summary?: RunInspectorAssignmentSummary

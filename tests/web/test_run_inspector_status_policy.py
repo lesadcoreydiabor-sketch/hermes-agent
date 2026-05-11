@@ -1342,6 +1342,20 @@ def test_run_inspector_memory_workbench_describes_all_states() -> None:
                   degraded_reason: null,
                   privacy_class: "redacted_summary",
                 },
+                handoff_protocol: {
+                  schema_version: 1,
+                  status: "empty",
+                  handoff_task_ids: [],
+                  ready_task_ids: [],
+                  blocked_task_ids: [],
+                  verification_missing_task_ids: [],
+                  reviewer_required_task_ids: [],
+                  human_decision_task_ids: [],
+                  conflict_task_ids: [],
+                  policy_counts: {},
+                  degraded_reason: null,
+                  privacy_class: "redacted_summary",
+                },
                 assignments: [],
                 degraded_reason: null,
                 privacy_class: "redacted_summary",
@@ -1463,6 +1477,52 @@ def test_run_inspector_memory_workbench_describes_all_states() -> None:
                   },
                 },
               }).label,
+              handoffQuiet: workbench.describeHandoffProtocolState(base).label,
+              handoffReady: workbench.describeHandoffProtocolState({
+                ...base,
+                agent_assignments: {
+                  ...base.agent_assignments,
+                  handoff_protocol: {
+                    ...base.agent_assignments.handoff_protocol,
+                    status: "ready",
+                    ready_task_ids: ["HMAMO-13"],
+                  },
+                },
+              }).message,
+              handoffVerify: workbench.describeHandoffProtocolState({
+                ...base,
+                agent_assignments: {
+                  ...base.agent_assignments,
+                  handoff_protocol: {
+                    ...base.agent_assignments.handoff_protocol,
+                    status: "needs_verification",
+                    verification_missing_task_ids: ["HMAMO-13"],
+                  },
+                },
+              }).tone,
+              handoffBlocked: workbench.describeHandoffProtocolState({
+                ...base,
+                agent_assignments: {
+                  ...base.agent_assignments,
+                  handoff_protocol: {
+                    ...base.agent_assignments.handoff_protocol,
+                    status: "blocked",
+                    blocked_task_ids: ["HMAMO-13"],
+                    human_decision_task_ids: ["HMAMO-14"],
+                  },
+                },
+              }).message,
+              handoffDegraded: workbench.describeHandoffProtocolState({
+                ...base,
+                agent_assignments: {
+                  ...base.agent_assignments,
+                  handoff_protocol: {
+                    ...base.agent_assignments.handoff_protocol,
+                    degraded_reason: "task_contract_parse_error",
+                  },
+                },
+              }).label,
+              handoffMissing: workbench.describeHandoffProtocolState(null).tone,
               planMissing: workbench.describeParallelAssignmentPlanState(null).tone,
               persistenceMissing: workbench.describeRuntimePersistenceState(null).tone,
               offlineTone: workbench.describeMemoryWorkbenchState("offline", null).tone,
@@ -1488,6 +1548,12 @@ def test_run_inspector_memory_workbench_describes_all_states() -> None:
     assert payload["planReady"] == "2 tasks / 1 batches"
     assert payload["planSequenced"] == "warning"
     assert payload["planDegraded"] == "Plan degraded"
+    assert payload["handoffQuiet"] == "Handoff quiet"
+    assert payload["handoffReady"] == "1 ready"
+    assert payload["handoffVerify"] == "warning"
+    assert payload["handoffBlocked"] == "1 blocked / 1 human"
+    assert payload["handoffDegraded"] == "Handoff degraded"
+    assert payload["handoffMissing"] == "muted"
     assert payload["planMissing"] == "muted"
     assert payload["persistenceMissing"] == "muted"
     assert payload["offlineTone"] == "destructive"
@@ -1510,19 +1576,25 @@ def test_run_inspector_memory_workbench_uses_readonly_api() -> None:
     assert "Multi-Agent Memory" in page_source
     assert "describeRuntimePersistenceState" in page_source
     assert "describeAgentAssignmentState" in page_source
+    assert "describeHandoffProtocolState" in page_source
     assert "describeParallelAssignmentPlanState" in page_source
     assert 'label="Persistence"' in page_source
     assert 'label="Assignments"' in page_source
+    assert 'label="Handoff"' in page_source
     assert 'label="Plan"' in page_source
     assert "parallelPlan?.batches.length" in page_source
     assert "api.getRunInspectorMemoryWorkbench" in hook_source
     assert "runtime_persistence" in api_source
     assert "agent_assignments" in api_source
+    assert "handoff_protocol" in api_source
     assert "parallel_plan" in api_source
     assert "describeRuntimePersistenceState" in (
         ROOT / "web" / "src" / "pages" / "runInspectorMemoryWorkbench.ts"
     ).read_text(encoding="utf-8")
     assert "describeAgentAssignmentState" in (
+        ROOT / "web" / "src" / "pages" / "runInspectorMemoryWorkbench.ts"
+    ).read_text(encoding="utf-8")
+    assert "describeHandoffProtocolState" in (
         ROOT / "web" / "src" / "pages" / "runInspectorMemoryWorkbench.ts"
     ).read_text(encoding="utf-8")
     assert "describeParallelAssignmentPlanState" in (

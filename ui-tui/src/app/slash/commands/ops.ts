@@ -444,6 +444,7 @@ const renderRunInspectorMemoryWorkbenchSummary = (
   const assignments = workbench?.agent_assignments
   const summary = assignments?.summary
   const plan = assignments?.parallel_plan
+  const handoff = assignments?.handoff_protocol
   const plannedTasks = plannedInspectorTaskCount(plan)
   const rows: [string, string][] = [
     [
@@ -478,6 +479,12 @@ const renderRunInspectorMemoryWorkbenchSummary = (
         : `${inspectorListCount(summary?.conflicts)} pairs`
     ],
     [
+      'Handoff',
+      handoff
+        ? `${inspectorListCount(handoff.ready_task_ids)} ready / ${inspectorListCount(handoff.verification_missing_task_ids)} verify / ${inspectorListCount(handoff.reviewer_required_task_ids)} review`
+        : 'unknown'
+    ],
+    [
       'Memory',
       `${workbench?.memory?.status ?? 'unknown'} / ${workbench?.memory?.provider_count ?? 0} providers`
     ],
@@ -492,6 +499,7 @@ const renderRunInspectorMemoryWorkbenchSummary = (
     assignments?.degraded_reason ||
     summary?.degraded_reason ||
     plan?.degraded_reason ||
+    handoff?.degraded_reason ||
     workbench?.memory?.degraded_reason ||
     workbench?.runtime_persistence?.degraded_reason
   if (degraded) {
@@ -555,6 +563,29 @@ const renderRunInspectorAssignmentPlanRows = (
   rows.push(['Sequenced', renderInspectorTaskIds(plan.conflict_task_ids)])
   if (plan.degraded_reason) {
     rows.push(['Plan degraded', clipInspectorText(plan.degraded_reason)])
+  }
+  return rows
+}
+
+const renderRunInspectorHandoffRows = (
+  workbench?: null | RunInspectorMemoryWorkbench
+): [string, string][] => {
+  const handoff = workbench?.agent_assignments?.handoff_protocol
+  if (!handoff) {
+    return [['Handoff', 'none']]
+  }
+
+  const rows: [string, string][] = [
+    ['Status', clipInspectorText(handoff.status, 'unknown', 48)],
+    ['Ready', renderInspectorTaskIds(handoff.ready_task_ids)],
+    ['Needs verification', renderInspectorTaskIds(handoff.verification_missing_task_ids)],
+    ['Needs review', renderInspectorTaskIds(handoff.reviewer_required_task_ids)],
+    ['Human decision', renderInspectorTaskIds(handoff.human_decision_task_ids)],
+    ['Blocked', renderInspectorTaskIds(handoff.blocked_task_ids)],
+    ['Conflicts', renderInspectorTaskIds(handoff.conflict_task_ids)]
+  ]
+  if (handoff.degraded_reason) {
+    rows.push(['Handoff degraded', clipInspectorText(handoff.degraded_reason)])
   }
   return rows
 }
@@ -1000,6 +1031,10 @@ export const opsCommands: SlashCommand[] = [
               {
                 rows: renderRunInspectorAssignmentPlanRows(r?.workbench),
                 title: 'Parallel Plan'
+              },
+              {
+                rows: renderRunInspectorHandoffRows(r?.workbench),
+                title: 'Handoff'
               },
               {
                 text: 'read-only memory workbench; no agent spawn, tool dispatch, memory write, skill edit, config edit, or task mutation'

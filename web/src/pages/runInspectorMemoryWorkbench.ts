@@ -216,3 +216,56 @@ export function describeParallelAssignmentPlanState(
     tone: "muted",
   };
 }
+
+export function describeHandoffProtocolState(
+  workbench: RunInspectorMemoryWorkbench | null,
+): MemoryWorkbenchDisplay {
+  const handoff = workbench?.agent_assignments?.handoff_protocol ?? null;
+  if (!handoff) {
+    return {
+      label: "Handoff unknown",
+      message: "No handoff summary",
+      tone: "muted",
+    };
+  }
+  if (handoff.degraded_reason) {
+    return {
+      label: "Handoff degraded",
+      message: handoff.degraded_reason,
+      tone: "warning",
+    };
+  }
+  if (handoff.blocked_task_ids.length > 0 || handoff.human_decision_task_ids.length > 0) {
+    return {
+      label: "Handoff blocked",
+      message: `${handoff.blocked_task_ids.length} blocked / ${handoff.human_decision_task_ids.length} human`,
+      tone: "destructive",
+    };
+  }
+  if (handoff.verification_missing_task_ids.length > 0) {
+    return {
+      label: "Handoff verify",
+      message: `${handoff.verification_missing_task_ids.length} missing verification`,
+      tone: "warning",
+    };
+  }
+  if (handoff.reviewer_required_task_ids.length > 0) {
+    return {
+      label: "Handoff review",
+      message: `${handoff.reviewer_required_task_ids.length} reviewer gates`,
+      tone: "warning",
+    };
+  }
+  if (handoff.ready_task_ids.length > 0) {
+    return {
+      label: "Handoff ready",
+      message: `${handoff.ready_task_ids.length} ready`,
+      tone: "success",
+    };
+  }
+  return {
+    label: "Handoff quiet",
+    message: "No handoff gates",
+    tone: "muted",
+  };
+}

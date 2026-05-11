@@ -790,9 +790,25 @@ export interface RunInspectorMemoryWorkbenchAgentAssignmentPlan {
   privacy_class: string;
 }
 
+export interface RunInspectorMemoryWorkbenchHandoffProtocol {
+  schema_version: number;
+  status: string;
+  handoff_task_ids: string[];
+  ready_task_ids: string[];
+  blocked_task_ids: string[];
+  verification_missing_task_ids: string[];
+  reviewer_required_task_ids: string[];
+  human_decision_task_ids: string[];
+  conflict_task_ids: string[];
+  policy_counts: Record<string, number>;
+  degraded_reason: string | null;
+  privacy_class: string;
+}
+
 export interface RunInspectorMemoryWorkbenchAgentAssignments {
   summary: RunInspectorMemoryWorkbenchAgentAssignmentSummary;
   parallel_plan?: RunInspectorMemoryWorkbenchAgentAssignmentPlan;
+  handoff_protocol?: RunInspectorMemoryWorkbenchHandoffProtocol;
   assignments: RunInspectorMemoryWorkbenchAgentAssignment[];
   degraded_reason: string | null;
   privacy_class: string;

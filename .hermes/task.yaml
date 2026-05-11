@@ -1508,6 +1508,28 @@ tasks:
     status: completed
     risk: medium
 
+  - id: HMAMO-13
+    title: Render handoff protocol operator summaries
+    description: Surface handoff protocol readiness and gate counts in Run Inspector and TUI memory workbench views.
+    depends_on:
+      - HMAMO-11
+      - HMAMO-12
+    acceptance:
+      - Frontend API and TUI types include agent_assignments.handoff_protocol.
+      - Run Inspector Multi-Agent Memory card shows Handoff state and bounded ready, verification, and reviewer gate counts.
+      - TUI /inspector-memory shows a Handoff section with safe task ids and degraded metadata.
+      - UI and TUI do not render raw handoff payloads, prompts, logs, tool args, diffs, secrets, absolute paths, or file contents.
+      - Slice does not add start, stop, spawn, approve, write memory, edit skill, edit config, or task mutation controls.
+    verify:
+      - venv/Scripts/python.exe -m pytest tests/web/test_run_inspector_status_policy.py -q -o addopts=
+      - cd ui-tui; npm.cmd test -- createSlashHandler.test.ts
+      - cd ui-tui; npm.cmd run type-check
+      - cd web; npm.cmd run build
+      - venv/Scripts/python.exe -c "import yaml; yaml.safe_load(open('.hermes/task.yaml', encoding='utf-8'))"
+      - git diff --check -- web/src/lib/api.ts web/src/pages/runInspectorMemoryWorkbench.ts web/src/pages/RunInspectorPage.tsx tests/web/test_run_inspector_status_policy.py ui-tui/src/gatewayTypes.ts ui-tui/src/app/slash/commands/ops.ts ui-tui/src/__tests__/createSlashHandler.test.ts .hermes/task.yaml
+    status: completed
+    risk: medium
+
 risk_flags:
   destructive_file_change:
     pause: true
@@ -2468,6 +2490,20 @@ progress_report:
       verification_result: "passed: venv/Scripts/python.exe -m pytest tests/runtime/test_agent_task_assignment.py tests/runtime/test_multi_agent_memory_workbench.py tests/hermes_cli/test_run_inspector_api.py -q -o addopts= (35 passed); passed: venv/Scripts/python.exe -c yaml.safe_load task.yaml; passed: git diff --check for HMAMO-12 files"
       blockers: []
       next_step: "Expose handoff_protocol in frontend/TUI operator summaries, then evaluate real orchestration ledger integration."
+    - task_id: HMAMO-13
+      status: completed
+      changed_files:
+        - web/src/lib/api.ts
+        - web/src/pages/runInspectorMemoryWorkbench.ts
+        - web/src/pages/RunInspectorPage.tsx
+        - tests/web/test_run_inspector_status_policy.py
+        - ui-tui/src/gatewayTypes.ts
+        - ui-tui/src/app/slash/commands/ops.ts
+        - ui-tui/src/__tests__/createSlashHandler.test.ts
+        - .hermes/task.yaml
+      verification_result: "passed: venv/Scripts/python.exe -m pytest tests/web/test_run_inspector_status_policy.py -q -o addopts= (27 passed); passed: cd ui-tui; npm.cmd test -- createSlashHandler.test.ts (100 passed); passed: cd ui-tui; npm.cmd run type-check; passed: cd ui-tui; npm.cmd run build; passed: cd web; npm.cmd run build; passed: venv/Scripts/python.exe -c yaml.safe_load task.yaml; passed: git diff --check for HMAMO-13 files"
+      blockers: []
+      next_step: "Begin real orchestration ledger integration for safe task lifecycle events, or add browser smoke for handoff UI layout."
 
 failure_review:
   enabled: true

@@ -14,6 +14,7 @@ import {
   Clock,
   Database,
   FileWarning,
+  Handshake,
   Link,
   Monitor,
   Play,
@@ -89,6 +90,7 @@ import {
 } from "@/pages/runInspectorDesktopStatus";
 import {
   describeAgentAssignmentState,
+  describeHandoffProtocolState,
   describeMemoryWorkbenchState,
   describeParallelAssignmentPlanState,
   describeRuntimePersistenceState,
@@ -689,9 +691,11 @@ function MultiAgentMemoryWorkbenchCard({
   const journal = workbench?.skills_journal ?? null;
   const runtimePersistence = workbench?.runtime_persistence ?? null;
   const assignmentSummary = workbench?.agent_assignments?.summary ?? null;
+  const handoffProtocol = workbench?.agent_assignments?.handoff_protocol ?? null;
   const parallelPlan = workbench?.agent_assignments?.parallel_plan ?? null;
   const runtimePersistenceDisplay = describeRuntimePersistenceState(workbench);
   const assignmentDisplay = describeAgentAssignmentState(workbench);
+  const handoffDisplay = describeHandoffProtocolState(workbench);
   const parallelPlanDisplay = describeParallelAssignmentPlanState(workbench);
   const runtimePersistenceFlags = runtimePersistence?.flags ?? [];
   const providers = memory?.providers ?? [];
@@ -736,7 +740,7 @@ function MultiAgentMemoryWorkbenchCard({
           </div>
         ) : null}
 
-        <div className="grid min-w-0 gap-2 sm:grid-cols-2 xl:grid-cols-7">
+        <div className="grid min-w-0 gap-2 sm:grid-cols-2 xl:grid-cols-8">
           <Metric
             icon={<Activity className="h-4 w-4" />}
             label="Work"
@@ -773,6 +777,12 @@ function MultiAgentMemoryWorkbenchCard({
             value={assignmentDisplay.label}
           />
           <Metric
+            icon={<Handshake className="h-4 w-4" />}
+            label="Handoff"
+            tone={handoffDisplay.tone}
+            value={handoffDisplay.label}
+          />
+          <Metric
             icon={<Link className="h-4 w-4" />}
             label="Plan"
             tone={parallelPlanDisplay.tone}
@@ -780,8 +790,8 @@ function MultiAgentMemoryWorkbenchCard({
           />
         </div>
 
-        {assignmentSummary || parallelPlan ? (
-          <div className="grid min-w-0 gap-2 sm:grid-cols-2">
+        {assignmentSummary || parallelPlan || handoffProtocol ? (
+          <div className="grid min-w-0 gap-2 sm:grid-cols-3">
             <div className="flex min-w-0 flex-col divide-y divide-border/70 border border-border">
               <DetailRow
                 label="Ready"
@@ -810,6 +820,24 @@ function MultiAgentMemoryWorkbenchCard({
               <DetailRow
                 label="Sequenced"
                 value={String(parallelPlan?.conflict_task_ids.length ?? 0)}
+              />
+            </div>
+            <div className="flex min-w-0 flex-col divide-y divide-border/70 border border-border">
+              <DetailRow
+                label="Handoff ready"
+                value={String(handoffProtocol?.ready_task_ids.length ?? 0)}
+              />
+              <DetailRow
+                label="Needs verify"
+                value={String(
+                  handoffProtocol?.verification_missing_task_ids.length ?? 0,
+                )}
+              />
+              <DetailRow
+                label="Needs review"
+                value={String(
+                  handoffProtocol?.reviewer_required_task_ids.length ?? 0,
+                )}
               />
             </div>
           </div>
