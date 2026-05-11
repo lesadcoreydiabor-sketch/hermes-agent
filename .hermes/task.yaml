@@ -967,7 +967,7 @@ tasks:
       - No helper edits SKILL.md, config, prompts, or provider state automatically.
     verify:
       - venv/Scripts/python.exe -m pytest tests/runtime/test_learning_journal.py -q -o addopts=
-    status: pending
+    status: completed
     risk: medium
 
   - id: HMAM-08
@@ -1730,6 +1730,15 @@ progress_report:
       verification_result: "passed: venv/Scripts/python.exe -m pytest tests/runtime/test_working_checkpoint.py -q -o addopts= (7 passed); working checkpoint generation is pure, bounded, redacted, and degrades on missing or broken ledger data"
       blockers: []
       next_step: "Implement HMAM-07 long-term queue and skills journal schema helpers before wiring Run Inspector workbench UI."
+    - task_id: HMAM-07
+      status: completed
+      changed_files:
+        - hermes_cli/learning_journal.py
+        - tests/runtime/test_learning_journal.py
+        - .hermes/task.yaml
+      verification_result: "passed: venv/Scripts/python.exe -m pytest tests/runtime/test_learning_journal.py -q -o addopts= (9 passed); queue and journal helpers are review-gated, redacted, explicit-write only, and do not edit SKILL.md or runtime providers"
+      blockers: []
+      next_step: "Implement HMAM-08 Run Inspector multi-agent memory workbench using read-only summaries from HMAM-03 through HMAM-07."
 
 failure_review:
   enabled: true
