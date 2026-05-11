@@ -511,6 +511,130 @@ class TestToolNamePreservation(unittest.TestCase):
         self.assertEqual(captured["saved"], expected_tools)
 
 
+class TestDelegateRunInspectorEvents(unittest.TestCase):
+    """Run Inspector multi-agent event mirroring stays best-effort and safe."""
+
+    def setUp(self):
+        from hermes_cli.run_inspector_events import clear_run_inspector_events_for_tests
+
+        clear_run_inspector_events_for_tests()
+
+    def tearDown(self):
+        from hermes_cli.run_inspector_events import clear_run_inspector_events_for_tests
+
+        clear_run_inspector_events_for_tests()
+
+    def _mock_child(self, response):
+        mock_child = MagicMock()
+        mock_child.model = "claude-sonnet-4-6"
+        mock_child.session_prompt_tokens = 0
+        mock_child.session_completion_tokens = 0
+        mock_child.session_estimated_cost_usd = 0.0
+        mock_child.run_conversation.return_value = response
+        return mock_child
+
+    def _event_types(self):
+        from hermes_cli.run_inspector_events import get_recent_run_inspector_events
+
+        return [event["type"] for event in get_recent_run_inspector_events(20)]
+
+    def test_successful_child_lifecycle_is_mirrored_without_goal_text(self):
+        from hermes_cli.run_inspector_events import get_recent_run_inspector_events
+
+        parent = _make_mock_parent(depth=0)
+        parent._current_task_id = "parent-work"
+        raw_goal = "Inspect token=super-secret and C:\\Users\\XQQ\\secret.txt"
+
+        with patch("run_agent.AIAgent") as MockAgent:
+            MockAgent.return_value = self._mock_child(
+                {
+                    "final_response": "done",
+                    "completed": True,
+                    "interrupted": False,
+                    "api_calls": 1,
+                    "messages": [],
+                }
+            )
+
+            result = json.loads(delegate_task(goal=raw_goal, parent_agent=parent))
+
+        self.assertEqual(result["results"][0]["status"], "completed")
+        events = get_recent_run_inspector_events(20)
+        self.assertEqual(
+            [event["type"] for event in events],
+            [
+                "agent.child.spawned",
+                "agent.child.running",
+                "agent.child.completed",
+            ],
+        )
+        self.assertTrue(all(event["source"] == "multi_agent" for event in events))
+        self.assertTrue(all(event["run_id"].startswith("sa-0-") for event in events))
+        self.assertTrue(all(event["session_id"] == "parent-work" for event in events))
+        combined_messages = " ".join(str(event.get("message") or "") for event in events)
+        self.assertNotIn("super-secret", combined_messages)
+        self.assertNotIn("secret.txt", combined_messages)
+
+    def test_failed_child_lifecycle_is_mirrored(self):
+        parent = _make_mock_parent(depth=0)
+
+        with patch("run_agent.AIAgent") as MockAgent:
+            MockAgent.return_value = self._mock_child(
+                {
+                    "final_response": "",
+                    "completed": False,
+                    "interrupted": False,
+                    "api_calls": 2,
+                    "messages": [],
+                }
+            )
+
+            result = json.loads(delegate_task(goal="fail safely", parent_agent=parent))
+
+        self.assertEqual(result["results"][0]["status"], "failed")
+        self.assertIn("agent.child.failed", self._event_types())
+
+    def test_interrupted_child_lifecycle_is_mirrored(self):
+        parent = _make_mock_parent(depth=0)
+
+        with patch("run_agent.AIAgent") as MockAgent:
+            MockAgent.return_value = self._mock_child(
+                {
+                    "final_response": "",
+                    "completed": False,
+                    "interrupted": True,
+                    "api_calls": 2,
+                    "messages": [],
+                }
+            )
+
+            result = json.loads(delegate_task(goal="interrupt safely", parent_agent=parent))
+
+        self.assertEqual(result["results"][0]["status"], "interrupted")
+        self.assertIn("agent.child.interrupted", self._event_types())
+
+    def test_event_recorder_failure_does_not_fail_delegation(self):
+        parent = _make_mock_parent(depth=0)
+
+        with patch("run_agent.AIAgent") as MockAgent, patch(
+            "hermes_cli.run_inspector_events.record_run_inspector_event",
+            side_effect=RuntimeError("ledger unavailable"),
+        ):
+            MockAgent.return_value = self._mock_child(
+                {
+                    "final_response": "done",
+                    "completed": True,
+                    "interrupted": False,
+                    "api_calls": 1,
+                    "messages": [],
+                }
+            )
+
+            result = json.loads(delegate_task(goal="keep working", parent_agent=parent))
+
+        self.assertEqual(result["results"][0]["status"], "completed")
+
+
 class TestDelegateObservability(unittest.TestCase):
     """Tests for enriched metadata returned by _run_single_child."""
 
@@ -1625,7 +1749,7 @@ class TestDelegateHeartbeat(unittest.TestCase):
             # Long enough to exceed the OLD idle threshold (5 cycles) at
             # the patched interval, but shorter than the new in-tool
             # threshold.
-            time.sleep(0.4)
+            time.sleep(0.5)
             return {"final_response": "done", "completed": True, "api_calls": 1}
 
         child.run_conversation.side_effect = slow_run
@@ -1649,7 +1773,7 @@ class TestDelegateHeartbeat(unittest.TestCase):
         self.assertGreater(
             len(touch_calls), 6,
             f"Heartbeat stopped too early while child was inside a tool; "
-            f"got {len(touch_calls)} touches over 0.4s at 0.05s interval",
+            f"got {len(touch_calls)} touches over 0.5s at 0.05s interval",
         )
 
 

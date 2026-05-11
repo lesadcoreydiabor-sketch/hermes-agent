@@ -216,6 +216,67 @@ def list_active_subagents() -> List[Dict[str, Any]]:
         ]
 
 
+def _safe_str_attr(obj: Any, name: str) -> Optional[str]:
+    try:
+        value = getattr(obj, name, None)
+    except Exception:
+        return None
+    return value if isinstance(value, str) else None
+
+
+def _record_multi_agent_work_event(
+    event_type: str,
+    *,
+    task_index: int,
+    child: Any = None,
+    parent_agent: Any = None,
+    work_id: Optional[str] = None,
+    status: Optional[str] = None,
+    message: Optional[str] = None,
+) -> None:
+    """Best-effort bridge from delegation lifecycle to Run Inspector events."""
+
+    try:
+        from hermes_cli.multi_agent_work_events import (
+            build_multi_agent_work_event,
+            multi_agent_event_to_run_inspector_kwargs,
+        )
+        from hermes_cli.run_inspector_events import record_run_inspector_event
+
+        child_id = _safe_str_attr(child, "_subagent_id")
+        parent_work_id = (
+            _safe_str_attr(parent_agent, "_current_task_id")
+            or _safe_str_attr(parent_agent, "session_id")
+        )
+        parent_agent_id = (
+            _safe_str_attr(child, "_parent_subagent_id")
+            or _safe_str_attr(parent_agent, "_subagent_id")
+            or _safe_str_attr(parent_agent, "session_id")
+        )
+        role = _safe_str_attr(child, "_delegate_role")
+        try:
+            depth = getattr(child, "_delegate_depth", None)
+        except Exception:
+            depth = None
+
+        event = build_multi_agent_work_event(
+            event_type,
+            work_id=child_id or work_id or f"subagent-{task_index}",
+            parent_work_id=parent_work_id,
+            agent_id=child_id,
+            parent_agent_id=parent_agent_id,
+            role=role,
+            title=f"Subagent {task_index}",
+            message=message,
+            status=status,
+            depth=depth,
+            source="delegate_task",
+        )
+        record_run_inspector_event(**multi_agent_event_to_run_inspector_kwargs(event))
+    except Exception:
+        logger.debug("multi-agent work event recording failed", exc_info=True)
+
+
 def _extract_output_tail(
     result: Dict[str, Any],
     *,
@@ -1464,6 +1525,15 @@ def _run_single_child(
         import uuid as _uuid
 
         child_task_id = _subagent_id or f"subagent-{task_index}-{_uuid.uuid4().hex[:8]}"
+        _record_multi_agent_work_event(
+            "child_running",
+            task_index=task_index,
+            child=child,
+            parent_agent=parent_agent,
+            work_id=child_task_id,
+            status="running",
+            message="child running",
+        )
         parent_task_id = getattr(parent_agent, "_current_task_id", None)
         wall_start = time.time()
         parent_reads_snapshot = (
@@ -1575,6 +1645,16 @@ def _run_single_child(
                     )
             else:
                 _err = str(_timeout_exc)
+
+            _record_multi_agent_work_event(
+                "child_timeout" if is_timeout else "child_failed",
+                task_index=task_index,
+                child=child,
+                parent_agent=parent_agent,
+                work_id=child_task_id,
+                status="timeout" if is_timeout else "failed",
+                message="child timeout" if is_timeout else "child failed",
+            )
 
             return {
                 "task_index": task_index,
@@ -1797,6 +1877,22 @@ def _run_single_child(
             except Exception as e:
                 logger.debug("Progress callback completion failed: %s", e)
 
+        if status == "interrupted":
+            _event_type = "child_interrupted"
+        elif status == "completed":
+            _event_type = "child_completed"
+        else:
+            _event_type = "child_failed"
+        _record_multi_agent_work_event(
+            _event_type,
+            task_index=task_index,
+            child=child,
+            parent_agent=parent_agent,
+            work_id=child_task_id,
+            status=status,
+            message=f"child {status}",
+        )
+
         return entry
 
     except Exception as exc:
@@ -1813,6 +1909,14 @@ def _run_single_child(
                 )
             except Exception as e:
                 logger.debug("Progress callback failure relay failed: %s", e)
+        _record_multi_agent_work_event(
+            "child_failed",
+            task_index=task_index,
+            child=child,
+            parent_agent=parent_agent,
+            status="failed",
+            message="child failed",
+        )
         return {
             "task_index": task_index,
             "status": "error",
@@ -2064,6 +2168,14 @@ def delegate_task(
             # Override with correct parent tool names (before child construction mutated global)
             child._delegate_saved_tool_names = _parent_tool_names
             children.append((i, t, child))
+            _record_multi_agent_work_event(
+                "child_spawned",
+                task_index=i,
+                child=child,
+                parent_agent=parent_agent,
+                status="queued",
+                message="child spawned",
+            )
     finally:
         # Authoritative restore: reset global to parent's tool names after all children built
         _model_tools._last_resolved_tool_names = _parent_tool_names
