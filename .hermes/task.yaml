@@ -1091,6 +1091,24 @@ tasks:
     status: completed
     risk: medium
 
+  - id: HMAMR-03
+    title: Refresh working checkpoint from delegate lifecycle
+    description: Wire delegate lifecycle to refresh working_checkpoint.json only when explicitly enabled, using safe task and action ledger summaries.
+    depends_on:
+      - HMAMR-01
+      - HMAMR-02
+    acceptance:
+      - Delegate lifecycle refreshes .hermes/working_checkpoint.json only when HERMES_DELEGATE_WORKING_CHECKPOINT is truthy.
+      - HERMES_DELEGATE_ACTION_LEDGER alone does not create working_checkpoint.json.
+      - Checkpoint refresh failures are swallowed and do not alter delegate_task return structure, depth limits, interruption behavior, or cost rollup.
+      - Persisted checkpoint excludes raw goal text, raw child summaries, tool args, command output, paths, diffs, and secret-looking values.
+    verify:
+      - venv/Scripts/python.exe -m pytest tests/tools/test_delegate.py tests/runtime/test_working_checkpoint.py tests/runtime/test_action_ledger.py tests/runtime/test_multi_agent_work_events.py tests/agent/test_subagent_stop_hook.py -q -o addopts=
+      - venv/Scripts/python.exe -c "import yaml; yaml.safe_load(open('.hermes/task.yaml', encoding='utf-8'))"
+      - git diff --check -- tools/delegate_tool.py tests/tools/test_delegate.py .hermes/task.yaml
+    status: completed
+    risk: high
+
 risk_flags:
   destructive_file_change:
     pause: true
@@ -1842,6 +1860,15 @@ progress_report:
       verification_result: "passed: venv/Scripts/python.exe -m pytest tests/runtime/test_working_checkpoint.py tests/runtime/test_action_ledger.py -q -o addopts= (17 passed); passed: venv/Scripts/python.exe -c yaml.safe_load task.yaml; passed: git diff --check for HMAMR-02 files"
       blockers: []
       next_step: "Wire checkpoint refresh to delegate lifecycle only behind an explicit opt-in after reviewing delegate impact."
+    - task_id: HMAMR-03
+      status: completed
+      changed_files:
+        - tools/delegate_tool.py
+        - tests/tools/test_delegate.py
+        - .hermes/task.yaml
+      verification_result: "passed: venv/Scripts/python.exe -m pytest tests/tools/test_delegate.py tests/runtime/test_working_checkpoint.py tests/runtime/test_action_ledger.py tests/runtime/test_multi_agent_work_events.py tests/agent/test_subagent_stop_hook.py -q -o addopts= (166 passed); passed: venv/Scripts/python.exe -c yaml.safe_load task.yaml"
+      blockers: []
+      next_step: "Review long-term queue runtime candidate capture behind explicit opt-in without auto-accepting memory or skill changes."
 
 failure_review:
   enabled: true

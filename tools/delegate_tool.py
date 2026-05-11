@@ -131,6 +131,7 @@ MAX_DEPTH = 1  # flat by default: parent (0) -> child (1); grandchild rejected u
 _MIN_SPAWN_DEPTH = 1
 _MAX_SPAWN_DEPTH_CAP = 3
 _DELEGATE_ACTION_LEDGER_ENV = "HERMES_DELEGATE_ACTION_LEDGER"
+_DELEGATE_WORKING_CHECKPOINT_ENV = "HERMES_DELEGATE_WORKING_CHECKPOINT"
 
 
 # ---------------------------------------------------------------------------
@@ -231,6 +232,12 @@ def _delegate_action_ledger_enabled() -> bool:
     return is_truthy_value(os.environ.get(_DELEGATE_ACTION_LEDGER_ENV, False))
 
 
+def _delegate_working_checkpoint_enabled() -> bool:
+    """Return whether delegate lifecycle events may refresh the checkpoint."""
+
+    return is_truthy_value(os.environ.get(_DELEGATE_WORKING_CHECKPOINT_ENV, False))
+
+
 def _append_delegate_action_ledger_event(
     event: Dict[str, Any],
     *,
@@ -260,6 +267,20 @@ def _append_delegate_action_ledger_event(
         )
     except Exception:
         logger.debug("delegate action ledger append failed", exc_info=True)
+
+
+def _refresh_delegate_working_checkpoint() -> None:
+    """Best-effort, opt-in checkpoint refresh from local task and ledger data."""
+
+    if not _delegate_working_checkpoint_enabled():
+        return
+
+    try:
+        from hermes_cli.working_checkpoint import write_working_checkpoint_from_files
+
+        write_working_checkpoint_from_files()
+    except Exception:
+        logger.debug("delegate working checkpoint refresh failed", exc_info=True)
 
 
 def _record_multi_agent_work_event(
@@ -311,6 +332,7 @@ def _record_multi_agent_work_event(
             source="delegate_task",
         )
         _append_delegate_action_ledger_event(event, task_id=parent_work_id)
+        _refresh_delegate_working_checkpoint()
         record_run_inspector_event(**multi_agent_event_to_run_inspector_kwargs(event))
     except Exception:
         logger.debug("multi-agent work event recording failed", exc_info=True)

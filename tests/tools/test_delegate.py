@@ -697,8 +697,12 @@ class TestDelegateRunInspectorEvents(unittest.TestCase):
                 .read_text(encoding="utf-8")
                 .splitlines()
             ]
+            checkpoint_exists = (
+                Path(tmpdir) / ".hermes" / "working_checkpoint.json"
+            ).exists()
 
         self.assertEqual(result["results"][0]["status"], "completed")
+        self.assertFalse(checkpoint_exists)
         self.assertEqual(
             [entry["event_type"] for entry in entries],
             [
@@ -711,6 +715,77 @@ class TestDelegateRunInspectorEvents(unittest.TestCase):
         serialized = json.dumps(entries, sort_keys=True)
         self.assertNotIn("super-secret", serialized)
         self.assertNotIn("secret.txt", serialized)
+
+    def test_delegate_task_can_opt_in_to_working_checkpoint_refresh(self):
+        parent = _make_mock_parent(depth=0)
+        parent._current_task_id = "parent-work"
+        raw_goal = "Investigate token=super-secret C:\\Users\\XQQ\\secret.txt"
+
+        with tempfile.TemporaryDirectory() as tmpdir, _temporary_cwd(tmpdir), patch.dict(
+            os.environ,
+            {
+                "HERMES_DELEGATE_ACTION_LEDGER": "1",
+                "HERMES_DELEGATE_WORKING_CHECKPOINT": "1",
+            },
+            clear=True,
+        ), patch("run_agent.AIAgent") as MockAgent:
+            hermes_dir = Path(tmpdir) / ".hermes"
+            hermes_dir.mkdir()
+            (hermes_dir / "task.yaml").write_text(
+                "capability: hermes-multi-agent-memory\n"
+                "tasks:\n"
+                "  - id: parent-work\n"
+                "    title: Delegate work\n"
+                "    status: running\n",
+                encoding="utf-8",
+            )
+            MockAgent.return_value = self._mock_child(
+                {
+                    "final_response": "done",
+                    "completed": True,
+                    "interrupted": False,
+                    "api_calls": 1,
+                    "messages": [],
+                }
+            )
+
+            result = json.loads(delegate_task(goal=raw_goal, parent_agent=parent))
+
+            checkpoint = json.loads(
+                (hermes_dir / "working_checkpoint.json").read_text(encoding="utf-8")
+            )
+
+        self.assertEqual(result["results"][0]["status"], "completed")
+        self.assertEqual(checkpoint["current_task_id"], "parent-work")
+        self.assertEqual(checkpoint["privacy_class"], "redacted_summary")
+        serialized = json.dumps(checkpoint, sort_keys=True)
+        self.assertNotIn("super-secret", serialized)
+        self.assertNotIn("secret.txt", serialized)
+
+    def test_working_checkpoint_refresh_failure_does_not_fail_delegation(self):
+        parent = _make_mock_parent(depth=0)
+
+        with tempfile.TemporaryDirectory() as tmpdir, _temporary_cwd(tmpdir), patch.dict(
+            os.environ,
+            {"HERMES_DELEGATE_WORKING_CHECKPOINT": "1"},
+            clear=True,
+        ), patch("run_agent.AIAgent") as MockAgent, patch(
+            "hermes_cli.working_checkpoint.write_working_checkpoint_from_files",
+            side_effect=RuntimeError("checkpoint unavailable"),
+        ):
+            MockAgent.return_value = self._mock_child(
+                {
+                    "final_response": "done",
+                    "completed": True,
+                    "interrupted": False,
+                    "api_calls": 1,
+                    "messages": [],
+                }
+            )
+
+            result = json.loads(delegate_task(goal="keep working", parent_agent=parent))
+
+        self.assertEqual(result["results"][0]["status"], "completed")
 
     def test_action_ledger_write_is_opt_in_and_redacted(self):
         parent = _make_mock_parent(depth=0)
