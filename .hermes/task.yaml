@@ -726,7 +726,7 @@ tasks:
     verify:
       - venv/Scripts/python.exe -m pytest tests/runtime/test_run_inspector_attention.py -q -o addopts=
       - git diff --check -- hermes_cli/run_inspector_attention.py tests/runtime/test_run_inspector_attention.py .hermes/task.yaml
-    status: pending
+    status: completed
     risk: medium
 
   - id: HRIDS-08
@@ -1284,6 +1284,15 @@ progress_report:
       verification_result: "passed: venv/Scripts/python.exe -c yaml.safe_load task.yaml; passed: git diff --check for HRIDS-06 docs/task files; GitNexus detect_changes risk low with no affected processes"
       blockers: []
       next_step: "HRIDS-06 desktop attention notification PRD drafted; verify, commit, push, then implement HRIDS-07 redacted attention signal policy."
+    - task_id: HRIDS-07
+      status: completed
+      changed_files:
+        - hermes_cli/run_inspector_attention.py
+        - tests/runtime/test_run_inspector_attention.py
+        - .hermes/task.yaml
+      verification_result: "passed: venv/Scripts/python.exe -m pytest tests/runtime/test_run_inspector_attention.py tests/runtime/test_run_inspector_events.py tests/runtime/test_run_snapshot_schema.py tests/runtime/test_run_snapshot_redaction.py -q -o addopts= (24 passed); passed: venv/Scripts/python.exe -c yaml.safe_load task.yaml; passed: git diff --cached --check for HRIDS-07 files; GitNexus detect_changes staged risk low with no affected processes"
+      blockers: []
+      next_step: "HRIDS-07 redacted attention signal policy implemented locally; verify, commit, push, then implement HRIDS-08 Run Inspector attention preview."
 
 failure_review:
   enabled: true
@@ -1396,4 +1405,12 @@ failure_review:
       what_changed: "Forced the POSIX branch for ps-output tests, added POSIX and Windows desktop process-scan coverage, and kept desktop status/start tests isolated from real dashboard dependencies."
       how_it_was_verified: "Re-ran venv/Scripts/python.exe -m pytest tests/hermes_cli/test_desktop_shell.py tests/hermes_cli/test_dashboard_lifecycle_flags.py tests/hermes_cli/test_update_stale_dashboard.py -q -o addopts= and got 33 passed, 5 skipped."
       added_eval_or_badcase: "tests/hermes_cli/test_desktop_shell.py::test_windows_process_scan_includes_hermes_desktop"
+      blocker: false
+    - trigger: failed_verification
+      task_id: HRIDS-07
+      what_happened: "Initial HRIDS-07 attention policy tests failed because event fixtures were older than the default TTL and token=super-secret was not redacted in identifier fields."
+      why_it_failed: "The event tests relied on wall-clock time instead of a fixed now, and identifier sanitization delegated to redact_sensitive_text without an explicit token=... guard."
+      what_changed: "Passed a fixed now into event attention tests and added an explicit secret-like identifier regex before normalizing run_id/session_id."
+      how_it_was_verified: "Re-ran venv/Scripts/python.exe -m pytest tests/runtime/test_run_inspector_attention.py -q -o addopts= and got 7 passed."
+      added_eval_or_badcase: "tests/runtime/test_run_inspector_attention.py::test_build_attention_signals_sanitizes_identifiers_route_and_missing_state"
       blocker: false
