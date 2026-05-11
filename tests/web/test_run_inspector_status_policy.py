@@ -751,7 +751,19 @@ def test_run_inspector_desktop_shell_status_describes_states():
             };
             const states = {
               running: desktopStatus.describeDesktopShellStatus("ready", baseStatus),
+              headerRunning: desktopStatus.describeDesktopShellHeaderSignal("ready", baseStatus),
               compatible: desktopStatus.describeDesktopShellStatus("ready", {
+                ...baseStatus,
+                record_present: false,
+                pid: null,
+                pid_status: "none",
+                pid_reason: "no_record",
+                compatible_dashboard: true,
+                reuse_command: "hermes desktop --port 9119",
+                manual_url: "http://127.0.0.1:9119/run-inspector",
+                stop_command: "hermes dashboard --stop",
+              }),
+              headerCompatible: desktopStatus.describeDesktopShellHeaderSignal("ready", {
                 ...baseStatus,
                 record_present: false,
                 pid: null,
@@ -767,7 +779,13 @@ def test_run_inspector_desktop_shell_status_describes_states():
                 pid_status: "stale",
                 pid_reason: "not_found",
               }),
+              headerStale: desktopStatus.describeDesktopShellHeaderSignal("ready", {
+                ...baseStatus,
+                pid_status: "stale",
+                pid_reason: "not_found",
+              }),
               offline: desktopStatus.describeDesktopShellStatus("offline", null),
+              headerOffline: desktopStatus.describeDesktopShellHeaderSignal("offline", null),
             };
             console.log(JSON.stringify(states));
             """
@@ -779,8 +797,18 @@ def test_run_inspector_desktop_shell_status_describes_states():
         "message": "Shell-owned dashboard",
         "tone": "success",
     }
+    assert payload["headerRunning"] == {
+        "label": "Desktop OK",
+        "message": "Shell-owned dashboard",
+        "tone": "success",
+    }
     assert payload["compatible"] == {
         "label": "Dashboard reusable",
+        "message": "No desktop runtime record",
+        "tone": "primary",
+    }
+    assert payload["headerCompatible"] == {
+        "label": "Desktop reuse",
         "message": "No desktop runtime record",
         "tone": "primary",
     }
@@ -789,7 +817,14 @@ def test_run_inspector_desktop_shell_status_describes_states():
         "message": "not_found",
         "tone": "warning",
     }
+    assert payload["headerStale"] == {
+        "label": "Desktop attention",
+        "message": "not_found",
+        "tone": "warning",
+    }
     assert payload["offline"]["tone"] == "destructive"
+    assert payload["headerOffline"]["label"] == "Desktop offline"
+    assert payload["headerOffline"]["tone"] == "destructive"
 
 
 def test_run_inspector_gateway_controls_follow_run_state_and_events():
@@ -1124,6 +1159,10 @@ def test_run_inspector_desktop_status_uses_safe_readonly_api() -> None:
 
     assert "useRunInspectorDesktopStatus" in page_source
     assert "Desktop Shell" in page_source
+    assert "describeDesktopShellHeaderSignal" in page_source
+    assert "Desktop OK" in (
+        ROOT / "web" / "src" / "pages" / "runInspectorDesktopStatus.ts"
+    ).read_text(encoding="utf-8")
     assert "api.getRunInspectorDesktopStatus" in hook_source
     assert "/api/run-inspector/desktop-status?port=" in api_source
     assert "fetcher = api.getRunInspectorDesktopStatus" in hook_source

@@ -847,6 +847,24 @@ tasks:
     status: completed
     risk: medium
 
+  - id: HRIDR-05
+    title: Add desktop shell header signal
+    description: Promote desktop shell health to a compact Run Inspector header signal so users do not need to open the detail card first.
+    depends_on:
+      - HRIDR-04
+    acceptance:
+      - Run Inspector header shows a compact desktop shell status badge on desktop layouts.
+      - The detailed Desktop Shell card remains the source for URL, PID, reuse, and stop guidance.
+      - Narrow viewport layout does not overflow when the header signal is present.
+      - The UI does not start, stop, clear stale records, or mutate desktop, dashboard, gateway, or config state.
+    verify:
+      - venv/Scripts/python.exe -m pytest tests/web/test_run_inspector_status_policy.py -q -o addopts=
+      - cd web; npm.cmd run build
+      - Playwright smoke for /run-inspector desktop and narrow viewports
+      - git diff --check -- HRIDR-05 files
+    status: completed
+    risk: low
+
 risk_flags:
   destructive_file_change:
     pause: true
@@ -1441,6 +1459,16 @@ progress_report:
       verification_result: "passed: venv/Scripts/python.exe -m pytest tests/hermes_cli/test_desktop_shell.py tests/hermes_cli/test_run_inspector_api.py tests/web/test_run_inspector_status_policy.py -q -o addopts= (57 passed); passed: cd web; npm.cmd run build; passed: Playwright smoke for /run-inspector desktop and narrow viewports with Desktop Shell visible and no horizontal overflow; passed: GitNexus api_impact pre-change for web_server route file risk low; GitNexus detect_changes staged risk high due broad web_server.py/api.ts symbol attribution across existing status flows; reviewed as additive read-only desktop-status endpoint plus UI card with no start/stop/config mutation"
       blockers: []
       next_step: "HRIDR-04 desktop shell status surfaced in Run Inspector locally; run YAML/diff/GitNexus checks, stage, commit, push, then continue lifecycle reliability hardening."
+    - task_id: HRIDR-05
+      status: completed
+      changed_files:
+        - web/src/pages/runInspectorDesktopStatus.ts
+        - web/src/pages/RunInspectorPage.tsx
+        - tests/web/test_run_inspector_status_policy.py
+        - .hermes/task.yaml
+      verification_result: "passed: venv/Scripts/python.exe -m pytest tests/web/test_run_inspector_status_policy.py -q -o addopts= (25 passed); passed: cd web; npm.cmd run build; passed: Playwright smoke for /run-inspector desktop and narrow viewports with compact Desktop header signal visible on desktop and no horizontal overflow; passed: GitNexus detect_changes staged risk low with no affected processes"
+      blockers: []
+      next_step: "HRIDR-05 desktop shell header signal implemented locally; run YAML/diff/GitNexus checks, stage, commit, push, then continue lifecycle reliability hardening."
 
 failure_review:
   enabled: true

@@ -74,6 +74,7 @@ import {
   type RunInspectorAttentionState,
 } from "@/pages/runInspectorAttention";
 import {
+  describeDesktopShellHeaderSignal,
   describeDesktopShellStatus,
   type RunInspectorDesktopStatusState,
 } from "@/pages/runInspectorDesktopStatus";
@@ -137,6 +138,11 @@ export default function RunInspectorPage() {
   >(null);
   const { setAfterTitle, setEnd, setTitle } = usePageHeader();
   const stateDisplay = describeRunInspectorState(inspector.state, inspector.snapshot);
+  const desktopHeaderSignal = describeDesktopShellHeaderSignal(
+    desktopStatus.state,
+    desktopStatus.status,
+    desktopStatus.error,
+  );
   const gatewayControlState = describeGatewayRunControlState({
     events: eventStream.events,
     recentRuns: gatewayRuns,
@@ -354,9 +360,18 @@ export default function RunInspectorPage() {
   useLayoutEffect(() => {
     setTitle("Run Inspector");
     setAfterTitle(
-      <Badge tone={BADGE_TONE[stateDisplay.tone]} className="text-[10px]">
-        {stateDisplay.label}
-      </Badge>,
+      <span className="flex min-w-0 flex-wrap items-center gap-1.5">
+        <Badge tone={BADGE_TONE[stateDisplay.tone]} className="text-[10px]">
+          {stateDisplay.label}
+        </Badge>
+        <Badge
+          tone={BADGE_TONE[desktopHeaderSignal.tone]}
+          className="hidden max-w-[10rem] truncate text-[10px] sm:inline-flex"
+          title={desktopHeaderSignal.message}
+        >
+          {desktopHeaderSignal.label}
+        </Badge>
+      </span>,
     );
     setEnd(
       <div className="flex w-full min-w-0 items-center justify-end gap-2">
@@ -386,6 +401,9 @@ export default function RunInspectorPage() {
     inspector.isLoading,
     inspector.lastUpdatedAt,
     inspector.refresh,
+    desktopHeaderSignal.label,
+    desktopHeaderSignal.message,
+    desktopHeaderSignal.tone,
     setAfterTitle,
     setEnd,
     setTitle,

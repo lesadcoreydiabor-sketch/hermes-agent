@@ -53,3 +53,25 @@ export function describeDesktopShellStatus(
   }
   return { label: "Desktop shell ready", message: "Dashboard reachable", tone: "success" };
 }
+
+export function describeDesktopShellHeaderSignal(
+  state: RunInspectorDesktopStatusState,
+  status: RunInspectorDesktopStatus | null,
+  error?: string | null,
+): DesktopShellDisplay {
+  const display = describeDesktopShellStatus(state, status, error);
+
+  if (display.tone === "success") {
+    return { label: "Desktop OK", message: display.message, tone: display.tone };
+  }
+  if (display.tone === "primary") {
+    return { label: "Desktop reuse", message: display.message, tone: display.tone };
+  }
+  if (display.tone === "warning") {
+    return { label: "Desktop attention", message: display.message, tone: display.tone };
+  }
+  if (display.tone === "destructive") {
+    return { label: "Desktop offline", message: display.message, tone: display.tone };
+  }
+  return { label: "Desktop unknown", message: display.message, tone: "muted" };
+}
