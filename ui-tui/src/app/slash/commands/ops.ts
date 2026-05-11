@@ -577,6 +577,35 @@ export const opsCommands: SlashCommand[] = [
   },
 
   {
+    aliases: ['run-inspector-desktop'],
+    help: 'show read-only Run Inspector desktop shell status [/inspector-desktop [port]]',
+    name: 'inspector-desktop',
+    run: (arg, ctx) => {
+      const port = parseInspectorPort(arg)
+      if (port === null) {
+        return ctx.transcript.sys('usage: /inspector-desktop [port]')
+      }
+
+      ctx.gateway
+        .rpc<RunInspectorStatusResponse>('run_inspector.status', { port })
+        .then(
+          ctx.guarded<RunInspectorStatusResponse>(r => {
+            ctx.transcript.panel('Run Inspector Desktop', [
+              {
+                rows: renderInspectorStatus(r?.desktop || {}),
+                title: 'Desktop Shell'
+              },
+              {
+                text: 'read-only desktop status; use hermes desktop to start, stop, or reuse the dashboard'
+              }
+            ])
+          })
+        )
+        .catch(ctx.guardedErr)
+    }
+  },
+
+  {
     aliases: ['run-inspector-health'],
     help: 'show read-only Run Inspector tool and MCP health [/inspector-health [port]]',
     name: 'inspector-health',

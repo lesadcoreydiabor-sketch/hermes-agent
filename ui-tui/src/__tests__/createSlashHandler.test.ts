@@ -354,10 +354,12 @@ describe('createSlashHandler', () => {
     ['/browser connect', 'browser.manage', { action: 'connect', session_id: null, url: 'http://127.0.0.1:9222' }],
     ['/inspector', 'run_inspector.status', { port: 9119 }],
     ['/inspector-attention', 'run_inspector.status', { port: 9119 }],
+    ['/inspector-desktop', 'run_inspector.status', { port: 9119 }],
     ['/inspector-events', 'run_inspector.events', { limit: 12 }],
     ['/inspector-events failed', 'run_inspector.events', { limit: 12 }],
     ['/inspector-health', 'run_inspector.status', { port: 9119 }],
     ['/run-inspector-attention 9222', 'run_inspector.status', { port: 9222 }],
+    ['/run-inspector-desktop 9222', 'run_inspector.status', { port: 9222 }],
     ['/run-inspector-health 9222', 'run_inspector.status', { port: 9222 }],
     ['/run-inspector-events 7', 'run_inspector.events', { limit: 7 }],
     ['/run-inspector-events 7 failed', 'run_inspector.events', { limit: 7 }],
@@ -561,6 +563,65 @@ describe('createSlashHandler', () => {
     expect(rpc).not.toHaveBeenCalled()
     expect(ctx.gateway.gw.request).not.toHaveBeenCalled()
     expect(ctx.transcript.sys).toHaveBeenCalledWith('usage: /inspector-attention [port]')
+  })
+
+  it('/inspector-desktop renders read-only desktop shell status without slash worker fallback', async () => {
+    const rpc = vi.fn(() =>
+      Promise.resolve({
+        desktop: {
+          compatible_dashboard: false,
+          health: 'attention',
+          health_reason: 'pid_missing',
+          manual_url: 'http://127.0.0.1:9222/run-inspector',
+          ok: true,
+          pid: 1234,
+          pid_status: 'stale',
+          port: 9222,
+          record_present: true,
+          reuse_command: 'hermes desktop --port 9222',
+          stop_command: 'hermes dashboard --stop',
+          url: 'http://127.0.0.1:9222/run-inspector'
+        },
+        ok: true
+      })
+    )
+    const ctx = buildCtx({ gateway: { ...buildGateway(), rpc } })
+
+    expect(createSlashHandler(ctx)('/inspector-desktop 9222')).toBe(true)
+
+    expect(rpc).toHaveBeenCalledWith('run_inspector.status', { port: 9222 })
+    expect(ctx.gateway.gw.request).not.toHaveBeenCalled()
+    await vi.waitFor(() => {
+      expect(ctx.transcript.panel).toHaveBeenCalledWith(
+        'Run Inspector Desktop',
+        expect.arrayContaining([
+          expect.objectContaining({
+            rows: expect.arrayContaining([
+              ['Desktop', 'recorded (stale / attention)'],
+              ['Run Inspector', 'http://127.0.0.1:9222/run-inspector'],
+              ['Health', 'attention / pid_missing'],
+              ['PID', '1234 (stale)'],
+              ['Reuse', 'hermes desktop --port 9222'],
+              ['Stop guidance', 'hermes dashboard --stop']
+            ]),
+            title: 'Desktop Shell'
+          }),
+          expect.objectContaining({
+            text: 'read-only desktop status; use hermes desktop to start, stop, or reuse the dashboard'
+          })
+        ])
+      )
+    })
+  })
+
+  it('/inspector-desktop rejects invalid ports before hitting the gateway', () => {
+    const rpc = vi.fn(() => Promise.resolve({}))
+    const ctx = buildCtx({ gateway: { ...buildGateway(), rpc } })
+
+    expect(createSlashHandler(ctx)('/inspector-desktop nope')).toBe(true)
+    expect(rpc).not.toHaveBeenCalled()
+    expect(ctx.gateway.gw.request).not.toHaveBeenCalled()
+    expect(ctx.transcript.sys).toHaveBeenCalledWith('usage: /inspector-desktop [port]')
   })
 
   it('/inspector-health renders tool and MCP health details without slash worker fallback', async () => {
