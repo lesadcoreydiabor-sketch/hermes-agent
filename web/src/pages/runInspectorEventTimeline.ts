@@ -63,6 +63,15 @@ export function describeRunInspectorEvent(
   return { label, tone, message };
 }
 
+export function describeRunInspectorEventContext(event: RunInspectorEvent): string {
+  const parts = [
+    event.run_id ? `run=${event.run_id}` : null,
+    event.session_id ? `session=${event.session_id}` : null,
+    event.tool ? `tool=${event.tool}` : null,
+  ].filter(Boolean);
+  return parts.join(" / ");
+}
+
 export function describeRunInspectorEventStream(
   state: RunInspectorEventStreamState,
 ): RunInspectorEventDisplay {

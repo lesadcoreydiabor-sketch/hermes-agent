@@ -562,7 +562,29 @@ def test_run_inspector_event_timeline_describes_event_and_stream_states():
               status: "running",
               message: null,
             });
-            console.log(JSON.stringify({ failed, connected, auth, forwarder }));
+            const context = timeline.describeRunInspectorEventContext({
+              id: 3,
+              type: "approval.request",
+              source: "gateway_run",
+              timestamp: "2026-05-11T00:00:00Z",
+              run_id: "run_1",
+              session_id: "session_1",
+              tool: "shell",
+              status: "waiting",
+              message: null,
+            });
+            const emptyContext = timeline.describeRunInspectorEventContext({
+              id: 4,
+              type: "run.completed",
+              source: "gateway_run",
+              timestamp: "2026-05-11T00:00:00Z",
+              run_id: null,
+              session_id: null,
+              tool: null,
+              status: "completed",
+              message: null,
+            });
+            console.log(JSON.stringify({ failed, connected, auth, forwarder, context, emptyContext }));
             """
         )
     )
@@ -579,6 +601,8 @@ def test_run_inspector_event_timeline_describes_event_and_stream_states():
         "tone": "primary",
         "message": "running",
     }
+    assert payload["context"] == "run=run_1 / session=session_1 / tool=shell"
+    assert payload["emptyContext"] == ""
 
 
 def test_run_inspector_attention_preview_describes_states_and_tones():

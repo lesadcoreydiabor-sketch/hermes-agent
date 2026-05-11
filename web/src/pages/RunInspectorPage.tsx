@@ -63,6 +63,7 @@ import {
 } from "@/pages/runInspectorViewModel";
 import {
   describeRunInspectorEvent,
+  describeRunInspectorEventContext,
   describeRunInspectorEventStream,
   formatRunInspectorEventTime,
   type RunInspectorEventStreamState,
@@ -1437,6 +1438,7 @@ function EventTimelineCard({
           <div className="flex min-w-0 flex-col divide-y divide-border/70 border border-border">
             {newestFirst.map((event) => {
               const display = describeRunInspectorEvent(event);
+              const context = describeRunInspectorEventContext(event);
               return (
                 <div
                   key={event.id}
@@ -1462,9 +1464,9 @@ function EventTimelineCard({
                     <p className="mt-1 break-words text-xs text-muted-foreground">
                       {formatDisplayValue(display.message, "No details")}
                     </p>
-                    {event.tool ? (
-                      <p className="mt-1 truncate font-mono-ui text-[10px] text-muted-foreground/80">
-                        {formatDisplayValue(event.tool)}
+                    {context ? (
+                      <p className="mt-1 break-all font-mono-ui text-[10px] text-muted-foreground/80">
+                        {formatDisplayValue(context)}
                       </p>
                     ) : null}
                   </div>
