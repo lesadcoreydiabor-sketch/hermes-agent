@@ -617,15 +617,23 @@ def test_run_inspector_event_timeline_describes_event_and_stream_states():
               { id: 6, type: "approval.request", source: "gateway_run", timestamp: "2026-05-11T00:00:00Z", run_id: "run_wait", session_id: null, tool: null, status: "waiting", message: null },
               { id: 7, type: "run.failed", source: "gateway_run", timestamp: "2026-05-11T00:00:00Z", run_id: "run_fail", session_id: null, tool: null, status: "failed", message: null },
               { id: 8, type: "gateway.forwarder.started", source: "run_inspector", timestamp: "2026-05-11T00:00:00Z", run_id: "run_forward", session_id: null, tool: null, status: "running", message: null },
+              { id: 9, type: "run.cancelled", source: "gateway_run", timestamp: "2026-05-11T00:00:00Z", run_id: "run_cancel", session_id: null, tool: null, status: "cancelled", message: null },
+              { id: 10, type: "run.completed", source: "gateway_run", timestamp: "2026-05-11T00:00:00Z", run_id: "run_done", session_id: null, tool: null, status: "completed", message: null },
             ];
             const filters = {
               all: timeline.filterRunInspectorEvents(events, "all").map((event) => event.id),
+              active: timeline.filterRunInspectorEvents(events, "active").map((event) => event.id),
               attention: timeline.filterRunInspectorEvents(events, "attention").map((event) => event.id),
+              approval: timeline.filterRunInspectorEvents(events, "approval").map((event) => event.id),
+              cancelled: timeline.filterRunInspectorEvents(events, "cancelled").map((event) => event.id),
+              completed: timeline.filterRunInspectorEvents(events, "completed").map((event) => event.id),
+              failed: timeline.filterRunInspectorEvents(events, "failed").map((event) => event.id),
               gateway: timeline.filterRunInspectorEvents(events, "gateway").map((event) => event.id),
               run: timeline.filterRunInspectorEvents(events, "run").map((event) => event.id),
               tool: timeline.filterRunInspectorEvents(events, "tool").map((event) => event.id),
             };
-            console.log(JSON.stringify({ failed, connected, auth, forwarder, context, emptyContext, filters }));
+            const summary = timeline.summarizeRunInspectorEvents(events);
+            console.log(JSON.stringify({ failed, connected, auth, forwarder, context, emptyContext, filters, summary }));
             """
         )
     )
@@ -645,11 +653,36 @@ def test_run_inspector_event_timeline_describes_event_and_stream_states():
     assert payload["context"] == "run=run_1 / session=session_1 / tool=shell"
     assert payload["emptyContext"] == ""
     assert payload["filters"] == {
-        "all": [5, 6, 7, 8],
+        "all": [5, 6, 7, 8, 9, 10],
+        "active": [5, 8],
         "attention": [6, 7],
-        "gateway": [6, 7, 8],
-        "run": [7],
+        "approval": [6],
+        "cancelled": [9],
+        "completed": [10],
+        "failed": [7],
+        "gateway": [6, 7, 8, 9, 10],
+        "run": [7, 9, 10],
         "tool": [5],
+    }
+    assert payload["summary"] == {
+        "active": 2,
+        "attention": 2,
+        "approval": 1,
+        "cancelled": 1,
+        "completed": 1,
+        "failed": 1,
+        "latest": {
+            "id": 10,
+            "type": "run.completed",
+            "source": "gateway_run",
+            "timestamp": "2026-05-11T00:00:00Z",
+            "run_id": "run_done",
+            "session_id": None,
+            "tool": None,
+            "status": "completed",
+            "message": None,
+        },
+        "total": 6,
     }
 
 
