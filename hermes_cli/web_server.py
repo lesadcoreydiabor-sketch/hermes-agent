@@ -22,6 +22,7 @@ import threading
 import time
 import urllib.parse
 import urllib.request
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -47,6 +48,11 @@ from hermes_cli.config import (
     check_config_version,
     redact_key,
 )
+from hermes_cli.multi_agent_memory_workbench import (
+    build_multi_agent_memory_workbench,
+    empty_multi_agent_memory_workbench,
+)
+from hermes_cli.run_inspector_events import get_recent_run_inspector_events
 from gateway.status import get_running_pid, read_runtime_status
 
 try:
@@ -637,6 +643,87 @@ async def get_status():
         "gateway_exit_reason": gateway_exit_reason,
         "gateway_updated_at": gateway_updated_at,
         "active_sessions": active_sessions,
+    }
+
+
+def _utc_now_iso() -> str:
+    return datetime.now(timezone.utc).isoformat()
+
+
+def _build_run_inspector_status_payload() -> dict[str, Any]:
+    """Build the privacy-safe Run Inspector snapshot without raw transcript reads."""
+    from hermes_cli.run_inspector import build_run_inspector_snapshot
+
+    return build_run_inspector_snapshot().to_dict()
+
+
+def _normalize_run_inspector_snapshot(payload: Any) -> dict[str, Any]:
+    """Normalize dashboard snapshots through the readonly Run Inspector contract."""
+    from hermes_cli.run_inspector import RunSnapshot
+
+    return RunSnapshot.from_mapping(payload).to_dict()
+
+
+def _run_inspector_error_snapshot(exc: Exception) -> dict[str, Any]:
+    from hermes_cli.run_inspector import empty_run_snapshot
+
+    return empty_run_snapshot(
+        degraded_reason=f"run_inspector_api_failed:{type(exc).__name__}",
+    ).to_dict()
+
+
+@app.get("/api/run-inspector")
+async def get_run_inspector():
+    """Return a privacy-safe, read-only Run Inspector snapshot for dashboard UI."""
+    ok = True
+    try:
+        snapshot = _normalize_run_inspector_snapshot(
+            _build_run_inspector_status_payload()
+        )
+    except Exception as exc:
+        ok = False
+        _log.warning("Run Inspector API snapshot failed: %s", exc)
+        snapshot = _run_inspector_error_snapshot(exc)
+
+    return {
+        "ok": ok,
+        "snapshot": snapshot,
+        "refreshed_at": _utc_now_iso(),
+    }
+
+
+@app.get("/api/run-inspector/events")
+async def get_run_inspector_events(limit: int = 50):
+    """Return recent privacy-safe Run Inspector events for dashboard UI."""
+    return {
+        "ok": True,
+        "events": get_recent_run_inspector_events(limit=limit),
+        "refreshed_at": _utc_now_iso(),
+    }
+
+
+@app.get("/api/run-inspector/memory-workbench")
+async def get_run_inspector_memory_workbench(limit: int = 12):
+    """Return read-only multi-agent memory workbench metadata summaries."""
+    ok = True
+    try:
+        events = get_recent_run_inspector_events(limit=limit)
+        workbench = build_multi_agent_memory_workbench(
+            PROJECT_ROOT,
+            events=events,
+            limit=limit,
+        )
+    except Exception as exc:
+        ok = False
+        _log.warning("Run Inspector memory workbench failed: %s", exc)
+        workbench = empty_multi_agent_memory_workbench(
+            degraded_reason=f"memory_workbench_api_failed:{type(exc).__name__}",
+        )
+
+    return {
+        "ok": ok,
+        "workbench": workbench,
+        "refreshed_at": _utc_now_iso(),
     }
 
 
